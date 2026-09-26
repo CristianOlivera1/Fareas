@@ -1,0 +1,25 @@
+<div class="h-full rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:p-5">
+  <h2 class="mb-4 text-base font-semibold tracking-tight text-gray-900">Distribución de asistencia</h2>
+
+  <div class="flex justify-center mb-6">
+    <div class="relative h-48 w-48 shrink-0">
+      <canvas #chart></canvas>
+      <div class="pointer-events-none absolute inset-0 grid place-items-center">
+        <div class="text-center">
+          <p class="text-2xl font-bold tracking-tight text-gray-900">{{ attendanceRate() }}</p>
+          <p class="text-xs text-gray-500">Asistencia</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="w-full space-y-2.5 border-t border-gray-100 pt-4">
+    @for (item of legend(); track item.label) {
+    <li class="flex items-center gap-2.5 text-sm">
+      <span class="size-3 shrink-0 rounded-sm" [style.background-color]="item.color"></span>
+      <span class="flex-1 text-gray-600">{{ item.label }}</span>
+      <span class="font-mono text-xs text-gray-900">{{ item.count | number }} ({{ item.percent }})</span>
+    </li>
+    }
+  </ul>
+</div>

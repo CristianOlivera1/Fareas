@@ -1,11 +1,11 @@
 <div class="min-h-screen flex relative overflow-hidden bg-gray-50">
   <div class="absolute inset-0 z-0 pointer-events-none">
     <div
-      class="absolute -top-[15%] -right-[20%] w-[60%] h-[60%] rounded-full bg-[radial-gradient(circle,rgba(77,139,255,0.18)_0%,transparent_70%)] blur-[100px]"
-    ></div>
+      class="absolute -top-[15%] -right-[20%] w-[60%] h-[60%] rounded-full bg-[radial-gradient(circle,rgba(77,139,255,0.18)_0%,transparent_70%)] blur-[100px]">
+    </div>
     <div
-      class="absolute -bottom-[15%] right-[5%] w-[45%] h-[50%] rounded-full bg-[radial-gradient(circle,rgba(21,93,252,0.12)_0%,transparent_70%)] blur-[100px]"
-    ></div>
+      class="absolute -bottom-[15%] right-[5%] w-[45%] h-[50%] rounded-full bg-[radial-gradient(circle,rgba(21,93,252,0.12)_0%,transparent_70%)] blur-[100px]">
+    </div>
   </div>
 
   <div class="relative z-10 w-full flex items-center justify-center p-6">
@@ -22,74 +22,26 @@
 
       <form [formGroup]="form" (ngSubmit)="onSubmit()" class="space-y-5">
         @if (errorMessage()) {
-          <div class="bg-red-50 border border-red-200 rounded-lg p-3">
-            <span class="text-sm text-red-600">{{ errorMessage() }}</span>
-          </div>
+        <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+          <span class="text-sm text-red-600">{{ errorMessage() }}</span>
+        </div>
         }
 
-        <div class="space-y-2">
-          <label for="username" class="block text-sm font-medium text-gray-700">Usuario</label>
-          <div class="relative">
-            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <iconify-icon icon="material-symbols:person-outline" width="20" class="text-gray-400" />
-            </div>
-            <input
-              id="username"
-              type="text"
-              formControlName="username"
-              placeholder="admin"
-              autocomplete="username"
-              class="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-(--fareas-primary) focus:border-transparent text-sm"
-            />
-          </div>
-          @if (fieldError('username')) {
-            <p class="text-xs text-red-500 ml-1">{{ fieldError('username') }}</p>
-          }
-        </div>
+        <app-ui-input formControlName="username" label="Usuario" icon="material-symbols:person-outline"
+          placeholder="admin" autocomplete="username" [error]="fieldError('username')" />
 
-        <div class="space-y-2">
-          <label for="password" class="block text-sm font-medium text-gray-700">Contraseña</label>
-          <div class="relative">
-            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <iconify-icon icon="material-symbols:lock-outline" width="20" class="text-gray-400" />
-            </div>
-            <input
-              id="password"
-              [type]="showPassword() ? 'text' : 'password'"
-              formControlName="password"
-              placeholder="••••••••"
-              autocomplete="current-password"
-              class="block w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-(--fareas-primary) focus:border-transparent text-sm"
-            />
-            <button
-              type="button"
-              (click)="togglePassword()"
-              aria-label="Mostrar contraseña"
-              class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-            >
-              <iconify-icon
-                [icon]="showPassword() ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'"
-                width="20"
-              />
-            </button>
-          </div>
-          @if (fieldError('password')) {
-            <p class="text-xs text-red-500 ml-1">{{ fieldError('password') }}</p>
-          }
-        </div>
+        <app-ui-input formControlName="password" label="Contraseña" type="password" icon="material-symbols:lock-outline"
+          placeholder="••••••••" autocomplete="current-password" [showPasswordToggle]="true"
+          [error]="fieldError('password')" />
 
-        <button
-          type="submit"
-          [disabled]="form.invalid || isSubmitting()"
-          class="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-(--fareas-primary) hover:bg-(--fareas-primary-deep) focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-(--fareas-primary) disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
-        >
+        <app-ui-button type="submit" variant="primary" [fullWidth]="true" [loading]="isSubmitting()"
+          [disabled]="form.invalid || isSubmitting()">
           @if (isSubmitting()) {
-            <iconify-icon icon="material-symbols:progress-activity" width="18" />
-            Ingresando...
+          Ingresando...
           } @else {
-            Ingresar
+          Ingresar
           }
-        </button>
+        </app-ui-button>
 
         <p class="text-center text-xs text-gray-400">
           Demo estática — probá con <span class="font-mono font-medium">admin / 123456</span>

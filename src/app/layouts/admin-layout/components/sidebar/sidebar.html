@@ -57,12 +57,11 @@
 
   <div class="flex-1 min-h-0"></div>
 
-  <div class="border-t border-gray-100 p-2 shrink-0">
+  <div class="relative border-t border-gray-100 p-2 shrink-0" #userMenuContainer>
     @if (currentUser()) {
-    <div [class]="
-          'flex items-center rounded-2xl p-2 cursor-pointer hover:bg-gray-50 transition-colors ' +
-          (isOpen() ? 'gap-2.5' : 'justify-center')
-        " (click)="isOpen() ? toggleUserMenu() : toggleSidebar()">
+    <div
+      [class]=" 'flex items-center rounded-2xl p-2 cursor-pointer hover:bg-gray-50 transition-colors ' + (isOpen() ? 'gap-2.5' : 'justify-center') "
+      (click)="isOpen() ? toggleUserMenu() : toggleSidebar()">
       <div
         class="w-8 h-8 rounded-full bg-(--fareas-primary) text-white text-xs font-bold flex items-center justify-center shrink-0">
         {{ auth.userInitials() }}
@@ -73,23 +72,23 @@
         </span>
         <span class="text-xs text-gray-500 truncate leading-snug">{{ userRoleLabel() }}</span>
       </div>
-      <div class="shrink-0" [class.hidden]="!isOpen()">
+      <div class="shrink-0 transition-transform duration-200" [class.hidden]="!isOpen()"
+        [class.rotate-180]="userMenuOpen()">
         <iconify-icon icon="material-symbols:expand-less" width="16" class="text-gray-400" />
       </div>
     </div>
 
     @if (userMenuOpen() && isOpen()) {
-    <div class="mt-1 rounded-2xl border border-gray-100 bg-white p-1.5 shadow-lg">
+    <div
+      class="absolute bottom-full left-2 right-2 mb-2 rounded-2xl border border-gray-100 bg-white p-1.5 shadow-xl z-50 origin-bottom animate-in fade-in slide-in-from-bottom-2">
       <a routerLink="/admin/dashboard"
         class="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
-        <iconify-icon icon="material-symbols:settings-outline" width="16" />
-        Configuración
+        <iconify-icon icon="material-symbols:settings-outline" width="16" /> Configuración
       </a>
       <div class="border-t border-gray-100 my-1"></div>
       <button (click)="logout()"
         class="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 rounded-xl hover:bg-red-50 transition-colors">
-        <iconify-icon icon="material-symbols:logout" width="16" />
-        Cerrar sesión
+        <iconify-icon icon="material-symbols:logout" width="16" /> Cerrar sesión
       </button>
     </div>
     }

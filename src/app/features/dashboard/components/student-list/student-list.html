@@ -1,0 +1,38 @@
+<div class="rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:p-5">
+  <div class="mb-3 flex items-center justify-between gap-2">
+    <h2 class="text-base font-semibold tracking-tight text-gray-900">Lista de estudiantes</h2>
+    <app-ui-button variant="outline" size="sm" icon="material-symbols:filter-list-outline" (click)="goToAttendance()">
+      Filtrar
+    </app-ui-button>
+  </div>
+
+  <app-data-table
+    [columns]="columns"
+    [data]="students()"
+    [trackBy]="trackByCode"
+    emptyTitle="Sin estudiantes"
+    emptyMessage="No hay registros de asistencia para mostrar."
+  >
+    <ng-template appCell="code" let-row>
+      <span class="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">{{ row.code }}</span>
+    </ng-template>
+    <ng-template appCell="student" let-row>
+      <span class="inline-flex items-center gap-2.5">
+        <span class="grid size-8 shrink-0 place-items-center rounded-full bg-(--fareas-primary)/10 text-xs font-bold text-(--fareas-primary)">
+          {{ row.initials }}
+        </span>
+        <span class="text-sm font-medium text-gray-900">{{ row.name }}</span>
+      </span>
+    </ng-template>
+    <ng-template appCell="status" let-row>
+      <span class="inline-flex items-center gap-2 text-sm text-gray-700">
+        <span class="size-2.5 rounded-full {{ statusDot(row.status) }}"></span>
+        {{ row.status }}
+      </span>
+    </ng-template>
+    <ng-template appCell="actions" let-row>
+      <app-ui-button variant="ghost" size="sm" icon="material-symbols:visibility-outline" (click)="goToAttendance()">
+      </app-ui-button>
+    </ng-template>
+  </app-data-table>
+</div>

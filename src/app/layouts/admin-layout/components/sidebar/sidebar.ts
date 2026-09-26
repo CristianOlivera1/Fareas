@@ -5,6 +5,8 @@ import {
   OnInit,
   computed,
   signal,
+  ElementRef, // Añadido
+  ViewChild,  // Añadido
 } from '@angular/core';
 import { NavigationEnd, Router, RouterModule } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -20,12 +22,18 @@ import { AuthService } from '../../../../core/services/auth/auth';
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(window:resize)': 'onResize()' },
+  host: {
+    '(window:resize)': 'onResize()',
+    '(document:click)': 'onClickOutside($event)' // Nuevo listener global
+  },
 })
 export class Sidebar implements OnInit {
   readonly isOpen = signal(false);
   readonly userMenuOpen = signal(false);
   readonly currentUrl = signal('');
+
+  // Referencia al contenedor del menú en el HTML
+  @ViewChild('userMenuContainer') userMenuContainer?: ElementRef<HTMLElement>;
 
   readonly navItems: NavItem[] = [
     {
@@ -67,6 +75,17 @@ export class Sidebar implements OnInit {
 
   onResize(): void {
     this.setInitialState();
+  }
+
+  // Cierra el menú si el clic ocurre fuera del contenedor
+  onClickOutside(event: Event): void {
+    if (
+      this.userMenuOpen() &&
+      this.userMenuContainer?.nativeElement &&
+      !this.userMenuContainer.nativeElement.contains(event.target as Node)
+    ) {
+      this.userMenuOpen.set(false);
+    }
   }
 
   isActive(route: string): boolean {

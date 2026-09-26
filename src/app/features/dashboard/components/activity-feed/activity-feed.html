@@ -1,0 +1,86 @@
+<div class="rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:p-5 h-full">
+  <div class="mb-4 flex items-center justify-between">
+    <h2 class="text-base font-semibold tracking-tight text-gray-900">Actividad en tiempo real</h2>
+  </div>
+
+  <div class="flex flex-col gap-4">
+
+    <!-- Fila de la Cámara -->
+    <div class="relative aspect-video max-w-2xl w-full mx-auto overflow-hidden rounded-lg bg-slate-900"
+      style="background-image: repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,0.04) 3px 4px)">
+      <div class="absolute inset-0 grid place-items-center">
+        <iconify-icon icon="material-symbols:person" width="120" class="text-slate-700" />
+      </div>
+
+      <div class="absolute left-[32%] top-[12%] h-[62%] w-[28%] rounded-sm border-2 border-green-400">
+        <span
+          class="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-green-500 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">
+          IDENTIFICADO
+        </span>
+      </div>
+
+      <div class="absolute left-3 top-3 rounded-md bg-black/60 px-2 py-1 text-[11px] leading-tight text-white">
+        <p class="flex items-center gap-1.5">
+          <span class="size-1.5 rounded-full bg-green-400"></span>
+          Aula: {{ person().room }}
+        </p>
+        <p class="mt-0.5 text-white/70">Cámara: {{ person().camera }}</p>
+      </div>
+
+      <span class="absolute bottom-3 right-3 rounded bg-black/60 px-2 py-0.5 font-mono text-[11px] text-white/80">
+        {{ detectedAt() }}
+      </span>
+    </div>
+
+    <div class="rounded-lg bg-(--fareas-canvas) p-4 flex flex-col gap-3">
+
+      <div class="flex items-center gap-3">
+        <div class="grid size-12 shrink-0 place-items-center rounded-xl bg-(--fareas-primary)/10 text-base font-bold text-(--fareas-primary)">
+          {{ person().initials }}
+        </div>
+        <div class="min-w-0">
+          <p class="truncate text-sm font-semibold text-gray-900">{{ person().name }}</p>
+          <p class="text-xs text-gray-500 font-mono">Código: {{ person().code }}</p>
+        </div>
+      </div>
+
+      <div class="border-t border-gray-200/60 my-0.5"></div>
+
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <p class="text-gray-400 font-medium uppercase tracking-wider text-[10px]">Grupo</p>
+          <p class="font-medium text-gray-800 mt-0.5">{{ person().group }}</p>
+        </div>
+        <div>
+          <p class="text-gray-400 font-medium uppercase tracking-wider text-[10px]">Curso</p>
+          <p class="font-medium text-gray-800 mt-0.5 truncate">{{ person().course }}</p>
+        </div>
+      </div>
+
+      <div class="border-t border-gray-200/60 my-0.5"></div>
+
+      <div class="space-y-2.5">
+        <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center gap-1.5 font-semibold text-gray-950">
+            <span class="size-2 rounded-full bg-green-500"></span>
+            Asistió
+          </div>
+          <span class="font-mono text-gray-500 text-[11px]">{{ detectedAt() }}</span>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-gray-500">Similitud</span>
+            <span class="font-semibold text-gray-900">{{ person().similarity }}%</span>
+          </div>
+          <div class="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+            <div class="h-full rounded-full bg-green-500 transition-all duration-500"
+              [style.width.%]="person().similarity"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
