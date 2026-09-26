@@ -1,11 +1,33 @@
-import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
+import {
+  ApplicationConfig,
+  LOCALE_ID,
+  provideBrowserGlobalErrorListeners,
+} from '@angular/core';
 import { provideRouter } from '@angular/router';
-
 import { routes } from './app.routes';
+import { provideHttpClient, withFetch } from '@angular/common/http';
+import { registerLocaleData } from '@angular/common';
+import localeEs from '@angular/common/locales/es';
+import { providePrimeNG } from 'primeng/config';
+import aura from '@primeuix/themes/aura';
+import { MessageService } from 'primeng/api';
+
+registerLocaleData(localeEs);
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideRouter(routes)
-  ]
+    provideRouter(routes),
+    provideHttpClient(withFetch()),
+    { provide: LOCALE_ID, useValue: 'es' },
+    providePrimeNG({
+      theme: {
+        preset: aura,
+        options: {
+          darkModeSelector: '.dark',
+        },
+      },
+    }),
+    MessageService,
+  ],
 };
