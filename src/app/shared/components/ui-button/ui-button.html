@@ -1,0 +1,8 @@
+<button [type]="type()" [disabled]="disabled() || loading()" [class]="classes()">
+  @if (loading()) {
+    <iconify-icon icon="material-symbols:progress-activity" width="18" class="animate-spin" />
+  } @else if (icon(); as iconName) {
+    <iconify-icon [icon]="iconName" width="18" />
+  }
+  <ng-content />
+</button>

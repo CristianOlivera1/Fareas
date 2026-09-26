@@ -1,0 +1,33 @@
+<div class="space-y-2">
+  @if (label()) {
+  <label [for]="resolvedId()" class="block text-sm font-medium text-gray-700">
+    {{ label() }}
+  </label>
+  }
+  <div class="relative">
+    @if (icon(); as iconName) {
+    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+      <iconify-icon [icon]="iconName" width="20" class="text-gray-400" />
+    </div>
+    }
+    <input [id]="resolvedId()" [type]="effectiveType()" [value]="value()" [placeholder]="placeholder()"
+      [attr.autocomplete]="autocomplete()" [disabled]="disabled()" (input)="onInput($event)" (blur)="onBlur()"
+      class="block w-full py-2.5 pr-3 border rounded-lg bg-white text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-(--fareas-primary) focus:border-transparent transition-all disabled:opacity-50 disabled:bg-gray-50"
+      [class.pl-10]="icon()" [class.pl-3]="!icon()" [class.pr-10]="showToggle()" [class.border-red-300]="error()"
+      [class.border-gray-300]="!error()" />
+    @if (showToggle()) {
+    <button type="button" (click)="togglePasswordVisibility()"
+      [attr.aria-label]="passwordVisible() ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+      class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors focus:outline-none">
+      <iconify-icon
+        [icon]="passwordVisible() ? 'material-symbols:visibility-off-outline' : 'material-symbols:visibility-outline'"
+        width="20" />
+    </button>
+    }
+  </div>
+  @if (error()) {
+  <p class="text-xs text-red-500 ml-1" role="alert">{{ error() }}</p>
+  } @else if (hint()) {
+  <p class="text-xs text-gray-400 ml-1">{{ hint() }}</p>
+  }
+</div>

@@ -13,13 +13,13 @@ import { FormsModule } from '@angular/forms';
 import { Select } from 'primeng/select';
 import { TableColumn } from '../../../core/models/table-column';
 import { DataTableCellDirective } from './data-table-cell.directive';
+import { UiButton } from '../ui-button/ui-button';
 
 @Component({
   selector: 'app-data-table',
-  imports: [CommonModule, FormsModule, Select],
+  imports: [CommonModule, FormsModule, Select, UiButton],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './data-table.html',
-  styleUrl: './data-table.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DataTable {
