@@ -1,0 +1,37 @@
+<section class="space-y-6">
+  <div class="flex flex-col gap-2">
+    <h1 class="text-xl font-semibold tracking-tight text-gray-900">Dashboard de asistencias</h1>
+    <p class="text-sm text-gray-500">
+      Resumen estático con mocks — {{ presentCount() }} de {{ latest().length }} presentes en la muestra.
+    </p>
+  </div>
+
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    @for (card of cards(); track card.title) {
+      <div class="relative overflow-hidden rounded-xl border border-gray-200 bg-white p-5 shadow-xs">
+        <iconify-icon
+          [icon]="card.icon"
+          width="64"
+          [class]="'absolute -right-1 -bottom-2 opacity-20 pointer-events-none ' + card.accent"
+        />
+        <div class="relative z-10">
+          <p class="text-sm font-medium text-gray-500">{{ card.title }}</p>
+          <p class="mt-1 text-3xl font-bold text-gray-900">{{ card.value }}</p>
+          <p class="mt-1 text-xs text-gray-400 italic">{{ card.detail }}</p>
+        </div>
+      </div>
+    }
+  </div>
+
+  <div>
+    <div class="mb-3">
+      <h2 class="text-base font-semibold text-gray-900">Últimos registros (mock)</h2>
+      <p class="text-sm text-gray-500">Sin backend — datos quemados para maquetar.</p>
+    </div>
+    <app-data-table [columns]="columns" [data]="latest()" [trackBy]="trackByName">
+      <ng-template appCell="status" let-row>
+        <p-tag [value]="row.status" [severity]="statusSeverity(row.status)" />
+      </ng-template>
+    </app-data-table>
+  </div>
+</section>

@@ -1,0 +1,25 @@
+<header
+  class="glass-effect sticky top-0 z-10 flex h-14 items-center justify-between border-b border-gray-200 px-3 sm:px-6"
+>
+  <div class="flex items-center gap-4">
+    <button
+      (click)="toggleSidebar()"
+      aria-label="Abrir menú"
+      class="md:hidden p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200"
+    >
+      <iconify-icon icon="material-symbols:menu" width="20" class="text-gray-600" />
+    </button>
+    <nav class="flex items-center gap-2 text-sm text-gray-500">
+      @for (crumb of breadcrumbs(); track crumb.label; let last = $last) {
+        @if (crumb.url && !crumb.active) {
+          <a [href]="crumb.url" class="hover:text-gray-900 transition-colors">{{ crumb.label }}</a>
+        } @else {
+          <span [class]="crumb.active ? 'font-medium text-gray-900' : ''">{{ crumb.label }}</span>
+        }
+        @if (!last) {
+          <iconify-icon icon="material-symbols:chevron-right" width="14" class="text-gray-400" />
+        }
+      }
+    </nav>
+  </div>
+</header>

@@ -1,3 +1,68 @@
-/* You can add global styles to this file, and also import other style files */
-
 @import "tailwindcss";
+
+@theme {
+  --color-primary-50: #f6f9ff;
+  --color-primary-100: #e8effd;
+  --color-primary-200: #c9d9fb;
+  --color-primary-300: #8fb0f7;
+  --color-primary-400: #4d8bff;
+  --color-primary-500: #387afe;
+  --color-primary-600: #155dfc;
+  --color-primary-700: #0f47c1;
+  --color-primary-800: #0d3b9f;
+  --color-primary-900: #0a2c75;
+
+  --color-secondary: #6b7280;
+  --color-surface: #ffffff;
+  --color-canvas: #f6f9ff;
+
+  --background-image-admin-pill: radial-gradient(circle at 20% 20%, #4d8bff 0%, #155dfc 50%, #0d3b9f 100%);
+}
+
+:root {
+  --fareas-primary: var(--color-primary-600);
+  --fareas-primary-light: var(--color-primary-500);
+  --fareas-primary-dark: var(--color-primary-800);
+  --fareas-primary-deep: var(--color-primary-700);
+  --fareas-canvas: var(--color-primary-50);
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  background: var(--fareas-canvas);
+}
+
+button {
+  cursor: pointer;
+}
+
+.glass-effect {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(8px);
+}
+
+.bg-admin-pill {
+  background-image: var(--background-image-admin-pill);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #9ca3af;
+  border-radius: 10px;
+  border: 2px solid #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}

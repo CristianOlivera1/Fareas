@@ -1,0 +1,9 @@
+<div class="flex h-screen overflow-hidden bg-gray-50">
+  <app-sidebar #sidebar />
+  <div class="flex flex-1 flex-col overflow-hidden">
+    <app-header (toggleSidebarEvent)="sidebar.toggleSidebar()" />
+    <main class="flex-1 overflow-y-auto bg-(--fareas-canvas) px-5 py-6 sm:p-6">
+      <router-outlet />
+    </main>
+  </div>
+</div>

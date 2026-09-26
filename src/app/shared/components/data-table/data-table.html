@@ -1,0 +1,156 @@
+@if (loading()) {
+  <div class="space-y-3" aria-busy="true">
+    @for (i of [1, 2, 3, 4, 5]; track i) {
+      <div class="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-4">
+        <div class="size-10 rounded-full bg-gray-100 animate-pulse"></div>
+        <div class="flex-1 space-y-2">
+          <div class="h-4 w-1/4 rounded bg-gray-100 animate-pulse"></div>
+          <div class="h-3 w-2/5 rounded bg-gray-50 animate-pulse"></div>
+        </div>
+        <div class="h-8 w-24 rounded-lg bg-gray-100 animate-pulse"></div>
+      </div>
+    }
+  </div>
+} @else if (errorMessage()) {
+  <div class="rounded-xl border border-red-200 bg-red-50 p-6 text-center">
+    <iconify-icon class="text-red-600" icon="material-symbols:error-outline" width="32"></iconify-icon>
+    <h2 class="mt-2 font-semibold text-red-950">No se pudieron cargar los datos</h2>
+    <p class="mt-1 text-sm text-red-700">{{ errorMessage() }}</p>
+    <button
+      type="button"
+      (click)="retry.emit()"
+      class="mt-4 inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors"
+    >
+      <iconify-icon icon="material-symbols:refresh" width="18"></iconify-icon>
+      Reintentar
+    </button>
+  </div>
+} @else if (data().length === 0) {
+  <div class="rounded-xl border border-gray-200 bg-white p-10 text-center shadow-xs">
+    <div class="mx-auto grid size-12 place-items-center rounded-xl bg-gray-50 text-gray-400">
+      <iconify-icon [icon]="emptyIcon()" width="28"></iconify-icon>
+    </div>
+    <h2 class="mt-3 font-semibold text-gray-900">{{ emptyTitle() }}</h2>
+    <p class="mx-auto mt-1 max-w-md text-sm text-gray-500">{{ emptyMessage() }}</p>
+    @if (showClearFilters()) {
+      <button
+        type="button"
+        (click)="clearFilters.emit()"
+        class="mt-4 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+      >
+        Limpiar filtros
+      </button>
+    }
+  </div>
+} @else {
+  <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xs">
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse text-left">
+        <thead>
+          <tr class="border-b border-gray-100 bg-gray-50/60 text-xs font-medium uppercase tracking-wide text-gray-500">
+            @for (col of columns(); track col.id) {
+              <th
+                class="px-4 py-3 whitespace-nowrap"
+                [class.text-center]="col.align === 'center'"
+                [class.text-right]="col.align === 'right'"
+                [class.hidden]="col.hiddenOnMobile"
+                [class.md:table-cell]="col.hiddenOnMobile"
+                [style.width]="col.width ?? null"
+              >
+                {{ col.header }}
+              </th>
+            }
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          @for (row of pagedData(); track trackBy()($index, row); let rowIndex = $index) {
+            <tr class="hover:bg-gray-50/60 transition-colors">
+              @for (col of columns(); track col.id) {
+                <td
+                  class="px-4 py-3"
+                  [class.text-center]="col.align === 'center'"
+                  [class.text-right]="col.align === 'right'"
+                  [class.hidden]="col.hiddenOnMobile"
+                  [class.md:table-cell]="col.hiddenOnMobile"
+                >
+                  @if (col.id === 'index') {
+                    <span class="text-sm tabular-nums text-gray-400">{{ rowNumber(rowIndex) }}</span>
+                  } @else if (getCellTemplate(col.id); as tmpl) {
+                    <ng-container
+                      *ngTemplateOutlet="tmpl.template; context: { $implicit: row, col: col, index: rowIndex }"
+                    ></ng-container>
+                  } @else {
+                    <span class="text-sm text-gray-700">{{ $any(row)[col.id] ?? '-' }}</span>
+                  }
+                </td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flex flex-col gap-3 border-t border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center gap-2 text-sm text-gray-500">
+        @if (totalPages() > 1) {
+          <span class="text-gray-300">·</span>
+          <span>Página {{ currentPage() }} de {{ totalPages() }}</span>
+        } @else {
+          <span>{{ totalCount() }} {{ totalCount() === 1 ? 'resultado' : 'resultados' }}</span>
+        }
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2 text-sm text-gray-500">
+          <span>Mostrar</span>
+          <p-select
+            class="w-24"
+            appendTo="body"
+            [options]="pageSizeOptions()"
+            optionLabel="label"
+            optionValue="value"
+            [ngModel]="perPage()"
+            (ngModelChange)="onPerPage($event)"
+          />
+        </label>
+        @if (totalPages() > 1) {
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              [disabled]="currentPage() <= 1"
+              (click)="onPage(currentPage() - 1)"
+              aria-label="Página anterior"
+              title="Página anterior"
+              class="grid size-8 place-items-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+            >
+              <iconify-icon icon="material-symbols:chevron-left" width="18"></iconify-icon>
+            </button>
+            @for (p of visiblePages(); track p) {
+              <button
+                type="button"
+                (click)="onPage(p)"
+                [attr.aria-current]="p === currentPage() ? 'page' : null"
+                class="grid size-8 place-items-center rounded-lg text-sm font-medium transition-colors"
+                [class.bg-gray-900]="p === currentPage()"
+                [class.text-white]="p === currentPage()"
+                [class.text-gray-600]="p !== currentPage()"
+                [class.hover:bg-gray-100]="p !== currentPage()"
+              >
+                {{ p }}
+              </button>
+            }
+            <button
+              type="button"
+              [disabled]="currentPage() >= totalPages()"
+              (click)="onPage(currentPage() + 1)"
+              aria-label="Página siguiente"
+              title="Página siguiente"
+              class="grid size-8 place-items-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+            >
+              <iconify-icon icon="material-symbols:chevron-right" width="18"></iconify-icon>
+            </button>
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+}
