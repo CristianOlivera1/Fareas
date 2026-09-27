@@ -1,7 +1,6 @@
-from fastapi import FastAPI
+import sys
+from pathlib import Path
 
-app = FastAPI()
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
+from app.main import app
