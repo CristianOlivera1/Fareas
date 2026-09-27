@@ -1,0 +1,39 @@
+# --- API ---
+fastapi==0.141.1
+uvicorn[standard]==0.54.0
+pydantic==2.13.5
+pydantic-settings==2.15.0
+websockets==17.1
+python-multipart==0.0.20
+
+# --- Base de datos (PostgreSQL, embeddings en real[]) ---
+sqlmodel==0.0.24
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+
+# --- Seguridad / correo (RF-08, RF-11, RF-12) ---
+pwdlib[argon2]==0.2.1
+pyjwt==2.10.1
+email-validator==2.3.0
+aiosmtplib==4.0.1
+
+# --- Programación de tareas (cierre de sesiones RF-26) ---
+apscheduler==3.10.4
+
+# --- Feed SSE del dashboard (RF-13, Bloque 8) ---
+sse-starlette==3.4.11
+
+# --- Pipeline de visión (RF-17...RF-20, CPU) ---
+numpy==2.1.3
+opencv-python==4.10.0.84
+onnxruntime==1.20.1
+
+# --- Reportes e importación (RF-07, RF-16) ---
+openpyxl==3.1.5
+reportlab==4.2.5
+pdfplumber==0.11.4
+
+# --- Desarrollo y pruebas ---
+httpx==0.28.1
+pytest==8.3.4
+ruff==0.8.4

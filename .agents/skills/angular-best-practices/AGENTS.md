@@ -19,16 +19,16 @@ Comprehensive guidelines for building performant, maintainable Angular applicati
 
 ## Table of Contents
 
-1. [Eliminating Waterfalls](#1-eliminating-waterfalls) — **CRITICAL**
+1. [Eliminating Waterfalls](#1-eliminating-waterfalls) - **CRITICAL**
    - 1.1 [Defer Await Until Needed](#11-defer-await-until-needed)
    - 1.2 [Promise.all() for Independent Operations](#12-promise-all-for-independent-operations)
-2. [Bundle Optimization](#2-bundle-optimization) — **CRITICAL**
+2. [Bundle Optimization](#2-bundle-optimization) - **CRITICAL**
    - 2.1 [Avoid Barrel File Imports](#21-avoid-barrel-file-imports)
    - 2.2 [Conditional Imports for Features](#22-conditional-imports-for-features)
    - 2.3 [Defer Heavy Third-Party Libraries](#23-defer-heavy-third-party-libraries)
    - 2.4 [Preload Critical Resources](#24-preload-critical-resources)
    - 2.5 [Use @defer for Lazy Loading](#25-use-defer-for-lazy-loading)
-3. [JavaScript Performance](#3-javascript-performance) — **HIGH**
+3. [JavaScript Performance](#3-javascript-performance) - **HIGH**
    - 3.1 [Batch DOM Reads and Writes](#31-batch-dom-reads-and-writes)
    - 3.2 [Cache API Results with Interceptors](#32-cache-api-results-with-interceptors)
    - 3.3 [Memoize Expensive Function Results](#33-memoize-expensive-function-results)
@@ -37,7 +37,7 @@ Comprehensive guidelines for building performant, maintainable Angular applicati
    - 3.6 [Use Immutable Array Methods](#36-use-immutable-array-methods)
    - 3.7 [Use Passive Event Listeners](#37-use-passive-event-listeners)
    - 3.8 [Use Set/Map for O(1) Lookups](#38-use-set-map-for-o-1-lookups)
-4. [TypeScript Best Practices](#4-typescript-best-practices) — **MEDIUM**
+4. [TypeScript Best Practices](#4-typescript-best-practices) - **MEDIUM**
    - 4.1 [Avoid Enums, Use const Objects](#41-avoid-enums-use-const-objects)
    - 4.2 [Declare Return Types for Exported Functions](#42-declare-return-types-for-exported-functions)
    - 4.3 [Handle noUncheckedIndexedAccess](#43-handle-nouncheckedindexedaccess)
@@ -49,7 +49,7 @@ Comprehensive guidelines for building performant, maintainable Angular applicati
    - 4.9 [Use Result Types Instead of Throwing](#49-use-result-types-instead-of-throwing)
    - 4.10 [When any is Acceptable in Generics](#410-when-any-is-acceptable-in-generics)
    - 4.11 [When to Use JSDoc Comments](#411-when-to-use-jsdoc-comments)
-5. [Signals & Reactivity](#5-signals-reactivity) — **HIGH**
+5. [Signals & Reactivity](#5-signals-reactivity) - **HIGH**
    - 5.1 [Avoid Effects for State Propagation](#51-avoid-effects-for-state-propagation)
    - 5.2 [Use Computed for Derived State](#52-use-computed-for-derived-state)
    - 5.3 [Use httpResource() for Signal-Based Data Fetching](#53-use-httpresource-for-signal-based-data-fetching)
@@ -61,20 +61,20 @@ Comprehensive guidelines for building performant, maintainable Angular applicati
    - 5.9 [Use Signal View Queries](#59-use-signal-view-queries)
    - 5.10 [Use Signals for Local State](#510-use-signals-for-local-state)
    - 5.11 [Use toSignal for Observables](#511-use-tosignal-for-observables)
-6. [Component Patterns](#6-component-patterns) — **HIGH**
+6. [Component Patterns](#6-component-patterns) - **HIGH**
    - 6.1 [Use Host Object for Element Bindings](#61-use-host-object-for-element-bindings)
    - 6.2 [Use inject() Function for Dependencies](#62-use-inject-function-for-dependencies)
-7. [RxJS Patterns](#7-rxjs-patterns) — **HIGH**
+7. [RxJS Patterns](#7-rxjs-patterns) - **HIGH**
    - 7.1 [Choose the Right Flattening Operator](#71-choose-the-right-flattening-operator)
    - 7.2 [Handle Errors in Streams](#72-handle-errors-in-streams)
    - 7.3 [Use combineLatest for Multiple Streams](#73-use-combinelatest-for-multiple-streams)
    - 7.4 [Use DestroyRef and takeUntilDestroyed](#74-use-destroyref-and-takeuntildestroyed)
    - 7.5 [Use shareReplay for Multicasting](#75-use-sharereplay-for-multicasting)
-8. [Template Optimization](#8-template-optimization) — **HIGH**
+8. [Template Optimization](#8-template-optimization) - **HIGH**
    - 8.1 [Use NgOptimizedImage for Images](#81-use-ngoptimizedimage-for-images)
    - 8.2 [Use Pure Pipes for Transforms](#82-use-pure-pipes-for-transforms)
    - 8.3 [Use Virtual Scrolling for Large Lists](#83-use-virtual-scrolling-for-large-lists)
-9. [SSR & Hydration](#9-ssr-hydration) — **HIGH**
+9. [SSR & Hydration](#9-ssr-hydration) - **HIGH**
    - 9.1 [Configure Server Route Render Modes](#91-configure-server-route-render-modes)
    - 9.2 [Enable Client Hydration](#92-enable-client-hydration)
    - 9.3 [Fetch Data in Parallel on Server](#93-fetch-data-in-parallel-on-server)
@@ -83,16 +83,16 @@ Comprehensive guidelines for building performant, maintainable Angular applicati
    - 9.6 [Use Incremental Hydration with @defer](#96-use-incremental-hydration-with-defer)
    - 9.7 [Use LRU Cache for SSR Computations](#97-use-lru-cache-for-ssr-computations)
    - 9.8 [Use TransferState to Avoid Refetch](#98-use-transferstate-to-avoid-refetch)
-10. [Forms](#10-forms) — **MEDIUM**
+10. [Forms](#10-forms) - **MEDIUM**
    - 10.1 [Create Reusable Validators](#101-create-reusable-validators)
    - 10.2 [Handle Form Submission Properly](#102-handle-form-submission-properly)
    - 10.3 [Use ControlValueAccessor for Custom Controls](#103-use-controlvalueaccessor-for-custom-controls)
    - 10.4 [Use ngx-formly for Dynamic Forms](#104-use-ngx-formly-for-dynamic-forms)
-11. [Architecture](#11-architecture) — **HIGH**
+11. [Architecture](#11-architecture) - **HIGH**
    - 11.1 [Enforce Module Boundaries](#111-enforce-module-boundaries)
    - 11.2 [Use Barrel Files for Public APIs](#112-use-barrel-files-for-public-apis)
    - 11.3 [Use Domain-Driven Folder Structure](#113-use-domain-driven-folder-structure)
-12. [Testing](#12-testing) — **HIGH**
+12. [Testing](#12-testing) - **HIGH**
    - 12.1 [Automate Accessibility Testing with axe-core](#121-automate-accessibility-testing-with-axe-core)
    - 12.2 [Component Testing with Angular Testing Library](#122-component-testing-with-angular-testing-library)
    - 12.3 [Mocking with ng-mocks and MSW](#123-mocking-with-ng-mocks-and-msw)
@@ -100,7 +100,7 @@ Comprehensive guidelines for building performant, maintainable Angular applicati
    - 12.5 [Unit Testing with Vitest](#125-unit-testing-with-vitest)
    - 12.6 [Use CDK Component Test Harnesses](#126-use-cdk-component-test-harnesses)
    - 12.7 [Use Object Mothers for Test Data](#127-use-object-mothers-for-test-data)
-13. [Infrastructure](#13-infrastructure) — **MEDIUM**
+13. [Infrastructure](#13-infrastructure) - **MEDIUM**
    - 13.1 [Enable Scroll Position Restoration](#131-enable-scroll-position-restoration)
    - 13.2 [Error Handling Patterns](#132-error-handling-patterns)
    - 13.3 [Schema-Validate LocalStorage Data](#133-schema-validate-localstorage-data)
@@ -114,14 +114,14 @@ Comprehensive guidelines for building performant, maintainable Angular applicati
    - 13.11 [Use InjectionToken with Factory for Config](#1311-use-injectiontoken-with-factory-for-config)
    - 13.12 [Use provideAppInitializer for Startup Logic](#1312-use-provideappinitializer-for-startup-logic)
    - 13.13 [Use Route Input Binding](#1313-use-route-input-binding)
-14. [UI & Accessibility](#14-ui-accessibility) — **MEDIUM**
+14. [UI & Accessibility](#14-ui-accessibility) - **MEDIUM**
    - 14.1 [Ensure Keyboard Navigation](#141-ensure-keyboard-navigation)
    - 14.2 [Loading State Patterns](#142-loading-state-patterns)
    - 14.3 [Manage Focus with CDK FocusTrap](#143-manage-focus-with-cdk-focustrap)
    - 14.4 [Respect prefers-reduced-motion](#144-respect-prefers-reduced-motion)
    - 14.5 [Theming Patterns](#145-theming-patterns)
    - 14.6 [Use ARIA Roles and Live Regions](#146-use-aria-roles-and-live-regions)
-15. [Data Handling](#15-data-handling) — **MEDIUM**
+15. [Data Handling](#15-data-handling) - **MEDIUM**
    - 15.1 [Compose Mappers for Nested Data](#151-compose-mappers-for-nested-data)
    - 15.2 [Use Functional HTTP Interceptors](#152-use-functional-http-interceptors)
    - 15.3 [Use Pure Mapper Functions for DTOs](#153-use-pure-mapper-functions-for-dtos)
@@ -282,7 +282,7 @@ elements.forEach((el, i) => el.style.height = `${heights[i] * 2}px`);
 
 **Impact: MEDIUM** (Eliminates redundant network requests)
 
-Use an HTTP interceptor or service-level caching with signals to avoid redundant API calls — prefer Angular-idiomatic patterns over raw `sessionStorage`.
+Use an HTTP interceptor or service-level caching with signals to avoid redundant API calls - prefer Angular-idiomatic patterns over raw `sessionStorage`.
 
 **Example:**
 
@@ -442,7 +442,7 @@ type State<T> =
 
 **Impact: LOW** (Smaller bundles, cleaner transpilation)
 
-Use `import type { User } from './user'` instead of `import { type User } from './user'` — the statement-level form is clearer, always fully erased at transpilation, and aligns with `verbatimModuleSyntax` in TypeScript 5.0+.
+Use `import type { User } from './user'` instead of `import { type User } from './user'` - the statement-level form is clearer, always fully erased at transpilation, and aligns with `verbatimModuleSyntax` in TypeScript 5.0+.
 
 ### 4.8 Use Readonly Properties by Default
 
@@ -569,7 +569,7 @@ constructor() { effect(() => this.selected.set(this.options()[0])); }
 ```typescript
 options = signal(['Ground', 'Air', 'Sea']);
 selected = linkedSignal(() => this.options()[0]);
-// Writable: selected.set('Air') — auto-resets when options change
+// Writable: selected.set('Air') - auto-resets when options change
 ```
 
 ### 5.5 Use model() for Two-Way Binding
@@ -688,7 +688,7 @@ chart = viewChild.required<ElementRef>('chart');
 
 **Impact: HIGH** (Fine-grained reactivity, zoneless-ready)
 
-Use `signal<T>(initialValue)` instead of plain class properties for component state — signals provide fine-grained reactivity and enable zoneless change detection, updated with `.set()` or `.update()`.
+Use `signal<T>(initialValue)` instead of plain class properties for component state - signals provide fine-grained reactivity and enable zoneless change detection, updated with `.set()` or `.update()`.
 
 ### 5.11 Use toSignal for Observables
 
@@ -765,7 +765,7 @@ export class UserComponent {
 
 **Impact: HIGH** (Prevents race conditions)
 
-Use `switchMap` to cancel previous (search/autocomplete), `exhaustMap` to ignore new (form submit), `concatMap` for ordered sequential, `mergeMap` for parallel — choosing wrong causes race conditions or lost requests.
+Use `switchMap` to cancel previous (search/autocomplete), `exhaustMap` to ignore new (form submit), `concatMap` for ordered sequential, `mergeMap` for parallel - choosing wrong causes race conditions or lost requests.
 
 **Correct:**
 
@@ -1237,7 +1237,7 @@ Use `vitest-axe` or `jest-axe` to check rendered components for WCAG violations.
 
 ```typescript
 it('should be accessible', () => {
-  // Manual visual check only — misses hidden violations
+  // Manual visual check only - misses hidden violations
 });
 ```
 
@@ -1375,7 +1375,7 @@ Use `withInMemoryScrolling({ scrollPositionRestoration: 'enabled' })` to automat
 **Incorrect:**
 
 ```typescript
-// Manually scrolling to top on every navigation — loses back-button position
+// Manually scrolling to top on every navigation - loses back-button position
 router.events.pipe(filter(e => e instanceof NavigationEnd)).subscribe(() => window.scrollTo(0, 0));
 ```
 
@@ -1444,7 +1444,7 @@ Implement `CanDeactivateFn` to warn users before navigating away from forms with
 **Incorrect:**
 
 ```typescript
-// No guard — user navigates away and loses unsaved changes
+// No guard - user navigates away and loses unsaved changes
 { path: 'edit/:id', component: EditComponent }
 ```
 
@@ -1465,7 +1465,7 @@ Implement a selective preloading strategy instead of `PreloadAllModules` to cont
 **Incorrect:**
 
 ```typescript
-// Preloads every lazy route — wastes bandwidth on rarely visited routes
+// Preloads every lazy route - wastes bandwidth on rarely visited routes
 provideRouter(routes, withPreloading(PreloadAllModules))
 ```
 
@@ -1584,7 +1584,7 @@ Use `provideAppInitializer()` (Angular 19+) or `{ provide: APP_INITIALIZER, useF
 **Incorrect:**
 
 ```typescript
-// Startup logic in root component — app renders before init completes
+// Startup logic in root component - app renders before init completes
 export class AppComponent {
   constructor(private config: ConfigService) { config.load(); }
 }
@@ -1593,7 +1593,7 @@ export class AppComponent {
 **Correct:**
 
 ```typescript
-// App providers — blocks rendering until init resolves
+// App providers - blocks rendering until init resolves
 export const appConfig: ApplicationConfig = {
   providers: [
     provideAppInitializer(() => inject(ConfigService).load()),

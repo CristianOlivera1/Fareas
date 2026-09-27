@@ -3,7 +3,7 @@ name: angular-best-practices
 description: >-
   Modern Angular best practices for building performant, maintainable Angular 17+
   applications. Covers Signals, RxJS, components, templates, styles, performance,
-  SSR, testing, forms, routing, accessibility, and architecture — with code examples
+  SSR, testing, forms, routing, accessibility, and architecture - with code examples
   and impact ratings for every rule.
   Use this skill whenever the user is working on Angular code of any kind: components,
   services, templates, stylesheets, routes, tests, or configuration. This applies to
@@ -35,7 +35,7 @@ globs:
 
 # Modern Angular Best Practices
 
-A comprehensive set of 112 rules covering TypeScript strictness, signal-based reactivity, component architecture, template optimization, RxJS patterns, SSR hydration, bundle optimization, accessibility, routing, forms, testing, and styling — so every component, service, template, and route you build is fast, accessible, tested, and maintainable.
+A comprehensive set of 112 rules covering TypeScript strictness, signal-based reactivity, component architecture, template optimization, RxJS patterns, SSR hydration, bundle optimization, accessibility, routing, forms, testing, and styling - so every component, service, template, and route you build is fast, accessible, tested, and maintainable.
 
 Below are the key patterns organized by what you're working on. For edge cases or when you need specific code examples beyond what's listed here, consult the AGENTS.md reference file in this skill directory.
 
@@ -49,14 +49,14 @@ Components are the building blocks. Modern Angular uses signals for reactivity, 
 - Use `signal()` for local state, `computed()` for derived state
 - Use `linkedSignal()` when state should reset when a source changes
 - Use `resource()` / `httpResource()` for async data with built-in loading states
-- Use `effect()` only for side effects — never for state synchronization
+- Use `effect()` only for side effects - never for state synchronization
 - Use `toSignal()` to bridge RxJS observables into signal-based templates
 - Use `viewChild()` / `contentChild()` signal queries instead of decorators
 - Use the `host` property instead of `@HostBinding` / `@HostListener`
 
 ## Templates & Styles
 
-Templates and styles work together — accessibility, layout, and performance cross both concerns.
+Templates and styles work together - accessibility, layout, and performance cross both concerns.
 
 - Use `@if`, `@for`, `@switch` control flow instead of structural directives
 - Use `@defer` for heavy below-fold content
@@ -78,7 +78,7 @@ Services handle data flow, dependency injection, and RxJS patterns. HTTP, cachin
 - Use `shareReplay({ bufferSize: 1, refCount: true })` for shared streams
 - Use `inject()` with `InjectionToken` for configuration
 - Use HTTP interceptors for cross-cutting concerns (auth, retry, logging)
-- Map DTOs at the API boundary — don't leak backend shapes into components
+- Map DTOs at the API boundary - don't leak backend shapes into components
 
 ## Performance & SSR
 
@@ -95,7 +95,7 @@ Performance rules span components, templates, and infrastructure. SSR affects ro
 
 ## Testing
 
-Testing patterns apply to components, services, and templates together — isolation is important but integration context matters.
+Testing patterns apply to components, services, and templates together - isolation is important but integration context matters.
 
 - Use component harnesses over direct DOM queries
 - Create test object factories for consistent test data
@@ -105,18 +105,18 @@ Testing patterns apply to components, services, and templates together — isola
 
 ## Architecture & Routing
 
-Architecture decisions affect every file type — routing, module boundaries, and dependency injection are structural.
+Architecture decisions affect every file type - routing, module boundaries, and dependency injection are structural.
 
 - One feature per lazy-loaded route
 - Use guards for auth, resolvers for data, `canDeactivate` for unsaved changes
 - Use preload strategies (`QuickLinkStrategy`) for likely-next routes
 - Bind route params via `input()` with `withComponentInputBinding()`
-- Avoid barrel file re-exports — import directly from source
-- Use environment-based configuration — no hardcoded URLs or API keys
+- Avoid barrel file re-exports - import directly from source
+- Use environment-based configuration - no hardcoded URLs or API keys
 
 ## TypeScript Foundations
 
-These apply everywhere — components, services, tests, all `.ts` files.
+These apply everywhere - components, services, tests, all `.ts` files.
 
 - Use strict type checking with `strict: true` in tsconfig
 - Avoid `any`; use `unknown` when type is uncertain, generics to narrow
@@ -128,7 +128,7 @@ These apply everywhere — components, services, tests, all `.ts` files.
 
 ## Accessibility
 
-Accessibility spans templates, styles, and components — it's not just an HTML concern.
+Accessibility spans templates, styles, and components - it's not just an HTML concern.
 
 - Use semantic HTML elements first (`<nav>`, `<main>`, `<button>`)
 - Use ARIA roles and `aria-live` regions for dynamic content
