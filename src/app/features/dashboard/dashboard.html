@@ -4,20 +4,20 @@
     <p class="mt-1 text-sm text-gray-500">Resumen simulado del reconocimiento facial y la asistencia de hoy.</p>
   </div>
 
-  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
     @for (card of cards(); track card.title) {
     <app-ui-card [title]="card.title" [value]="card.value" [detail]="card.detail" [icon]="card.icon"
-      [accent]="card.accent" />
+      [accent]="card.accent" class="min-w-0" />
     }
   </div>
   <div class="grid gap-4 xl:grid-cols-3">
-    <app-activity-feed class="xl:col-span-1" />
+    <app-activity-feed class="min-w-0 xl:col-span-1" />
 
-    <app-student-list class="xl:col-span-2" />
+    <app-student-list class="min-w-0 xl:col-span-2" />
   </div>
 
   <div class="grid gap-4 xl:grid-cols-4">
-    <app-hourly-chart class="xl:col-span-3" />
-    <app-distribution-chart class="xl:col-span-1" />
+    <app-hourly-chart class="min-w-0 xl:col-span-3" />
+    <app-distribution-chart class="min-w-0 xl:col-span-1" />
   </div>
 </section>

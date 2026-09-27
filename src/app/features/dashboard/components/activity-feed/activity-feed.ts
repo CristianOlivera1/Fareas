@@ -14,40 +14,51 @@ interface IdentifiedPerson {
   course: string;
   room: string;
   camera: string;
+  /** Similitud del embedding en % (RF-20: umbral mínimo 75%). */
   similarity: number;
+  /** Veredicto mostrado en la puerta (RF-25 / Tabla 8). */
+  verdict: 'Asistió' | 'Tardanza';
+  message: string;
   initials: string;
 }
 
+/** Detecciones de una misma sesión (LAB 305, misma cámara), coherentes con student-list. */
 const MOCK_ROTATION: IdentifiedPerson[] = [
   {
     name: 'Raul Montesinos Valdivia',
     code: '221181',
     group: 'A',
-    course: 'Estructura de datos',
-    room: '305',
-    camera: '192.5.10.5',
+    course: 'Metodología de la Investigación Científica',
+    room: 'LAB 305',
+    camera: '10.14.5.5',
     similarity: 92.5,
+    verdict: 'Asistió',
+    message: 'Registro correcto',
     initials: 'RM',
   },
   {
-    name: 'Razib Rahman',
-    code: '25511',
-    group: 'B',
-    course: 'Metodología ágil',
-    room: '104',
-    camera: '192.5.10.8',
+    name: 'Razib Rahman Ttito',
+    code: '231204',
+    group: 'A',
+    course: 'Metodología de la Investigación Científica',
+    room: 'LAB 305',
+    camera: '10.14.5.5',
     similarity: 97.1,
-    initials: 'RR',
+    verdict: 'Tardanza',
+    message: 'Registro con tardanza',
+    initials: 'RT',
   },
   {
-    name: 'Luke Norton',
-    code: '24447',
+    name: 'Lucía Fernández Quispe',
+    code: '221105',
     group: 'A',
-    course: 'Big data',
-    room: '202',
-    camera: '192.5.11.2',
+    course: 'Metodología de la Investigación Científica',
+    room: 'LAB 305',
+    camera: '10.14.5.5',
     similarity: 88.4,
-    initials: 'LN',
+    verdict: 'Asistió',
+    message: 'Registro correcto',
+    initials: 'LF',
   },
 ];
 
@@ -81,5 +92,9 @@ export class ActivityFeed {
       this.detectedAt.set(nowTime());
     }, 5000);
     destroyRef.onDestroy(() => clearInterval(timer));
+  }
+
+  verdictColor(verdict: IdentifiedPerson['verdict']): string {
+    return verdict === 'Asistió' ? 'bg-green-500' : 'bg-amber-500';
   }
 }

@@ -12,19 +12,19 @@
         <iconify-icon icon="material-symbols:person" width="120" class="text-slate-700" />
       </div>
 
-      <div class="absolute left-[32%] top-[12%] h-[62%] w-[28%] rounded-sm border-2 border-green-400">
+      <div class="absolute left-[32%] top-[12%] h-[62%] w-[28%] rounded-sm border-2"
+        [class.border-green-400]="person().verdict === 'Asistió'" [class.border-amber-400]="person().verdict === 'Tardanza'">
         <span
           class="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-green-500 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">
-          IDENTIFICADO
+          {{ person().message }}
         </span>
       </div>
 
       <div class="absolute left-3 top-3 rounded-md bg-black/60 px-2 py-1 text-[11px] leading-tight text-white">
         <p class="flex items-center gap-1.5">
           <span class="size-1.5 rounded-full bg-green-400"></span>
-          Aula: {{ person().room }}
+          Aula: {{ person().room }} · Cámara: {{ person().camera }}
         </p>
-        <p class="mt-0.5 text-white/70">Cámara: {{ person().camera }}</p>
       </div>
 
       <span class="absolute bottom-3 right-3 rounded bg-black/60 px-2 py-0.5 font-mono text-[11px] text-white/80">
@@ -62,8 +62,9 @@
       <div class="space-y-2.5">
         <div class="flex items-center justify-between text-xs">
           <div class="flex items-center gap-1.5 font-semibold text-gray-950">
-            <span class="size-2 rounded-full bg-green-500"></span>
-            Asistió
+            <span class="size-2 rounded-full" [class.bg-green-500]="person().verdict === 'Asistió'"
+              [class.bg-amber-500]="person().verdict === 'Tardanza'"></span>
+            {{ person().verdict }}
           </div>
           <span class="font-mono text-gray-500 text-[11px]">{{ detectedAt() }}</span>
         </div>
@@ -74,8 +75,8 @@
             <span class="font-semibold text-gray-900">{{ person().similarity }}%</span>
           </div>
           <div class="h-2 w-full overflow-hidden rounded-full bg-gray-200">
-            <div class="h-full rounded-full bg-green-500 transition-all duration-500"
-              [style.width.%]="person().similarity"></div>
+            <div class="h-full rounded-full transition-all duration-500" [class.bg-green-500]="person().verdict === 'Asistió'"
+              [class.bg-amber-500]="person().verdict === 'Tardanza'" [style.width.%]="person().similarity"></div>
           </div>
         </div>
       </div>

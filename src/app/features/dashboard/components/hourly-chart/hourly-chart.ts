@@ -16,9 +16,10 @@ Chart.register(...registerables);
 
 const HOURS = ['7:00', '8:00', '9:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
 
+/** Registros de asistencia por hora de inicio de bloque (07:00–20:00). Escala de la facultad (~90 marcas/h). */
 const MOCK_SERIES: Record<string, number[]> = {
-  Hoy: [310, 155, 190, 240, 305, 255, 175, 215, 185, 155, 195, 275, 265],
-  Ayer: [260, 140, 170, 210, 270, 230, 160, 190, 170, 140, 175, 240, 235],
+  Hoy: [62, 78, 84, 90, 71, 55, 12, 0, 48, 66, 74, 31, 0],
+  Ayer: [58, 74, 80, 87, 68, 52, 10, 0, 44, 60, 70, 28, 0],
 };
 
 @Component({
@@ -78,12 +79,18 @@ export class HourlyChart implements AfterViewInit, OnDestroy {
         scales: {
           y: {
             min: 0,
-            max: 500,
-            ticks: { stepSize: 100, color: '#9ca3af', font: { size: 11 } },
+            max: 100,
+            ticks: { stepSize: 25, color: '#9ca3af', font: { size: 11 } },
             grid: { color: '#f1f5f9' },
           },
           x: {
-            ticks: { color: '#9ca3af', font: { size: 11 } },
+            ticks: {
+              color: '#9ca3af',
+              font: { size: 11 },
+              autoSkip: true,
+              maxTicksLimit: 7,
+              maxRotation: 0,
+            },
             grid: { display: false },
           },
         },

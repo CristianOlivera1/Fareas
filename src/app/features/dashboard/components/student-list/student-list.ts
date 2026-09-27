@@ -11,7 +11,12 @@ import { DataTableCellDirective } from '../../../../shared/components/data-table
 import { UiButton } from '../../../../shared/components/ui-button/ui-button';
 import { TableColumn } from '../../../../core/models/table-column';
 
-type StudentStatus = 'Asistió' | 'Tarde' | 'Sin registro' | 'Falta';
+/**
+ * Estados en el panel: Asistió/Tardanza/Falta según RF-23.
+ * "Sin registro" es un estado transitorio de vista: la sesión del curso
+ * sigue abierta, por lo que aún no puede clasificarse como Falta (RF-26).
+ */
+type StudentStatus = 'Asistió' | 'Tardanza' | 'Sin registro' | 'Falta';
 
 interface StudentRow {
   code: string;
@@ -23,18 +28,19 @@ interface StudentRow {
   time: string;
 }
 
+/** Datos de demostración coherentes con el activity-feed y la página de asistencias. */
 const MOCK_STUDENTS: StudentRow[] = [
-  { code: '221155', name: 'Raul Montesinos', initials: 'RM', status: 'Asistió', course: 'Base de datos I', room: '305', time: '11:15 am' },
-  { code: '25511', name: 'Razib Rahman', initials: 'RR', status: 'Tarde', course: 'Metodología ágil', room: '104', time: '9:15 am' },
-  { code: '24447', name: 'Luke Norton', initials: 'LN', status: 'Asistió', course: 'Big data', room: '202', time: '9:00 am' },
-  { code: '221181', name: 'Lucía Fernández', initials: 'LF', status: 'Asistió', course: 'Estructura de datos', room: '305', time: '8:02 am' },
-  { code: '31002', name: 'Diego Torres', initials: 'DT', status: 'Falta', course: 'Redes I', room: '410', time: '—' },
-  { code: '18734', name: 'Valentina Sosa', initials: 'VS', status: 'Sin registro', course: 'Big data', room: '202', time: '—' },
+  { code: '221181', name: 'Raul Montesinos Valdivia', initials: 'RM', status: 'Asistió', course: 'Metodología de la Investigación Científica', room: 'LAB 305', time: '9:02 am' },
+  { code: '231204', name: 'Razib Rahman Ttito', initials: 'RT', status: 'Tardanza', course: 'Metodología de la Investigación Científica', room: 'LAB 305', time: '9:18 am' },
+  { code: '221105', name: 'Lucía Fernández Quispe', initials: 'LF', status: 'Asistió', course: 'Metodología de la Investigación Científica', room: 'LAB 305', time: '9:01 am' },
+  { code: '222046', name: 'Valentina Sosa Apaza', initials: 'VS', status: 'Asistió', course: 'Sistemas Distribuidos', room: 'LAB 304', time: '9:00 am' },
+  { code: '223014', name: 'Diego Torres Mamani', initials: 'DT', status: 'Falta', course: 'Sistemas Distribuidos', room: 'LAB 304', time: '-' },
+  { code: '231150', name: 'Luis Navarro Cusihuaranga', initials: 'LN', status: 'Sin registro', course: 'Sistemas Distribuidos', room: 'LAB 304', time: '-' },
 ];
 
 const STATUS_DOT: Record<StudentStatus, string> = {
   Asistió: 'bg-green-500',
-  Tarde: 'bg-amber-500',
+  Tardanza: 'bg-amber-500',
   'Sin registro': 'bg-gray-400',
   Falta: 'bg-red-500',
 };

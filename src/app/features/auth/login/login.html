@@ -1,38 +1,42 @@
-<div class="min-h-screen flex relative overflow-hidden bg-gray-50">
-  <div class="absolute inset-0 z-0 pointer-events-none">
-    <div
-      class="absolute -top-[15%] -right-[20%] w-[60%] h-[60%] rounded-full bg-[radial-gradient(circle,rgba(77,139,255,0.18)_0%,transparent_70%)] blur-[100px]">
-    </div>
-    <div
-      class="absolute -bottom-[15%] right-[5%] w-[45%] h-[50%] rounded-full bg-[radial-gradient(circle,rgba(21,93,252,0.12)_0%,transparent_70%)] blur-[100px]">
-    </div>
-  </div>
-
-  <div class="relative z-10 w-full flex items-center justify-center p-6">
-    <div class="w-full max-w-sm">
       <div class="mb-8">
         <span class="text-2xl font-semibold tracking-tight text-gray-900">
           Fareas<span class="text-(--fareas-primary)">.</span>
         </span>
         <h1 class="mt-4 text-3xl font-bold tracking-tight text-gray-900">Bienvenido</h1>
         <p class="mt-2 text-sm text-gray-500">
-          Ingresá tus credenciales demo para ver el panel estático.
+          Ingresa tus credenciales para acceder al sistema.
         </p>
       </div>
 
       <form [formGroup]="form" (ngSubmit)="onSubmit()" class="space-y-5">
+        @if (infoMessage()) {
+        <div
+          class="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-lg p-3 animate-[fadeIn_0.25s_ease-out]">
+          <iconify-icon icon="material-symbols:info-outline" width="18" class="text-blue-500 mt-0.5 shrink-0" />
+          <span class="text-sm text-blue-700">{{ infoMessage() }}</span>
+        </div>
+        }
+
         @if (errorMessage()) {
-        <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+        <div
+          class="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-lg p-3 animate-[fadeIn_0.25s_ease-out]">
+          <iconify-icon icon="material-symbols:error-outline" width="18" class="text-red-500 mt-0.5 shrink-0" />
           <span class="text-sm text-red-600">{{ errorMessage() }}</span>
         </div>
         }
 
-        <app-ui-input formControlName="username" label="Usuario" icon="material-symbols:person-outline"
-          placeholder="admin" autocomplete="username" [error]="fieldError('username')" />
+        <app-ui-input formControlName="email" label="Correo o código" icon="material-symbols:mail-outline"
+          placeholder="admin@unamba.edu.pe" autocomplete="username" [error]="fieldError('email')" />
 
         <app-ui-input formControlName="password" label="Contraseña" type="password" icon="material-symbols:lock-outline"
           placeholder="••••••••" autocomplete="current-password" [showPasswordToggle]="true"
           [error]="fieldError('password')" />
+
+        <div class="flex justify-end">
+          <a routerLink="/auth/recover" class="text-xs text-(--fareas-primary) hover:underline font-medium">
+            ¿Olvidaste tu contraseña?
+          </a>
+        </div>
 
         <app-ui-button type="submit" variant="primary" [fullWidth]="true" [loading]="isSubmitting()"
           [disabled]="form.invalid || isSubmitting()">
@@ -42,11 +46,4 @@
           Ingresar
           }
         </app-ui-button>
-
-        <p class="text-center text-xs text-gray-400">
-          Demo estática — probá con <span class="font-mono font-medium">admin / 123456</span>
-        </p>
       </form>
-    </div>
-  </div>
-</div>

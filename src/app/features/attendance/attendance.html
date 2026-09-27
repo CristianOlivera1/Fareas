@@ -2,7 +2,7 @@
   <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
     <div>
       <h1 class="text-xl font-semibold tracking-tight text-gray-900">Asistencias</h1>
-      <p class="mt-1 text-sm text-gray-500">Listado estático con mocks — sin conexión al backend.</p>
+      <p class="mt-1 text-sm text-gray-500">Registros de hoy por curso y grupo - datos de demostración, aún sin conexión al backend.</p>
     </div>
     <div class="flex flex-col sm:flex-row gap-2">
       <label class="relative">
@@ -16,7 +16,7 @@
           [ngModel]="query()"
           (ngModelChange)="query.set($event)"
           type="search"
-          placeholder="Buscar por nombre, ID o área…"
+          placeholder="Buscar por estudiante, curso o registro…"
           class="w-full sm:w-64 rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)"
         />
       </label>
@@ -40,6 +40,9 @@
     emptyTitle="Sin asistencias"
     emptyMessage="No hay registros para los filtros actuales."
   >
+    <ng-template appCell="group" let-row>
+      <span class="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">Grupo {{ row.group }}</span>
+    </ng-template>
     <ng-template appCell="method" let-row>
       <span class="inline-flex items-center gap-1.5 text-sm text-gray-700">
         <iconify-icon

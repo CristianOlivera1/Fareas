@@ -30,13 +30,6 @@ export class Dashboard {
       accent: 'text-green-600',
     },
     {
-      title: 'Empleados activos',
-      value: '142',
-      detail: '3 de licencia',
-      icon: 'material-symbols:group-outline',
-      accent: 'text-(--fareas-primary)',
-    },
-    {
       title: 'Ausencias',
       value: '11',
       detail: '7.7% del plantel',
@@ -44,11 +37,18 @@ export class Dashboard {
       accent: 'text-red-500',
     },
     {
-      title: 'Reconocimiento facial',
-      value: '98.2%',
-      detail: 'precisión mock',
-      icon: 'material-symbols:face-outline',
-      accent: 'text-amber-600',
+      title: 'Cámaras activas',
+      value: '14 / 16',
+      detail: '2 streams RTSP caídos',
+      icon: 'material-symbols:videocam-outline',
+      accent: 'text-(--fareas-primary)',
     },
+    {
+      title: 'Alertas críticas DPI',
+      value: '3',
+      detail: 'Alumnos con >30% faltas',
+      icon: 'akar-icons:triangle-alert-fill',
+      accent: 'text-red-500',
+    }
   ]);
 }
