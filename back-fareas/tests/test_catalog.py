@@ -214,3 +214,22 @@ async def test_admin_no_se_crea_por_api_y_patch_protege_admin(client: AsyncClien
 async def test_temp_user_fixture_intacto(client: AsyncClient, temp_user: AppUser):
     """El fixture de auth sigue usable desde este módulo (misma BD)."""
     assert temp_user.email == TEMP_EMAIL
+
+
+async def test_students_with_face_flag(client, admin_headers, db_session):
+    """with_face=1 añade enrolled (RF-04) con UNA query por página (no N)."""
+    # Raul (id 4 del seed) está enrolado; los temp no.
+    r = await client.get(
+        f"{API}/students", headers=admin_headers,
+        params={"with_face": "true", "page_size": 50},
+    )
+    assert r.status_code == 200, r.text
+    items = r.json()["items"]
+    assert items
+    raul = next((i for i in items if i["code"] == "221181"), None)
+    assert raul is not None and raul["enrolled"] is True
+
+    # Sin el flag: enrolled viene None (no hace la query extra)
+    r = await client.get(f"{API}/students", headers=admin_headers, params={"page_size": 5})
+    assert r.status_code == 200
+    assert all(i["enrolled"] is None for i in r.json()["items"])

@@ -15,7 +15,7 @@ from app.core.pagination import PageParams, PageParamsDep
 from app.schemas.common import Page
 from app.services.accounts import create_account, resend_credentials
 from app.services.audit import audit
-from app.tables import AppUser, Device, DeviceType, Room, UserRole
+from app.tables import AppUser, Device, DeviceType, FaceEmbedding, Room, UserRole
 
 router = APIRouter(tags=["catalog"])
 
@@ -265,6 +265,7 @@ class PersonOut(BaseModel):
     semester: int | None
     is_active: bool
     must_change_password: bool
+    enrolled: bool | None = None  # solo con ?with_face=1 (RF-04)
 
 
 def person_out(u: AppUser) -> PersonOut:
@@ -345,6 +346,7 @@ async def list_students(
     page: PageParamsDep,
     q: str | None = Query(None, max_length=80),
     semester: int | None = Query(None, ge=1, le=12),
+    with_face: bool = Query(False, description="Incluye enrolled (rostro actual RF-04)"),
 ) -> Page[PersonOut]:
     stmt, count_stmt = _people_stmt(UserRole.ESTUDIANTE, q)
     if semester is not None:
@@ -354,7 +356,37 @@ async def list_students(
     students = (
         await db.exec(stmt.order_by(AppUser.full_name).offset(page.offset).limit(page.limit))
     ).all()
-    return Page(items=[person_out(s) for s in students], total=total, page=page.page, page_size=page.page_size)
+    # with_face=1: UNA query extra por página (no N por alumno) para el badge
+    # 'Enrolado/Sin rostro' del directorio (RF-04).
+    enrolled_ids: set[int] = set()
+    if with_face and students:
+        ids = [s.id for s in students]
+        filas = (
+            await db.exec(
+                select(FaceEmbedding.student_id).where(
+                    FaceEmbedding.student_id.in_(ids),  # type: ignore[attr-defined]
+                    FaceEmbedding.is_current,  # type: ignore[arg-type]
+                )
+            )
+        ).all()
+        enrolled_ids = {r[0] if isinstance(r, tuple) else r for r in filas}
+    items = [
+        PersonOut(
+            id=s.id,  # type: ignore[arg-type]
+            role=s.role.value,
+            full_name=s.full_name,
+            email=s.email,
+            dni=s.dni,
+            code=s.code,
+            whatsapp=s.whatsapp,
+            semester=s.semester,
+            is_active=s.is_active,
+            must_change_password=s.must_change_password,
+            enrolled=(s.id in enrolled_ids) if with_face else None,
+        )
+        for s in students
+    ]
+    return Page(items=items, total=total, page=page.page, page_size=page.page_size)
 
 
 @router.post("/students", response_model=PersonOut, status_code=status.HTTP_201_CREATED)
