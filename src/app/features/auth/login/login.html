@@ -1,49 +1,48 @@
-      <div class="mb-8">
-        <span class="text-2xl font-semibold tracking-tight text-gray-900">
-          Fareas<span class="text-(--fareas-primary)">.</span>
-        </span>
-        <h1 class="mt-4 text-3xl font-bold tracking-tight text-gray-900">Bienvenido</h1>
-        <p class="mt-2 text-sm text-gray-500">
-          Ingresa tus credenciales para acceder al sistema.
-        </p>
-      </div>
+<div class="mb-8">
+  <span class="text-2xl font-semibold tracking-tight text-gray-900">
+    Fareas<span class="text-(--fareas-primary)">.</span>
+  </span>
+  <h1 class="mt-4 text-3xl font-bold tracking-tight text-gray-900">Bienvenido</h1>
+  <p class="mt-2 text-sm text-gray-500">
+    Ingresa tus credenciales para acceder al sistema.
+  </p>
+</div>
 
-      <form [formGroup]="form" (ngSubmit)="onSubmit()" class="space-y-5">
-        @if (infoMessage()) {
-        <div
-          class="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-lg p-3 animate-[fadeIn_0.25s_ease-out]">
-          <iconify-icon icon="material-symbols:info-outline" width="18" class="text-blue-500 mt-0.5 shrink-0" />
-          <span class="text-sm text-blue-700">{{ infoMessage() }}</span>
-        </div>
-        }
+<form [formGroup]="form" (ngSubmit)="onSubmit()" class="space-y-5">
+  @if (infoMessage()) {
+  <div
+    class="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-lg p-3 animate-[fadeIn_0.25s_ease-out]">
+    <iconify-icon icon="material-symbols:info-outline" width="18" class="text-blue-500 mt-0.5 shrink-0" />
+    <span class="text-sm text-blue-700">{{ infoMessage() }}</span>
+  </div>
+  }
 
-        @if (errorMessage()) {
-        <div
-          class="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-lg p-3 animate-[fadeIn_0.25s_ease-out]">
-          <iconify-icon icon="material-symbols:error-outline" width="18" class="text-red-500 mt-0.5 shrink-0" />
-          <span class="text-sm text-red-600">{{ errorMessage() }}</span>
-        </div>
-        }
+  @if (errorMessage()) {
+  <div class="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-lg p-3 animate-[fadeIn_0.25s_ease-out]">
+    <iconify-icon icon="material-symbols:error-outline" width="18" class="text-red-500 mt-0.5 shrink-0" />
+    <span class="text-sm text-red-600">{{ errorMessage() }}</span>
+  </div>
+  }
 
-        <app-ui-input formControlName="email" label="Correo o código" icon="material-symbols:mail-outline"
-          placeholder="admin@unamba.edu.pe" autocomplete="username" [error]="fieldError('email')" />
+  <app-ui-input formControlName="email" label="Correo o código" icon="material-symbols:mail-outline"
+    placeholder="admin@unamba.edu.pe" autocomplete="username" [error]="fieldError('email')" />
 
-        <app-ui-input formControlName="password" label="Contraseña" type="password" icon="material-symbols:lock-outline"
-          placeholder="••••••••" autocomplete="current-password" [showPasswordToggle]="true"
-          [error]="fieldError('password')" />
+  <app-ui-input formControlName="password" label="Contraseña" type="password" icon="material-symbols:lock-outline"
+    placeholder="••••••••" autocomplete="current-password" [showPasswordToggle]="true"
+    [error]="fieldError('password')" />
 
-        <div class="flex justify-end">
-          <a routerLink="/auth/recover" class="text-xs text-(--fareas-primary) hover:underline font-medium">
-            ¿Olvidaste tu contraseña?
-          </a>
-        </div>
+  <div class="flex justify-end">
+    <a routerLink="/auth/recover" class="text-xs text-(--fareas-primary) hover:underline font-medium">
+      ¿Olvidaste tu contraseña?
+    </a>
+  </div>
 
-        <app-ui-button type="submit" variant="primary" [fullWidth]="true" [loading]="isSubmitting()"
-          [disabled]="form.invalid || isSubmitting()">
-          @if (isSubmitting()) {
-          Ingresando...
-          } @else {
-          Ingresar
-          }
-        </app-ui-button>
-      </form>
+  <app-ui-button type="submit" variant="primary" [fullWidth]="true" [loading]="isSubmitting()"
+    [disabled]="form.invalid || isSubmitting()">
+    @if (isSubmitting()) {
+    Ingresando...
+    } @else {
+    Ingresar
+    }
+  </app-ui-button>
+</form>

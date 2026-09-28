@@ -12,7 +12,6 @@ import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
-
 import { QueryParams } from '../../../shared/utils/query-params';
 import { CatalogApi } from '../../../core/services/catalog-api';
 import { AuthService } from '../../../core/services/auth/auth';

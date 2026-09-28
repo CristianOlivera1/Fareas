@@ -11,7 +11,6 @@ import { MessageService } from 'primeng/api';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
-
 import { QueryParams } from '../../../shared/utils/query-params';
 import { CatalogApi } from '../../../core/services/catalog-api';
 import { AuthService } from '../../../core/services/auth/auth';
@@ -24,8 +23,6 @@ import { DataTableCellDirective } from '../../../shared/components/data-table/da
 import { TableColumn } from '../../../core/models/table-column';
 import { Room } from '../../../core/models/catalog';
 
-/** Extrae el 'detail' del error de FastAPI (o cae a un mensaje genérico).
- * La exportan las demás pantallas del catálogo. */
 export function extractDetail(err: unknown): string {
   const anyErr = err as { error?: { detail?: string }; message?: string };
   return anyErr?.error?.detail ?? anyErr?.message ?? 'Error de conexión con el servidor';
@@ -87,7 +84,6 @@ export class RoomsPage {
   dialogVisible = false;
 
   constructor() {
-    // carga inicial + reacción a cambios de URL (filtros/paginación)
     effect(() => {
       this.q();
       this.page();
