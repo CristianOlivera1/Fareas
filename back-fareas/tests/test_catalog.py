@@ -195,12 +195,10 @@ async def test_crear_estudiante_y_ciclo(client: AsyncClient, admin_headers: dict
 
 
 async def test_admin_no_se_crea_por_api_y_patch_protege_admin(client: AsyncClient, admin_headers: dict):
-    # PATCH sobre el propio admin → 403 (se gestiona por BD)
     me = (await client.get(f"{API}/auth/me", headers=admin_headers)).json()
     r = await client.patch(f"{API}/accounts/{me['id']}", headers=admin_headers, json={"full_name": "Otro"})
     assert r.status_code == 403
 
-    # PATCH sobre docente temporal OK
     teacher = (await client.post(
         f"{API}/teachers", headers=admin_headers,
         json={"full_name": "Docente Para Patch", "email": "temp.docente.patch@unamba.edu.pe", "dni": "71234600"},
@@ -218,7 +216,6 @@ async def test_temp_user_fixture_intacto(client: AsyncClient, temp_user: AppUser
 
 async def test_students_with_face_flag(client, admin_headers, db_session):
     """with_face=1 añade enrolled (RF-04) con UNA query por página (no N)."""
-    # Raul (id 4 del seed) está enrolado; los temp no.
     r = await client.get(
         f"{API}/students", headers=admin_headers,
         params={"with_face": "true", "page_size": 50},
@@ -229,7 +226,6 @@ async def test_students_with_face_flag(client, admin_headers, db_session):
     raul = next((i for i in items if i["code"] == "221181"), None)
     assert raul is not None and raul["enrolled"] is True
 
-    # Sin el flag: enrolled viene None (no hace la query extra)
     r = await client.get(f"{API}/students", headers=admin_headers, params={"page_size": 5})
     assert r.status_code == 200
     assert all(i["enrolled"] is None for i in r.json()["items"])

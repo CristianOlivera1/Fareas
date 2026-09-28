@@ -26,8 +26,6 @@ export interface ListParams {
   readonly [key: string]: unknown;
 }
 
-export type ListResult<T> = Page<T> & { items: T[] };
-
 /** Serializa ListParams → HttpParams (ignora null/undefined/''). */
 export function toParams(params?: ListParams): HttpParams {
   let http = new HttpParams();

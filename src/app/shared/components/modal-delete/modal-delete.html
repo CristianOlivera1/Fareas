@@ -1,0 +1,22 @@
+<p-dialog [header]="title()" [(visible)]="visible" [modal]="true" [style]="{ width: '420px' }"
+  (onHide)="requestClose(false)">
+  <div class="flex items-start gap-3 pt-2">
+    <span class="grid size-10 shrink-0 place-items-center rounded-full bg-red-50 text-red-600">
+      <iconify-icon icon="material-symbols:delete-outline" width="22" />
+    </span>
+    <div class="min-w-0 flex-1 space-y-2">
+      <p class="text-sm text-gray-700">{{ question() }}</p>
+      @if (warning(); as w) {
+        <p class="rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800">{{ w }}</p>
+      }
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="requestClose(false)" [disabled]="loading()">
+      Cancelar
+    </app-ui-button>
+    <app-ui-button variant="danger" [loading]="loading()" (click)="onConfirm()">
+      {{ softDelete() ? 'Desactivar' : 'Eliminar' }}
+    </app-ui-button>
+  </ng-template>
+</p-dialog>

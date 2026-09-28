@@ -56,10 +56,3 @@ export interface SessionUser {
   readonly role: UserRole;
   readonly must_change_password: boolean;
 }
-
-export interface NavItem {
-  label: string;
-  route: string;
-  icon: string;
-  tooltip: string;
-}

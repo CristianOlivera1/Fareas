@@ -74,22 +74,38 @@ export const routes: Routes = [
         data: { title: 'Asistencias' },
       },
 
-      // --- Académico (F2) ---
       { path: 'courses', canActivate: [roleGuard('admin', 'docente')], ...pendiente('Cursos y grupos', 'F2 · Académico') },
       { path: 'enrollments', canActivate: [roleGuard('admin', 'docente')], ...pendiente('Matrículas', 'F2 · Académico') },
 
-      // --- Catálogo (F2) ---
-      { path: 'teachers', canActivate: [roleGuard('admin')], ...pendiente('Docentes', 'F2 · Catálogo') },
-      { path: 'students', canActivate: [roleGuard('admin', 'docente')], ...pendiente('Estudiantes', 'F2 · Catálogo') },
-      { path: 'rooms', canActivate: [roleGuard('admin')], ...pendiente('Aulas', 'F2 · Catálogo') },
-      { path: 'devices', canActivate: [roleGuard('admin')], ...pendiente('Dispositivos', 'F2 · Catálogo') },
+      {
+        path: 'teachers',
+        canActivate: [roleGuard('admin')],
+        loadComponent: () => import('./features/catalog/teachers/teachers').then((m) => m.TeachersPage),
+        data: { title: 'Docentes' },
+      },
+      {
+        path: 'students',
+        canActivate: [roleGuard('admin', 'docente')],
+        loadComponent: () => import('./features/catalog/students/students').then((m) => m.StudentsPage),
+        data: { title: 'Estudiantes' },
+      },
+      {
+        path: 'rooms',
+        canActivate: [roleGuard('admin')],
+        loadComponent: () => import('./features/catalog/rooms/rooms').then((m) => m.RoomsPage),
+        data: { title: 'Aulas' },
+      },
+      {
+        path: 'devices',
+        canActivate: [roleGuard('admin')],
+        loadComponent: () => import('./features/catalog/devices/devices').then((m) => m.DevicesPage),
+        data: { title: 'Dispositivos' },
+      },
 
-      // --- Calendario (F3) ---
       { path: 'calendar/holidays', canActivate: [roleGuard('admin', 'docente')], ...pendiente('Feriados', 'F3 · Calendario') },
       { path: 'calendar/justifications', canActivate: [roleGuard('admin', 'docente')], ...pendiente('Justificaciones', 'F3 · Calendario') },
       { path: 'calendar/settings', canActivate: [roleGuard('admin')], ...pendiente('Parámetros del sistema', 'F3 · Calendario') },
 
-      // --- Herramientas (F4-F6) ---
       { path: 'faces', canActivate: [roleGuard('admin')], ...pendiente('Enrolamiento facial', 'F4 · Herramientas') },
       { path: 'imports', canActivate: [roleGuard('admin')], ...pendiente('Importar horario (PDF)', 'F6 · Herramientas') },
       { path: 'reports', canActivate: [roleGuard('admin', 'docente')], ...pendiente('Reportes', 'F6 · Herramientas') },

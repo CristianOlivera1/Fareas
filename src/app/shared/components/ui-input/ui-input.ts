@@ -35,6 +35,8 @@ export class UiInput implements ControlValueAccessor {
   readonly autocomplete = input<string | null>(null);
   readonly customId = input<string | null>(null);
   readonly showPasswordToggle = input(false);
+  readonly required = input(false);
+  readonly mono = input(false);
 
   readonly value = signal('');
   readonly disabled = signal(false);

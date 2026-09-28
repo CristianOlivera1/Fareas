@@ -1,0 +1,186 @@
+<app-page-header title="Dispositivos" subtitle="Cámaras RTSP y nodos ESP32 por aula (RF-05, RF-35)">
+  @if (isMonitoreo()) {
+    <span class="mr-2 inline-flex items-center gap-1.5 text-xs text-gray-500">
+      <span class="size-2 animate-pulse rounded-full bg-green-500"></span>
+      Auto-actualiza cada 30 s · últ. {{ lastRefresh() }}
+    </span>
+  }
+  @if (auth.isAdmin()) {
+    <app-ui-button icon="material-symbols:add" (click)="openCreate()">
+      Nuevo dispositivo
+    </app-ui-button>
+  }
+</app-page-header>
+
+<div class="mb-4 flex w-fit items-center gap-2 rounded-xl bg-gray-100 p-1">
+  <button type="button" (click)="setTab('catalogo')"
+    class="rounded-lg px-4 py-1.5 text-sm font-medium transition-colors"
+    [class.bg-white]="!isMonitoreo()" [class.shadow-sm]="!isMonitoreo()"
+    [class.text-gray-900]="!isMonitoreo()" [class.text-gray-500]="isMonitoreo()">
+    Catálogo
+  </button>
+  <button type="button" (click)="setTab('monitoreo')"
+    class="rounded-lg px-4 py-1.5 text-sm font-medium transition-colors"
+    [class.bg-white]="isMonitoreo()" [class.shadow-sm]="isMonitoreo()"
+    [class.text-gray-900]="isMonitoreo()" [class.text-gray-500]="!isMonitoreo()">
+    <span class="inline-flex items-center gap-1.5">
+      Monitoreo
+      <span class="rounded-full px-1.5 text-xs font-semibold"
+        [class.bg-green-100]="onlineCount() > 0" [class.text-green-700]="onlineCount() > 0"
+        [class.bg-gray-200]="onlineCount() === 0" [class.text-gray-500]="onlineCount() === 0">
+        {{ onlineCount() }}/{{ statusList().length }}
+      </span>
+    </span>
+  </button>
+</div>
+
+@if (!isMonitoreo()) {
+  <div class="mb-4 flex flex-wrap items-center gap-3">
+    <p-select class="w-52" appendTo="body" [options]="aulas()" placeholder="Todas las aulas"
+      showClear optionLabel="label" optionValue="value"
+      [ngModel]="roomId()" (ngModelChange)="onRoomFilter($event)" />
+    <p-select class="w-44" appendTo="body" [options]="tipos" placeholder="Todos los tipos"
+      showClear [ngModel]="tipo()" (ngModelChange)="onTypeFilter($event)" />
+    <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="reload()">
+      Actualizar
+    </app-ui-button>
+  </div>
+
+  @if (error(); as msg) {
+    <app-ui-alert variant="danger" title="No se pudieron cargar los dispositivos" class="mb-4 block">{{ msg }}</app-ui-alert>
+  }
+
+  <app-data-table
+    [columns]="columns" [data]="devices()" mode="server"
+    [serverPage]="page()" [serverTotal]="total()" [serverPageSize]="pageSize()"
+    [loading]="loading()" [errorMessage]="error()"
+    emptyTitle="Sin dispositivos" emptyMessage="Registra la primera cámara o nodo ESP32."
+    emptyIcon="material-symbols:videocam-outline"
+    (pageChange)="onPage($event)" (perPageChange)="onPageSize($event)" (retry)="reload()"
+  >
+    <ng-template appCell="device" let-d>
+      <div class="flex items-center gap-2.5">
+        <span class="grid size-8 shrink-0 place-items-center rounded-lg"
+          [class.bg-blue-50]="d.device_type === 'camara'" [class.text-(--fareas-primary)]="d.device_type === 'camara'"
+          [class.bg-purple-50]="d.device_type === 'esp32'" [class.text-purple-600]="d.device_type === 'esp32'">
+          <iconify-icon [icon]="d.device_type === 'camara' ? 'material-symbols:videocam-outline' : 'material-symbols:memory'" width="18"></iconify-icon>
+        </span>
+        <div class="min-w-0">
+          <div class="truncate text-sm font-medium text-gray-900">{{ d.name || d.device_key }}</div>
+          <div class="font-mono text-xs text-gray-500">{{ d.device_key }}</div>
+        </div>
+      </div>
+    </ng-template>
+    <ng-template appCell="room_code" let-d>
+      <span class="text-sm text-gray-600">{{ d.room_code }}</span>
+    </ng-template>
+    <ng-template appCell="rtsp_url" let-d>
+      @if (d.rtsp_url) {
+        <span class="font-mono text-xs text-gray-500" [title]="d.rtsp_url">{{ shortRtsp(d.rtsp_url) }}</span>
+      } @else { <span class="text-xs text-gray-400">—</span> }
+    </ng-template>
+    <ng-template appCell="is_online" let-d>
+      @if (d.is_online) {
+        <span class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+          <span class="size-1.5 animate-pulse rounded-full bg-green-500"></span> En línea
+        </span>
+      } @else {
+        <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+          <span class="size-1.5 rounded-full bg-gray-400"></span> Fuera de línea
+        </span>
+      }
+    </ng-template>
+    <ng-template appCell="actions" let-d>
+      <div class="flex items-center justify-center gap-1">
+        <button type="button"
+          class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+          title="Editar" (click)="openEdit(d)">
+          <iconify-icon icon="material-symbols:edit-outline" width="18"></iconify-icon>
+        </button>
+      </div>
+    </ng-template>
+  </app-data-table>
+} @else {
+  <!-- Monitoreo RF-35 -->
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    @for (d of statusList(); track d.id) {
+      <div class="rounded-xl border bg-white p-4 shadow-xs"
+        [class.border-green-200]="d.is_online" [class.border-gray-200]="!d.is_online">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex min-w-0 items-center gap-2.5">
+            <span class="grid size-9 shrink-0 place-items-center rounded-lg"
+              [class.bg-blue-50]="d.device_type === 'camara'" [class.text-(--fareas-primary)]="d.device_type === 'camara'"
+              [class.bg-purple-50]="d.device_type === 'esp32'" [class.text-purple-600]="d.device_type === 'esp32'">
+              <iconify-icon [icon]="d.device_type === 'camara' ? 'material-symbols:videocam-outline' : 'material-symbols:memory'" width="20"></iconify-icon>
+            </span>
+            <div class="min-w-0">
+              <div class="truncate text-sm font-semibold text-gray-900">{{ d.name || d.device_key }}</div>
+              <div class="text-xs text-gray-500">{{ d.room_code }} · {{ d.device_type }}</div>
+            </div>
+          </div>
+          @if (d.is_online) {
+            <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+              <span class="size-1.5 animate-pulse rounded-full bg-green-500"></span> En línea
+            </span>
+          } @else {
+            <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+              <span class="size-1.5 rounded-full bg-gray-400"></span> Caído
+            </span>
+          }
+        </div>
+        <div class="mt-3 flex items-center justify-between text-xs text-gray-500">
+          <span class="font-mono">{{ d.ip_address || d.device_key }}</span>
+          <span [title]="d.last_heartbeat ?? 'sin latidos'">
+            @if (d.last_heartbeat) { latido {{ shortTime(d.last_heartbeat) }} } @else { sin latidos }
+          </span>
+        </div>
+      </div>
+    } @empty {
+      <div class="col-span-full rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center">
+        <iconify-icon icon="material-symbols:monitor-heart-outline" width="32" class="text-gray-300"></iconify-icon>
+        <p class="mt-2 text-sm text-gray-500">Sin dispositivos activos para monitorear.</p>
+      </div>
+    }
+  </div>
+}
+
+<p-dialog [header]="form().id ? 'Editar dispositivo' : 'Nuevo dispositivo'"
+  [(visible)]="dialogVisible" [modal]="true" [style]="{ width: '460px' }">
+  <div class="space-y-4 pt-2">
+    @if (form().id === null) {
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Tipo <span class="text-red-500">*</span></span>
+        <p-select class="w-full" appendTo="body" [options]="tipos" optionLabel="label" optionValue="value"
+          placeholder="Cámara o ESP32" [ngModel]="form().device_type" (ngModelChange)="patch({ device_type: $event })" />
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Aula <span class="text-red-500">*</span></span>
+        <p-select class="w-full" appendTo="body" [options]="aulas()" optionLabel="label" optionValue="value"
+          placeholder="Aula del dispositivo" [ngModel]="form().room_id" (ngModelChange)="patch({ room_id: $event })" />
+      </label>
+      <app-ui-input [label]="form().device_type === 'esp32' ? 'Device key del nodo' : 'Device key de la cámara'"
+        [required]="true" [mono]="true"
+        [placeholder]="form().device_type === 'esp32' ? 'esp32-lab305' : 'cam-lab305'"
+        hint="Debe coincidir con el firmware del ESP32 (RF-33)"
+        [ngModel]="form().device_key" (ngModelChange)="patch({ device_key: $event })" />
+    }
+    <app-ui-input label="Nombre" placeholder="Cámara puerta LAB 305"
+      [ngModel]="form().name" (ngModelChange)="patch({ name: $event })" />
+    @if (form().device_type === 'camara') {
+      <app-ui-input label="URL RTSP" [required]="true" [mono]="true"
+        placeholder="rtsp://admin:clave@10.14.5.11:554/Streaming/Channels/102"
+        hint="Sub-stream 102 recomendado (menos CPU)"
+        [ngModel]="form().rtsp_url" (ngModelChange)="patch({ rtsp_url: $event })" />
+    }
+    @if (form().id !== null) {
+      <label class="flex items-center gap-2 pt-1">
+        <p-toggleswitch [ngModel]="form().is_active" (ngModelChange)="patch({ is_active: $event })" />
+        <span class="text-sm text-gray-700">Dispositivo activo</span>
+      </label>
+    }
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="dialogVisible = false">Cancelar</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="save()">Guardar</app-ui-button>
+  </ng-template>
+</p-dialog>

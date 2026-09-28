@@ -1,0 +1,94 @@
+<app-page-header title="Docentes" subtitle="Alta de docentes con envío de clave temporal (RF-02, RF-08)">
+  @if (auth.isAdmin()) {
+    <app-ui-button icon="material-symbols:person-add" (click)="openCreate()">
+      Nuevo docente
+    </app-ui-button>
+  }
+</app-page-header>
+
+<div class="mb-4 flex flex-wrap items-center gap-3">
+  <iconify-icon icon="material-symbols:search" class="text-gray-400" width="20"></iconify-icon>
+  <input pInputText class="w-72" placeholder="Buscar por nombre o correo…"
+    [ngModel]="q()" (ngModelChange)="onSearch($event)" />
+  <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="reload()">
+    Actualizar
+  </app-ui-button>
+</div>
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudieron cargar los docentes" class="mb-4 block">{{ msg }}</app-ui-alert>
+}
+
+<app-data-table
+  [columns]="columns" [data]="people()" mode="server"
+  [serverPage]="page()" [serverTotal]="total()" [serverPageSize]="pageSize()"
+  [loading]="loading()" [errorMessage]="error()"
+  emptyTitle="Sin docentes" emptyMessage="Registra al primer docente de la facultad."
+  emptyIcon="material-symbols:person-outline"
+  (pageChange)="onPage($event)" (perPageChange)="onPageSize($event)" (retry)="reload()"
+>
+  <ng-template appCell="email" let-p>
+    <span class="text-sm text-gray-600">{{ p.email }}</span>
+  </ng-template>
+  <ng-template appCell="is_active" let-p>
+    @if (p.is_active) {
+      <span class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+        <span class="size-1.5 rounded-full bg-green-500"></span> Activo
+      </span>
+    } @else {
+      <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+        <span class="size-1.5 rounded-full bg-gray-400"></span> Inactivo
+      </span>
+    }
+  </ng-template>
+  <ng-template appCell="actions" let-p>
+    <div class="flex items-center justify-center gap-1">
+      <button type="button"
+        class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+        title="Editar" (click)="openEdit(p)">
+        <iconify-icon icon="material-symbols:edit-outline" width="18"></iconify-icon>
+      </button>
+      <button type="button"
+        class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-blue-50 hover:text-(--fareas-primary) transition-colors disabled:opacity-40"
+        [disabled]="resendingId() === p.id"
+        title="Reenviar clave temporal por correo (RF-08)" (click)="resend(p)">
+        @if (resendingId() === p.id) {
+          <iconify-icon icon="svg-spinners:180-ring-with-bg" width="16"></iconify-icon>
+        } @else {
+          <iconify-icon icon="material-symbols:mark-email-unread-outline" width="18"></iconify-icon>
+        }
+      </button>
+    </div>
+  </ng-template>
+</app-data-table>
+
+<p-dialog [header]="form().id ? 'Editar docente' : 'Nuevo docente'"
+  [(visible)]="dialogVisible" [modal]="true" [style]="{ width: '440px' }">
+  <div class="space-y-4 pt-2">
+    <app-ui-input label="Nombre completo" [required]="true" placeholder="Aquino Cruz, Mario (Mag.)"
+      [ngModel]="form().full_name" (ngModelChange)="patch({ full_name: $event })" />
+    @if (form().id === null) {
+      <app-ui-input label="Correo institucional" [required]="true" type="email"
+        placeholder="mario.aquino@unamba.edu.pe" icon="material-symbols:mail-outline"
+        [ngModel]="form().email" (ngModelChange)="patch({ email: $event })" />
+      <app-ui-input label="DNI" [required]="true" type="number" placeholder="8 dígitos"
+        [ngModel]="form().dni" (ngModelChange)="patch({ dni: $event })" />
+    }
+    <app-ui-input label="WhatsApp" placeholder="+51 983 000 000"
+      [ngModel]="form().whatsapp" (ngModelChange)="patch({ whatsapp: $event })" />
+    @if (form().id !== null) {
+      <label class="flex items-center gap-2 pt-1">
+        <p-toggleswitch [ngModel]="form().is_active" (ngModelChange)="patch({ is_active: $event })" />
+        <span class="text-sm text-gray-700">Cuenta activa</span>
+      </label>
+    } @else {
+      <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
+        Al guardar se genera una clave temporal y se envía al correo (RF-08).
+      </app-ui-alert>
+    }
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="dialogVisible = false">Cancelar</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="save()">Guardar</app-ui-button>
+  </ng-template>
+</p-dialog>

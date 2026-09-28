@@ -103,7 +103,7 @@
             [options]="pageSizeOptions()"
             optionLabel="label"
             optionValue="value"
-            [ngModel]="perPage()"
+            [ngModel]="mode() === 'server' ? serverPageSize() : perPage()"
             (ngModelChange)="onPerPage($event)"
           />
         </label>

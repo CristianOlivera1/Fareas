@@ -1,0 +1,73 @@
+<app-page-header title="Aulas" subtitle="Catálogo de aulas y laboratorios (RF-05)">
+  @if (auth.isAdmin()) {
+    <app-ui-button icon="material-symbols:add" (click)="openCreate()">
+      Nueva aula
+    </app-ui-button>
+  }
+</app-page-header>
+
+<div class="mb-4 flex flex-wrap items-center gap-3">
+  <iconify-icon icon="material-symbols:search" class="text-gray-400" width="20"></iconify-icon>
+  <input pInputText class="w-72" placeholder="Buscar por código o nombre…"
+    [ngModel]="q()" (ngModelChange)="onSearch($event)" />
+  <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="reload()">
+    Actualizar
+  </app-ui-button>
+</div>
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudieron cargar las aulas" class="mb-4 block">{{ msg }}</app-ui-alert>
+}
+
+<app-data-table
+  [columns]="columns" [data]="rooms()" mode="server"
+  [serverPage]="page()" [serverTotal]="total()" [serverPageSize]="pageSize()"
+  [loading]="loading()" [errorMessage]="error()"
+  emptyTitle="Sin aulas" emptyMessage="Crea la primera aula o ajusta la búsqueda."
+  emptyIcon="material-symbols:meeting-room-outline"
+  (pageChange)="onPage($event)" (perPageChange)="onPageSize($event)" (retry)="reload()"
+>
+  <ng-template appCell="is_active" let-room>
+    @if (room.is_active) {
+      <span class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+        <span class="size-1.5 rounded-full bg-green-500"></span> Activa
+      </span>
+    } @else {
+      <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+        <span class="size-1.5 rounded-full bg-gray-400"></span> Inactiva
+      </span>
+    }
+  </ng-template>
+  <ng-template appCell="actions" let-room>
+    <div class="flex items-center justify-center gap-1">
+      <button type="button"
+        class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+        title="Editar aula" (click)="openEdit(room)">
+        <iconify-icon icon="material-symbols:edit-outline" width="18"></iconify-icon>
+      </button>
+    </div>
+  </ng-template>
+</app-data-table>
+
+<p-dialog [header]="form().id ? 'Editar aula' : 'Nueva aula'"
+  [(visible)]="dialogVisible" [modal]="true" [style]="{ width: '420px' }">
+  <div class="space-y-4 pt-2">
+    <app-ui-input label="Código" [required]="true" placeholder="LAB 304"
+      [disabled]="form().id !== null" hint="Único por aula; no se puede cambiar después"
+      [ngModel]="form().code" (ngModelChange)="patch({ code: $event })" />
+    <app-ui-input label="Nombre" placeholder="Laboratorio de Redes"
+      [ngModel]="form().name" (ngModelChange)="patch({ name: $event })" />
+    <app-ui-input label="Edificio" placeholder="Pabellón de Informática"
+      [ngModel]="form().building" (ngModelChange)="patch({ building: $event })" />
+    @if (form().id !== null) {
+      <label class="flex items-center gap-2 pt-1">
+        <p-toggleswitch [ngModel]="form().is_active" (ngModelChange)="patch({ is_active: $event })" />
+        <span class="text-sm text-gray-700">Aula activa (abre sesiones)</span>
+      </label>
+    }
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="dialogVisible = false">Cancelar</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="save()">Guardar</app-ui-button>
+  </ng-template>
+</p-dialog>

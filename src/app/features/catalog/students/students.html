@@ -1,0 +1,124 @@
+<app-page-header title="Estudiantes" subtitle="Directorio de matriculados (RF-03)">
+  @if (auth.isAdmin()) {
+    <app-ui-button icon="material-symbols:person-add" (click)="openCreate()">
+      Nuevo estudiante
+    </app-ui-button>
+  }
+</app-page-header>
+
+<div class="mb-4 flex flex-wrap items-center gap-3">
+  <iconify-icon icon="material-symbols:search" class="text-gray-400" width="20"></iconify-icon>
+  <input pInputText class="w-64" placeholder="Nombre, correo o código…"
+    [ngModel]="q()" (ngModelChange)="onSearch($event)" />
+  <p-select class="w-44" appendTo="body" [options]="ciclos" placeholder="Todos los ciclos"
+    showClear [ngModel]="semester()" (ngModelChange)="onSemester($event)" />
+  <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="reload()">
+    Actualizar
+  </app-ui-button>
+</div>
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudieron cargar los estudiantes" class="mb-4 block">{{ msg }}</app-ui-alert>
+}
+
+<app-data-table
+  [columns]="columns" [data]="students()" mode="server"
+  [serverPage]="page()" [serverTotal]="total()" [serverPageSize]="pageSize()"
+  [loading]="loading()" [errorMessage]="error()"
+  emptyTitle="Sin estudiantes" emptyMessage="Registra al primer estudiante o ajusta la búsqueda."
+  emptyIcon="material-symbols:school-outline"
+  (pageChange)="onPage($event)" (perPageChange)="onPageSize($event)" (retry)="reload()"
+>
+  <ng-template appCell="student" let-s>
+    <div class="flex items-center gap-2.5">
+      <span class="grid size-8 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-bold text-(--fareas-primary)">
+        {{ initials(s.full_name) }}
+      </span>
+      <div class="min-w-0">
+        <div class="truncate text-sm font-medium text-gray-900">{{ s.full_name }}</div>
+        <div class="text-xs text-gray-500">{{ s.code ?? 'sin código' }}</div>
+      </div>
+    </div>
+  </ng-template>
+  <ng-template appCell="enrolled" let-s>
+    @if (s.enrolled === true) {
+      <span class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+        <iconify-icon icon="material-symbols:face" width="13"></iconify-icon> Enrolado
+      </span>
+    } @else if (s.enrolled === false) {
+      <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+        <iconify-icon icon="material-symbols:face-retouching-off" width="13"></iconify-icon> Sin rostro
+      </span>
+    } @else {
+      <span class="text-xs text-gray-400">—</span>
+    }
+  </ng-template>
+  <ng-template appCell="email" let-s>
+    <span class="text-sm text-gray-600">{{ s.email }}</span>
+  </ng-template>
+  <ng-template appCell="semester" let-s>
+    <span class="text-sm text-gray-600">{{ s.semester ? 'Ciclo ' + s.semester : '—' }}</span>
+  </ng-template>
+  <ng-template appCell="is_active" let-s>
+    @if (s.is_active) {
+      <span class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+        <span class="size-1.5 rounded-full bg-green-500"></span> Activo
+      </span>
+    } @else {
+      <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+        <span class="size-1.5 rounded-full bg-gray-400"></span> Inactivo
+      </span>
+    }
+  </ng-template>
+  <ng-template appCell="actions" let-s>
+    <div class="flex items-center justify-center gap-1">
+      <button type="button"
+        class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+        title="Editar" (click)="openEdit(s)">
+        <iconify-icon icon="material-symbols:edit-outline" width="18"></iconify-icon>
+      </button>
+    </div>
+  </ng-template>
+</app-data-table>
+
+<p-dialog [header]="form().id ? 'Editar estudiante' : 'Nuevo estudiante'"
+  [(visible)]="dialogVisible" [modal]="true" [style]="{ width: '460px' }">
+  <div class="space-y-4 pt-2">
+    <app-ui-input label="Nombre completo" [required]="true" placeholder="Montesinos Valdivia, Raul"
+      [ngModel]="form().full_name" (ngModelChange)="patch({ full_name: $event })" />
+    @if (form().id === null) {
+      <app-ui-input label="Correo institucional" [required]="true" type="email"
+        placeholder="raul.montesinos@unamba.edu.pe" icon="material-symbols:mail-outline"
+        [ngModel]="form().email" (ngModelChange)="patch({ email: $event })" />
+      <div class="grid grid-cols-2 gap-3">
+        <app-ui-input label="DNI" [required]="true" type="number" placeholder="8 dígitos"
+          [ngModel]="form().dni" (ngModelChange)="patch({ dni: $event })" />
+        <app-ui-input label="Código de matrícula" [required]="true" [mono]="true" placeholder="221181"
+          hint="6 dígitos; sirve para iniciar sesión"
+          [ngModel]="form().code" (ngModelChange)="patch({ code: $event })" />
+      </div>
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Ciclo <span class="text-red-500">*</span></span>
+        <p-select class="w-full" appendTo="body" [options]="ciclos" placeholder="Ciclo actual"
+          [ngModel]="form().semester" (ngModelChange)="patch({ semester: $event })" />
+      </label>
+    }
+    <app-ui-input label="WhatsApp" placeholder="+51 983 000 000"
+      [ngModel]="form().whatsapp" (ngModelChange)="patch({ whatsapp: $event })" />
+    @if (form().id !== null) {
+      <label class="flex items-center gap-2 pt-1">
+        <p-toggleswitch [ngModel]="form().is_active" (ngModelChange)="patch({ is_active: $event })" />
+        <span class="text-sm text-gray-700">Cuenta activa</span>
+      </label>
+    } @else {
+      <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
+        Se genera una clave temporal y se envía al correo (RF-08). El rostro se enrola
+        después en Herramientas → Enrolamiento facial.
+      </app-ui-alert>
+    }
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="dialogVisible = false">Cancelar</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="save()">Guardar</app-ui-button>
+  </ng-template>
+</p-dialog>

@@ -16,6 +16,7 @@ export interface Device {
   readonly device_key: string;
   readonly name: string | null;
   readonly ip_address: string | null;
+  readonly rtsp_url?: string | null;
   readonly is_online: boolean;
   readonly last_heartbeat: string | null;
   readonly is_active: boolean;
@@ -32,6 +33,7 @@ export interface Person {
   readonly semester: number | null;
   readonly is_active: boolean;
   readonly must_change_password: boolean;
+  readonly enrolled?: boolean | null;
 }
 
 export interface Course {

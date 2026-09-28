@@ -1,7 +1,7 @@
-<div class="space-y-2">
-  @if (label()) {
+<div class="space-y-1">
+  @if (label(); as text) {
   <label [for]="resolvedId()" class="block text-sm font-medium text-gray-700">
-    {{ label() }}
+    {{ text }} @if (required()) { <span class="text-red-500">*</span> }
   </label>
   }
   <div class="relative">
@@ -12,9 +12,10 @@
     }
     <input [id]="resolvedId()" [type]="effectiveType()" [value]="value()" [placeholder]="placeholder()"
       [attr.autocomplete]="autocomplete()" [disabled]="disabled()" (input)="onInput($event)" (blur)="onBlur()"
+      [attr.inputmode]="type() === 'number' ? 'numeric' : null"
       class="block w-full py-2.5 pr-3 border rounded-lg bg-white text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-(--fareas-primary) focus:border-transparent transition-all disabled:opacity-50 disabled:bg-gray-50"
       [class.pl-10]="icon()" [class.pl-3]="!icon()" [class.pr-10]="showToggle()" [class.border-red-300]="error()"
-      [class.border-gray-300]="!error()" />
+      [class.border-gray-300]="!error()" [class.font-mono]="mono()" [class.text-xs]="mono()" />
     @if (showToggle()) {
     <button type="button" (click)="togglePasswordVisibility()"
       [attr.aria-label]="passwordVisible() ? 'Ocultar contraseña' : 'Mostrar contraseña'"
@@ -27,7 +28,7 @@
   </div>
   @if (error()) {
   <p class="text-[13px] text-red-500 ml-1" role="alert">{{ error() }}</p>
-  } @else if (hint()) {
-  <p class="text-[13px] text-gray-400 ml-1">{{ hint() }}</p>
+  } @else if (hint(); as hintText) {
+  <p class="text-[13px] text-gray-400 ml-1">{{ hintText }}</p>
   }
 </div>

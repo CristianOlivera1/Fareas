@@ -1,0 +1,24 @@
+@if (!dismissed()) {
+  <div [class]="
+    inline()
+      ? 'flex items-start gap-2 text-sm ' + classes().iconColor
+      : 'flex items-start gap-3 rounded-xl border p-4 ' + classes().box
+  ">
+    <iconify-icon [icon]="icon() ?? classes().icon" width="20" [class.mt-0.5]="!inline()" [class]="classes().iconColor" />
+    <div class="min-w-0 flex-1">
+      @if (title(); as t) {
+        <p class="font-semibold" [class]="classes().title" [class.text-sm]="inline()">{{ t }}</p>
+      }
+      <div class="text-sm" [class]="inline() ? 'text-gray-600' : 'text-gray-700'"
+        [class.mt-0.5]="title()">
+        <ng-content />
+      </div>
+    </div>
+    @if (dismissible()) {
+      <button type="button" (click)="dismiss()" aria-label="Cerrar aviso"
+        class="shrink-0 rounded-lg p-1 text-gray-400 hover:bg-black/5 hover:text-gray-600 transition-colors">
+        <iconify-icon icon="material-symbols:close" width="16" />
+      </button>
+    }
+  </div>
+}

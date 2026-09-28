@@ -27,6 +27,13 @@ export class DataTable {
   readonly data = input.required<unknown[]>();
   readonly trackBy = input<(index: number, row: unknown) => unknown>((_, row) => row);
 
+  /** 'client': pagina en memoria (default, retrocompatible).
+   * 'server': la página ya viene paginada por la API (Page<T>); usa los inputs server*. */
+  readonly mode = input<'client' | 'server'>('client');
+  readonly serverPage = input(1);
+  readonly serverTotal = input(0);
+  readonly serverPageSize = input(10);
+
   readonly loading = input(false);
   readonly errorMessage = input<string | null>(null);
   readonly emptyTitle = input('Sin resultados');
@@ -42,17 +49,29 @@ export class DataTable {
 
   readonly retry = output<void>();
   readonly clearFilters = output<void>();
+  /** Solo mode='server': el usuario pidió otra página/tamaño (la página recarga). */
+  readonly pageChange = output<number>();
+  readonly perPageChange = output<number>();
 
   readonly cellTemplates = contentChildren(DataTableCellDirective);
 
   private readonly page = signal(1);
   readonly perPage = signal(5);
 
-  readonly totalCount = computed(() => this.data().length);
-  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.totalCount() / this.perPage())));
-  readonly currentPage = computed(() => Math.min(this.page(), this.totalPages()));
+  readonly totalCount = computed(() =>
+    this.mode() === 'server' ? this.serverTotal() : this.data().length,
+  );
+  readonly totalPages = computed(() =>
+    this.mode() === 'server'
+      ? Math.max(1, Math.ceil(this.serverTotal() / Math.max(1, this.serverPageSize())))
+      : Math.max(1, Math.ceil(this.data().length / this.perPage())),
+  );
+  readonly currentPage = computed(() =>
+    this.mode() === 'server' ? this.serverPage() : Math.min(this.page(), this.totalPages()),
+  );
 
   readonly pagedData = computed(() => {
+    if (this.mode() === 'server') return this.data();
     const start = (this.currentPage() - 1) * this.perPage();
     return this.data().slice(start, start + this.perPage());
   });
@@ -71,14 +90,25 @@ export class DataTable {
   }
 
   rowNumber(rowIndex: number): number {
+    if (this.mode() === 'server') {
+      return (this.serverPage() - 1) * this.serverPageSize() + rowIndex + 1;
+    }
     return (this.currentPage() - 1) * this.perPage() + rowIndex + 1;
   }
 
   onPage(page: number): void {
+    if (this.mode() === 'server') {
+      this.pageChange.emit(page);
+      return;
+    }
     this.page.set(page);
   }
 
   onPerPage(value: number): void {
+    if (this.mode() === 'server') {
+      this.perPageChange.emit(value);
+      return;
+    }
     this.perPage.set(value);
     this.page.set(1);
   }
