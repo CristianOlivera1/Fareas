@@ -36,6 +36,18 @@ async def _dispose_engine_after_each_test():
     await engine.dispose()
 
 
+@pytest.fixture(autouse=True)
+async def _reset_login_rate_limit():
+    """El rate limit de login (routers/auth.py) es un estado en memoria por
+    proceso: sin este reset, una corrida de tests con IP de prueba única
+    acumularía fallos y bloquearía tests posteriores con 429."""
+    from app.routers.auth import _login_attempts
+
+    _login_attempts.clear()
+    yield
+    _login_attempts.clear()
+
+
 @pytest.fixture
 def app_instance() -> FastAPI:
     return create_app()

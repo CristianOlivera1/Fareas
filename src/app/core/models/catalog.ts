@@ -104,6 +104,9 @@ export interface Settings {
 }
 
 /** Registro de HOY (vista v_today_attendance + attendance.py). */
+export type AttendanceStatusApi = 'asistio' | 'tardanza' | 'falta';
+
+/** Registro de HOY (vista v_today_attendance + attendance.py). */
 export interface AttendanceToday {
   readonly record_id: number;
   readonly student_id: number;
@@ -114,7 +117,7 @@ export interface AttendanceToday {
   readonly course_name: string;
   readonly group_code: string;
   readonly room_code: string;
-  readonly status: 'asistio' | 'tardanza' | 'falta';
+  readonly status: AttendanceStatusApi;
   readonly marked_at: string | null;
   readonly method: string;
   readonly similarity: number | null;

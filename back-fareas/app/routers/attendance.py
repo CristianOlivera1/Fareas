@@ -6,6 +6,7 @@ La lógica vive en el motor; aquí solo se orquesta y se audita.
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text as sql_text
+from sqlmodel import select
 
 from app.core.deps import DbSession, RequireRole
 from app.routers.catalog import _client_ip, _get_or_404
@@ -18,10 +19,15 @@ from app.services.attendance_engine import (
 )
 from app.services.audit import audit
 from app.tables import (
+    AppUser,
     AttendanceRecord,
     AttendanceSession,
     AttendanceStatus,
+    Course,
+    CourseGroup,
+    Room,
     ScheduleBlock,
+    SessionStatus,
     UserRole,
 )
 
@@ -74,6 +80,61 @@ async def attendance_today(
             "similarity": float(f.similarity) if f.similarity is not None else None,
         }
         for f in filas
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Sesiones abiertas de HOY (inicio de F3): alimenta el modal de marca
+# manual RF-21 con la sesión activa por aula/curso/grupo.
+# ---------------------------------------------------------------------------
+@router.get("/attendance/sessions-today")
+async def sessions_today(
+    db: DbSession,
+    user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
+) -> list[dict]:
+    """Sesiones ABIERTAS de hoy (RF-26) con su aula/curso/grupo/bloque.
+
+    Un docente solo ve las sesiones de SUS grupos; el admin las ve todas.
+    El frontend lo usa para saber qué sesión corresponde al modal de
+    marca manual (RF-21). Las cerradas se excluyen: una vez cerrada, la
+    corrección es por rectificación (RF-15), no por marca manual.
+    """
+    stmt = (
+        select(AttendanceSession, ScheduleBlock, CourseGroup, Course, Room, AppUser)
+        .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)  # type: ignore[arg-type]
+        .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)  # type: ignore[arg-type]
+        .join(Course, Course.id == CourseGroup.course_id)  # type: ignore[arg-type]
+        .join(Room, Room.id == CourseGroup.room_id)  # type: ignore[arg-type]
+        .join(AppUser, AppUser.id == CourseGroup.teacher_id)  # type: ignore[arg-type]
+        .where(
+            AttendanceSession.session_date == _naive_peru(ahora_peru()).date(),
+            AttendanceSession.status == SessionStatus.ABIERTA,  # type: ignore[arg-type]
+        )
+    )
+    if user.role is not UserRole.ADMIN:
+        stmt = stmt.where(CourseGroup.teacher_id == user.id)
+    stmt = stmt.order_by(ScheduleBlock.start_time)
+    filas = (await db.exec(stmt)).all()
+    return [
+        {
+            "session_id": ses.id,
+            "status": ses.status.value,
+            "session_date": str(ses.session_date),
+            "block_id": bloque.id,
+            "weekday": bloque.weekday,
+            "start_time": bloque.start_time.isoformat(timespec="seconds"),
+            "end_time": bloque.end_time.isoformat(timespec="seconds"),
+            "group_id": grupo.id,
+            "group_code": grupo.group_code,
+            "course_id": curso.id,
+            "course_code": curso.code,
+            "course_name": curso.name,
+            "room_id": aula.id,
+            "room_code": aula.code,
+            "teacher_id": docente.id,
+            "teacher_name": docente.full_name,
+        }
+        for ses, bloque, grupo, curso, aula, docente in filas
     ]
 
 
