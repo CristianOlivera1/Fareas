@@ -196,7 +196,7 @@ back-fareas/
 - [x] `services/session_scheduler.py`: APScheduler en el `lifespan` (cada 60 s); `cerrar_sesiones_pendientes()` cierra toda sesión vencida —incluidas las de fechas anteriores si el servidor estuvo caído— generando faltas (marked_at NULL) a matriculados sin registro y alertas DPI.
 - [x] Alertas DPI al cierre (RF-24): SQL sobre la vista `v_student_dpi` + `services/notifications.py` (correo con la paleta institucional, rojo si ya supera el 1/3).
 - [x] `services/camera_loop.py`: un solo task asyncio en round-robin (~2 fps por aula activa) → pipeline → marca en BD → veredicto al ESP32 del aula + `ultimo_veredicto()` en memoria para el feed SSE del Bloque 8.
-- [x] `routers/attendance.py`: `GET /attendance/today` (vista `v_today_attendance`, filtros curso/aula/estado — alimenta app-student-list, PLAN §5), `POST /sessions/{id}/manual-mark` (RF-21, docente solo en SUS grupos), `PATCH /attendance/{id}/rectify` (RF-15 motivo obligatorio → audit_log), `POST /sessions/{id}/close` (admin).
+- [x] `routers/attendance.py`: `GET /attendance/today` (vista `v_today_attendance`, filtros curso/aula/estado — alimenta app-student-list, PLAN §5), `POST /sessions/{id}/manual-mark` (RF-21, docente solo en SUS grupos), `PATCH /attendance/{id}/rectify` (RF-15 motivo obligatorio → audit_log), `POST /sessions/{id}/close` (admin). (Bloque 6b añade `GET /attendance/sessions-today` y `GET /attendance/me`; ver arriba).
 - [x] `tests/test_attendance_engine.py` + `test_attendance_api.py`: creación/reuso de sesión, feriado, ventana de tardanza, marca única (409), cierre con faltas e idempotencia, marca manual por API, rectificación auditada, 403 a docente ajeno.
 - **Entregable VERIFICADO:** video demo → sesión auto-abierta → Raul (221181) identificado (sim 0.618) → marca `asistio` persistida → cierre sin faltas pendientes → todo en BD. **49/49 tests.**
 
@@ -246,6 +246,14 @@ back-fareas/
 2. Regex de días GENÉRICO (3-4 letras) + diccionario: lo no reconocido sale ambiguo en vez de perderse silenciosamente.
 3. `File(...)` en default de parámetro dispara B008 de ruff: es el patrón estándar de FastAPI, se marca con noqa (o Annotated).
 4. La importación masiva necesita `add_block(commit=False)`: el commit propio del servicio rompía el todo-o-nada.
+
+### Bloque 6b - Ampliaciones de asistencia y seguridad (inicio de F3) - **✅ COMPLETADO Y VERIFICADO**
+- [x] `GET /attendance/sessions-today` (F3, frontend lo consume): sesiones ABIERTAS de hoy con aula/curso/grupo/docente/bloque; docente solo ve SUS grupos, admin todas; las CERRADAS se excluyen (su corrección es por rectificación RF-15). Test E2E: apertura → aparece, cierre → desaparece.
+- [x] **Rate limit de login en el backend** (antes solo en el cliente `auth-rate-limit.ts`): 5 intentos fallidos por IP/minuto con ventana móvil (dict en memoria, mismo patrón que el OTP RF-12), 6º intento → 429 aunque la clave sea correcta; login exitoso limpia la ventana. Tests: bloqueo + reinicio en login correcto; fixture autouse resetea el contador entre tests.
+- [x] **`GET /attendance/me`** (nuevo alcance, ver la decisión revisada abajo): historial de asistencias del ESTUDIANTE autenticado (solo rol estudiante; admin/docente → 403), con filtros `?desde=&hasta=` (rango de fechas de sesión) y limit 500. Devuelve record_id, session_date, franja bloque, curso, grupo, estado, marked_at, method y correct_reason (RF-15 visible para el alumno).
+- **Decisiones revisadas:**
+1. ~~"El rol ESTUDIANTE no entra al panel"~~ → **REVISADO: el estudiante SÍ entra a la app** con su vista personal "Mis asistencias" alimentada por `GET /attendance/me` (el resto del panel sigue restringido a admin/docente). Las alertas por correo (RF-24) se mantienen igual.
+- **Entregable VERIFICADO:** 72/72 tests incluyendo los nuevos (sessions-today + rate limit + /attendance/me).
 
 ### Bloque 10 - Calidad y demo final (1–2 días)
 - [ ] Tests pytest (`fareas_test`); motor y auth con prioridad.

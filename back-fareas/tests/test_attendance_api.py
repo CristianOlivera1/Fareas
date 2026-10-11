@@ -134,3 +134,49 @@ async def test_sessions_today(client, admin_headers, db_session, escenario):
     await client.post(f"{API}/sessions/{sesion.id}/close", headers=admin_headers)
     r = await client.get(f"{API}/attendance/sessions-today", headers=admin_headers)
     assert r.json() == [], r.text
+
+
+async def test_attendance_me_del_estudiante(client, admin_headers, db_session, escenario):
+    """GET /attendance/me: historial del estudiante autenticado (nuevo alcance:
+    el rol ESTUDIANTE SÍ entra a la app con su vista personal)."""
+    esc = escenario
+    sesion, _ = await resolver_sesion(db_session, esc["aula_id"], now=h(esc["lunes"], "08:15"))
+    await db_session.commit()
+    assert sesion is not None
+
+    # Marca manual para e1 (asistio); e2 queda sin marca en esta sesión
+    r = await client.post(
+        f"{API}/sessions/{sesion.id}/manual-mark",
+        headers=admin_headers,
+        json={"student_id": esc["e1"], "status": "asistio"},
+    )
+    assert r.status_code == 201, r.text
+
+    def _student_headers() -> dict[str, str]:
+        from app.core.security import create_access_token
+
+        return {
+            "Authorization": f"Bearer {create_access_token(esc['e1'], 'estudiante')}",
+        }
+
+    # Admin/docente NO usan /attendance/me (403): su vista es la del panel
+    r = await client.get(f"{API}/attendance/me", headers=admin_headers)
+    assert r.status_code == 403
+
+    # Historial del e1: su marca denomin 'asistio' con curso TST601
+    r = await client.get(f"{API}/attendance/me", headers=_student_headers())
+    assert r.status_code == 200, r.text
+    filas = r.json()
+    assert len(filas) >= 1
+    propia = next(f for f in filas if f["record_id"] == r.json()[0]["record_id"])
+    assert propia["course_code"] == CURSO
+    assert propia["status"] == "asistio"
+    assert propia["group_code"] == "A"
+    assert propia["method"] == "manual"
+
+    # Filtro por rango: solo exactamente este rango lo incluye
+    r2 = await client.get(
+        f"{API}/attendance/me?desde=2099-01-01&hasta=2099-12-31",
+        headers=_student_headers(),
+    )
+    assert r2.status_code == 200 and r2.json() == []

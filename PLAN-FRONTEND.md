@@ -22,19 +22,28 @@
 | Build OK | `ng build --configuration development` pasa; `dist/fareas` generado |
 
 **Stack fijo:** Angular 21 (standalone + signals + OnPush), PrimeNG 20, Tailwind 4,
-Chart.js 4, material-symbols/akar-icons ya en uso.
+Chart.js 4, material-symbols/akar-icons ya en uso.## 1. Decisiones definitivas (respondidas por el usuario)
 
-## 1. Decisiones definitivas (respondidas por el usuario)
-
-1. **El rol ESTUDIANTE no entra al panel** (por ahora): el guard de `/admin` solo
-   deja pasar `admin` y `docente`. El estudiante recibe sus alertas por correo
-   (RF-24). Si en el futuro se quiere "Mis asistencias", se añade `GET /attendance/me`.
+1. **~~El rol ESTUDIANTE no entra al panel~~ → REVISADO: el estudiante SÍ entra a la app**:
+   el backend ya expone `GET /attendance/me` (historial personal, solo rol estudiante) y
+   el estudiante recibirá su propia vista "Mis asistencias" (Responsive list con curso,
+   grupo, estado, fecha, método y motivo de rectificación RF-15). El panel admin/docente
+   sigue restringido por `authGuard`/`roleGuard`; las alertas por correo (RF-24) se mantienen.
+   **Estado frontend:** este bloque NO se ha implementado aún; queda documentado aquí para
+   insertarse como sub-bloque de F3b (ver §4 F3b).
 2. **Hardware al final (F7)**: cámara Hikvision + ESP32 se conectan cuando el
    frontend puede MONITOREARLOS (RF-35) — así cada paso se verifica desde la UI.
 3. **Sidebar agrupado con submenús** (secciones colapsables), con visibilidad por rol.
 4. **Backend mínimo extra aprobado**: `GET /attendance/sessions-today`
    (sesiones abiertas de hoy con session_id/curso/grupo/aula/estado) para el modal
-   de marca manual RF-21 — se implementa al inicio de F3 (~30 líneas, patrón ya existente).
+   de marca manual RF-21 — **✅ YA IMPLEMENTADO EN EL BACKEND** (Bloque 6b del
+   PLAN-BACKEND, excluye cerradas; el frontend ya lo consume en la pantalla
+   Asistencias con el modal RF-21 pre-integrado).
+5. **Rate limit de login en el backend**: añadido en el Bloque 6b (5 fallos/IP/min → 429;
+   login correcto limpia). El rate limit del cliente (`auth-rate-limit.ts`) se mantiene
+   como primera capa UX.
+6. **`/attendance/me` (estudiante)**: endpoint YA IMPLEMENTADO en el backend (Bloque 6b);
+   su pantalla en el frontend queda para F3b (ver §4).
 
 ## 2. Estructura de rutas objetivo (Bloque F1 las crea; F2-F6 las llenan)
 
@@ -143,6 +152,29 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 - [ ] **Parámetros** `/calendar/settings`: formulario semestre/bloque/tolerancia/umbrales —
   `GET/PATCH /settings` (aviso: "aplica a sesiones siguientes, nunca retroactivo" RF-34).
 - **Entregable:** el flujo completo de un día lectivo se opera 100% desde la UI.
+
+### F3 - Estado real (actualizado al 2026-10-11)
+- [x] `GET /attendance/sessions-today` — **backend ✅ (Bloque 6b) y frontend ✅**:
+  la pantalla Asistencias ya es REAL (`GET /attendance/today` + `sessions-today`,
+  auto-refresh 60 s, filtro ?status=, columna N°) y el modal RF-21 (marca manual
+  con matriculados del grupo vía AttendanceApi) está pre-integrado.
+- [ ] Rectificación RF-15 en la tabla (acción de fila → dialog motivo) — **pendiente**.
+- [ ] Botón "Cerrar sesión de clase" (admin) → `POST /sessions/{id}/close` — **pendiente**.
+- [ ] Feriados / Justificaciones / Parámetros — **pendientes** (arriba).
+
+### F3b - "Mis asistencias" del ESTUDIANTE (nuevo, ½ día) - RF-22/RF-24 con vista propia
+> Decisión 1 revisada: el estudiante SÍ entra a la app. El backend YA expone
+> `GET /attendance/me` (Bloque 6b del PLAN-BACKEND: solo rol estudiante, filtros
+> ?desde=&hasta=, devuelve curso, grupo, estado, marked_at, method y correct_reason).
+- [ ] Ruta `​/me` (o `/my-attendance`) FUERA de `/admin` (otro guard: solo rol estudiante;
+  el panel admin/docente sigue con roleGuard) con layout propio simple.
+- [ ] Pantalla: lista de asistencias del alumno (curso, grupo, fecha/franja, badge de estado
+  asistio/tardanza/falta con colores Tabla 8, método facial/manual) + filtro de rango de fechas.
+- [ ] Mostrar `correct_reason` si la marca fue rectificada (RF-15 visible para el alumno).
+- [ ] El estudiante no puede navegar a `/admin` (authGuard y roleDocente ya lo bloquean;
+  verificar la redirección de login para rol estudiante → `/me` y no a `/admin/dashboard`).
+- **Entregable:** el estudiante entra con su cuenta del BD (código o correo), ve SU historial
+  y sus alertas DPI siguen llegando por correo (RF-24) sin cambio en el backend.
 
 ### F4 - Enrolamiento facial (½-1 día) - RF-04, RF-20
 - [ ] Página `/faces`: buscar estudiante → `GET /students/{id}/faces` muestra estado actual
@@ -338,7 +370,8 @@ void loop() {
 | `GET/POST /teachers` · `GET/POST /students` · `GET/PATCH /accounts/{id}` · `POST /accounts/{id}/send-temp-password` | Catálogo de personas (F2) | A admin · L docente |
 | `GET/POST /courses` · `GET/POST /courses/{id}/groups` · `GET/POST /groups/{id}/blocks` · `PATCH/DELETE /blocks/{id}` · `DELETE /groups/{id}` | Cursos y grupos (F2) | A admin · L docente |
 | `GET/POST/DELETE /groups/{id}/students` | Matrículas (F2) | A admin · L docente |
-| `GET /attendance/today` · `POST /sessions/{id}/manual-mark` · `PATCH /attendance/{id}/rectify` · `POST /sessions/{id}/close` · `GET /attendance/sessions-today` (nuevo) | Asistencias (F3) | A admin · D suyo |
+| `GET /attendance/today` · `POST /sessions/{id}/manual-mark` · `PATCH /attendance/{id}/rectify` · `POST /sessions/{id}/close` · `GET /attendance/sessions-today` | Asistencias (F3) | A admin · D suyo |
+| `GET /attendance/me` | "Mis asistencias" del estudiante (F3b) | Solo rol estudiante |
 | `GET/POST/DELETE /holidays` · `GET/POST/DELETE /justifications` · `GET/PATCH /settings` | Calendario (F3) | A admin · L docente |
 | `POST/GET /students/{id}/faces` | Enrolamiento (F4) | A admin · L docente |
 | `GET /dashboard/summary` · `/dashboard/live` (SSE) · `GET /stats/hourly` · `GET /stats/distribution` | Dashboard (F5) | A+D (SSE por query) |
@@ -349,19 +382,18 @@ la UI solo oculta botones con `@if (auth.isAdmin())`.
 
 ## 6. Inconsistencias y avisos detectados al revisar el backend (sin acción urgente)
 
-1. **`GET /attendance/sessions-today` NO existe** → aprobado añadirlo (inicio de F3). Sin él,
-   el modal de marca manual no sabe qué sesión abierta corresponde a cada aula/curso.
+1. **~~`GET /attendance/sessions-today` NO existe~~ → RESUELTO** (Bloque 6b del
+   PLAN-BACKEND; el frontend ya lo consume).
 2. **`app.frontend()` no está implementado** en `main.py` (el plan del backend lo menciona
    para el Bloque 10) → F8 lo implementa junto con la config de producción.
-3. **Rate limit de login SOLO en el cliente** (`auth-rate-limit.ts`): el endpoint
-   `POST /auth/login` del backend no limita intentos. Para la tesis alcanza; si el tribunal
-   pregunta por seguridad, añadir un limitador simple en el backend (dict IP→intentos, 5/min).
+3. **~~Rate limit de login SOLO en el cliente~~ → RESUELTO**: el backend ya limita
+   (Bloque 6b: 5 fallos IP/min → 429, login correcto limpia la ventana; con tests).
 4. **`GET /devices/status` es PÚBLICO** (sin token): pensado para el panel RF-35 en un solo
    origen. Exponer estados en línea de equipos sin credencial es discutible en producción
    real; opción futura: exigir JWT (1 línea en el endpoint).
-5. **El badge "Enrolado" en `/students`** requeriría N llamadas (`GET /students/{id}/faces` por
-   alumno). Para el directorio completo: opcional añadir `GET /students?with_face=1` al backend
-   (o aceptar N llamadas solo al abrir el enrolamiento individual — plan actual).
+5. **~~El badge "Enrolado" en `/students` requeriría N llamadas~~ → RESUELTO**: el backend ya
+   soporta `GET /students?with_face=1` (UNA query extra por página, no N por alumno) y el
+   frontend ya lo usa para el badge Enrolado/Sin rostro.
 6. **Las vistas SQL (`v_today_attendance`) usan `CURRENT_DATE` del servidor**: asume la zona
    horaria de Perú en la PC servidor (la del dev ya lo está). No tocar.
 7. **`PersonOut` no expone `photo_url`**: la foto de portada se ve solo en `/faces`; suficiente.
@@ -369,4 +401,6 @@ la UI solo oculta botones con `@if (auth.isAdmin())`.
 ## 7. Fuera de alcance (coherente con PLAN-BACKEND §7)
 - Sin PWA/SSR/i18n; sin NgRx/NGXS (signals + services); sin tests e2e Cypress (los smokes
   son manuales por bloque; si sobra tiempo: 2-3 specs de `ng test` para guards y auth).
-- El estudiante NO entra al panel (decisión §1); notificaciones por correo RF-24 ya existentes.
+- El estudiante NO entra al PANEL ADMIN (el guard seguirá bloqueando `/admin`); su vista
+  propia "Mis asistencias" (`GET /attendance/me`) se construye en F3b (ver §4). Las
+  notificaciones por correo RF-24 se mantienen.

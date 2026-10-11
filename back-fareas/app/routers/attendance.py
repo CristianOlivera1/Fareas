@@ -3,12 +3,14 @@ consulta del día (alimenta app-student-list del dashboard, PLAN §5).
 
 La lógica vive en el motor; aquí solo se orquesta y se audita.
 """
+from datetime import date
+
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text as sql_text
 from sqlmodel import select
 
-from app.core.deps import DbSession, RequireRole
+from app.core.deps import CurrentUser, DbSession, RequireRole
 from app.routers.catalog import _client_ip, _get_or_404
 from app.services import errors
 from app.services.attendance_engine import (
@@ -32,6 +34,61 @@ from app.tables import (
 )
 
 router = APIRouter(tags=["attendance"])
+
+
+# ---------------------------------------------------------------------------
+# Asistencias propias del ESTUDIANTE autenticado (RF-22/RF-24)
+# ---------------------------------------------------------------------------
+@router.get("/attendance/me")
+async def my_attendance(
+    db: DbSession,
+    user: CurrentUser,
+    desde: date | None = None,
+    hasta: date | None = None,
+    limit: int = Query(100, ge=1, le=500),
+) -> list[dict]:
+    """Historial de asistencias del ESTUDIANTE autenticado (rol estudiante).
+
+    Requiere rol 'estudiante' (los usuarios admin/docente reciben 403: su
+    vista es la del panel /attendance, no un historial personal).
+    Los rangos filtran por fecha de sesión (default: sin límite).
+    """
+    if user.role is not UserRole.ESTUDIANTE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Este endpoint es para el rol estudiante",
+        )
+    stmt = (
+        select(AttendanceRecord, AttendanceSession, ScheduleBlock, Course, CourseGroup)
+        .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id)  # type: ignore[arg-type]
+        .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)  # type: ignore[arg-type]
+        .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)  # type: ignore[arg-type]
+        .join(Course, Course.id == CourseGroup.course_id)  # type: ignore[arg-type]
+        .where(AttendanceRecord.student_id == user.id)  # type: ignore[arg-type]
+        .order_by(AttendanceSession.session_date.desc(), ScheduleBlock.start_time)
+    )
+    if desde is not None:
+        stmt = stmt.where(AttendanceSession.session_date >= desde)
+    if hasta is not None:
+        stmt = stmt.where(AttendanceSession.session_date <= hasta)
+    filas = (await db.exec(stmt.limit(limit))).all()
+    return [
+        {
+            "record_id": rec.id,
+            "session_date": str(ses.session_date),
+            "start_time": bloque.start_time.isoformat(timespec="minutes"),
+            "end_time": bloque.end_time.isoformat(timespec="minutes"),
+            "course_id": curso.id,
+            "course_code": curso.code,
+            "course_name": curso.name,
+            "group_code": grupo.group_code,
+            "status": rec.status.value,
+            "marked_at": rec.marked_at.isoformat(timespec="seconds") if rec.marked_at else None,
+            "method": rec.method,
+            "correct_reason": rec.correct_reason,
+        }
+        for rec, ses, bloque, curso, grupo in filas
+    ]
 
 
 # ---------------------------------------------------------------------------

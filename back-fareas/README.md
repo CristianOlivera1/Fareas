@@ -56,9 +56,6 @@ back-fareas/
 ├── db/                       # SQL MANUAL (ver workflow abajo)
 │   ├── 001_schema.sql        # esquema completo (idempotente)
 │   ├── 002_seed.sql          # datos demo (idempotente)
-│   ├── 003_refresh_tokens.sql     # (OBSOLETO) fue aplicado y revertido por 005
-│   ├── 004_umbral_facial_055.sql  # calibración RF-20 del Bloque 5
-│   └── 005_eliminar_refresh_tokens.sql  # sin refresh tokens: JWT simple 120 min
 ├── models/                   # pesos .onnx (gitignored) - det_10g + w600k_r50
 ├── ai/                       # pipeline de visión (Bloque 5) - sin lógica HTTP
 │   ├── boxes.py              # IoU + NMS en NumPy
