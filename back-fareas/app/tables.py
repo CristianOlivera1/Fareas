@@ -43,6 +43,7 @@ class AttendanceStatus(StrEnum):
 class SessionStatus(StrEnum):
     ABIERTA = "abierta"
     CERRADA = "cerrada"
+    CANCELADA = "cancelada"  # R5 (db/006): no genera faltas ni cuenta en DPI
 
 
 class DeviceType(StrEnum):
@@ -73,17 +74,23 @@ def server_now_kwargs() -> dict:
     return {"sa_column_kwargs": {"server_default": text("now()")}}
 
 
-# app_settings (RF-34) - fila única id=1
+# app_settings (RF-34) - fila única id=1. block_minutes quedó INFORMATIVO
+# (Bloque 11): la duración real sale de start_time/end_time de cada bloque.
 class AppSettings(SQLModel, table=True):
     __tablename__ = "app_settings"
 
     id: int | None = Field(default=1, primary_key=True)
     semester_label: str = Field(max_length=40)
-    block_minutes: int = 120
+    semester_start: date | None = None  # R1: si ambas fechas son NULL no se restringe
+    semester_end: date | None = None
+    block_minutes: int = 120  # informativo: sugerencia para crear bloques de 1 h/2 h
     late_tolerance_minutes: int = 10
+    early_open_minutes: int = 15  # R2/R3: apertura anticipada de la sesión
+    rectify_days: int = 7  # R11: plazo del docente para rectificar
+    dpi_min_sessions: int = 4  # R7: mínimo de sesiones antes de enviar alertas
     face_match_threshold: Decimal = Field(default=Decimal("0.750"), max_digits=4, decimal_places=3)
-    dpi_alert_percent: Decimal = Field(default=Decimal("30.00"), max_digits=5, decimal_places=2)
-    dpi_limit_percent: Decimal = Field(default=Decimal("33.33"), max_digits=5, decimal_places=2)
+    dpi_alert_percent: Decimal = Field(default=Decimal("20.00"), max_digits=5, decimal_places=2)
+    dpi_limit_percent: Decimal = Field(default=Decimal("30.00"), max_digits=5, decimal_places=2)
     attendance_hour_start: time = time(7, 0)
     attendance_hour_end: time = time(20, 0)
     updated_at: datetime | None = Field(default=None, **server_now_kwargs())
@@ -104,6 +111,7 @@ class AppUser(SQLModel, table=True):
     must_change_password: bool = True  # RF-11: clave temporal obliga a cambiar
     semester: int | None = None  # ciclo del estudiante
     is_active: bool = True
+    face_consent_at: datetime | None = None  # R13 (Ley 29733): consentimiento biométrico
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
     updated_at: datetime | None = Field(default=None, **server_now_kwargs())
 
@@ -116,6 +124,7 @@ class Room(SQLModel, table=True):
     code: str = Field(max_length=20, unique=True)  # 'LAB 304'
     name: str | None = Field(default=None, max_length=120)
     building: str | None = Field(default=None, max_length=80)
+    capacity: int | None = None  # R9: aforo informativo del aula
     is_active: bool = True
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
 
@@ -156,6 +165,8 @@ class CourseGroup(SQLModel, table=True):
     group_code: str = Field(max_length=5)  # 'A' | 'B' | 'C'
     teacher_id: int = Field(foreign_key="app_user.id")
     room_id: int = Field(foreign_key="room.id")
+    semester_label: str = Field(max_length=40)  # R1/R9: la unicidad incluye el semestre
+    capacity: int = 40  # R8: cupo por defecto (decisión: 40 para todos los cursos)
     is_active: bool = True
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
 
@@ -170,7 +181,9 @@ class ScheduleBlock(SQLModel, table=True):
     end_time: time
 
 
-# enrollment (RF-03, RF-22)
+# enrollment (RF-03, RF-22) - retiro con withdrawn_at (R8): si hay registros la
+# fila se retira (soft); si no, el servicio la borra. UNIQUE(student_id, group_id)
+# se mantiene: re-matricular en el mismo grupo = withdrawn_at=None (reactivar).
 class Enrollment(SQLModel, table=True):
     __tablename__ = "enrollment"
 
@@ -178,6 +191,7 @@ class Enrollment(SQLModel, table=True):
     student_id: int = Field(foreign_key="app_user.id")
     group_id: int = Field(foreign_key="course_group.id")
     enrolled_at: datetime | None = Field(default=None, **server_now_kwargs())
+    withdrawn_at: datetime | None = None
 
 
 # face_embedding (RF-04, RF-19) - REAL[512], búsqueda coseno en NumPy (sin pgvector)
@@ -246,7 +260,7 @@ class Justification(SQLModel, table=True):
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
 
 
-# attendance_session (RF-26)
+# attendance_session (RF-26, R4, R5)
 class AttendanceSession(SQLModel, table=True):
     __tablename__ = "attendance_session"
 
@@ -256,9 +270,13 @@ class AttendanceSession(SQLModel, table=True):
     status: SessionStatus = Field(default=SessionStatus.ABIERTA, sa_column=pg_enum(SessionStatus, "session_status"))
     opened_at: datetime | None = Field(default=None, **server_now_kwargs())
     closed_at: datetime | None = None  # hora real de cierre (puede ser diferida)
+    needs_review: bool = False  # R4: cerró con cero marcas → revisar antes de contar
+    cancel_reason: str | None = Field(default=None, max_length=200)  # R5
+    cancelled_by: int | None = Field(default=None, foreign_key="app_user.id")
+    cancelled_at: datetime | None = None
 
 
-# attendance_record (RF-15, RF-21, RF-22, RF-23)
+# attendance_record (RF-15, RF-21, RF-22, RF-23, R6)
 class AttendanceRecord(SQLModel, table=True):
     __tablename__ = "attendance_record"
 
@@ -272,6 +290,8 @@ class AttendanceRecord(SQLModel, table=True):
     corrected_by: int | None = Field(default=None, foreign_key="app_user.id")  # RF-15
     corrected_at: datetime | None = None
     correct_reason: str | None = Field(default=None, max_length=400)
+    is_justified: bool = False  # R6: falta justificada (no cuenta para DPI)
+    justification_id: int | None = Field(default=None, foreign_key="justification.id")
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
 
 
@@ -289,5 +309,14 @@ class AuditLog(SQLModel, table=True):
     ip_address: str | None = Field(default=None, max_length=45)
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
 
+# dpi_alert_sent (R7, db/005): UN correo por nivel (alerta/limite) por
+# alumno-curso-semestre. El servicio inserta primero (ON CONFLICT DO NOTHING):
+# si no insertó, ya se envió antes y no se repite.
+class DpiAlertSent(SQLModel, table=True):
+    __tablename__ = "dpi_alert_sent"
 
-# refresh_token - renovación silenciosa de sesión
+    student_id: int = Field(foreign_key="app_user.id", primary_key=True)
+    course_id: int = Field(foreign_key="course.id", primary_key=True)
+    semester_label: str = Field(max_length=40, primary_key=True)
+    level: str = Field(max_length=10, primary_key=True)  # 'alerta' | 'limite'
+    sent_at: datetime | None = Field(default=None, **server_now_kwargs())
