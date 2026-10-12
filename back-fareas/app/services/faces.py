@@ -68,12 +68,20 @@ async def enrolar(
     actor: AppUser,
     student_id: int,
     photos_b64: list[str],
+    consent: bool = False,
     ip: str | None = None,
 ) -> dict:
-    """RF-04 completo: valida, promedia, guarda y audita. Devuelve resumen."""
+    """RF-04 completo: valida, promedia, guarda y audita. Devuelve resumen.
+
+    R13 (Ley 29733): sin ``consent=True`` no se guarda ningún dato biométrico.
+    """
     student = await db.get(AppUser, student_id)
     if student is None or student.role is not UserRole.ESTUDIANTE or not student.is_active:
         raise errors.NotFoundError("Estudiante no encontrado o inactivo")
+    if not consent:
+        raise errors.DomainError(
+            "Se requiere el consentimiento expreso del estudiante para guardar datos biométricos (Ley 29733)"
+        )
 
     if not MIN_PHOTOS <= len(photos_b64) <= MAX_PHOTOS:
         raise errors.DomainError(f"Se requieren entre {MIN_PHOTOS} y {MAX_PHOTOS} fotos (recibidas: {len(photos_b64)})")
@@ -123,6 +131,16 @@ async def enrolar(
     )
     db.add(fila)
     await db.flush()
+    if student.face_consent_at is None:
+        from datetime import datetime
+
+        student.face_consent_at = datetime.now()
+        db.add(student)
+        await audit(
+            db, actor, action="consentimiento_facial", entity="app_user", entity_id=student_id,
+            new_value={"face_consent_at": student.face_consent_at.isoformat(timespec="seconds")},
+            ip_address=ip,
+        )
     await audit(
         db, actor, action="enrolamiento_facial", entity="face_embedding", entity_id=fila.id,
         new_value={"student_id": student_id, "fotos": len(embeddings),
@@ -143,3 +161,38 @@ async def enrolar(
         "photo_url": photo_url,
         "embedding_id": fila.id,
     }
+
+
+async def eliminar_rostro(
+    db: SQLModelAsyncSession,
+    actor: AppUser,
+    student_id: int,
+    ip: str | None = None,
+) -> dict:
+    """R13 (derecho de cancelación): elimina embeddings + foto y limpia el consentimiento."""
+    student = await db.get(AppUser, student_id)
+    if student is None or student.role is not UserRole.ESTUDIANTE:
+        raise errors.NotFoundError("Estudiante no encontrado")
+
+    filas = (
+        await db.exec(select(FaceEmbedding).where(FaceEmbedding.student_id == student_id))
+    ).all()
+    for fila in filas:
+        if fila.photo_url and fila.photo_url.startswith("storage/"):
+            try:
+                os.remove(fila.photo_url)
+            except OSError:
+                pass  # la foto ya no está: el objetivo igual se cumple
+        await db.delete(fila)
+
+    tenia_consentimiento = student.face_consent_at is not None
+    student.face_consent_at = None
+    db.add(student)
+    await audit(
+        db, actor, action="rostro_eliminado", entity="app_user", entity_id=student_id,
+        old_value={"embeddings": len(filas), "tenia_consentimiento": tenia_consentimiento},
+        ip_address=ip,
+    )
+    await db.commit()
+    await recargar_galeria(db)
+    return {"student_id": student_id, "deleted": len(filas)}

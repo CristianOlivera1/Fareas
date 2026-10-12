@@ -9,7 +9,7 @@ from sqlmodel import select
 
 from app.core.deps import DbSession, RequireRole
 from app.routers.catalog import _client_ip
-from app.services.faces import enrolar
+from app.services.faces import eliminar_rostro, enrolar
 from app.tables import AppUser, FaceEmbedding, UserRole
 
 router = APIRouter(tags=["enrollment"])
@@ -20,6 +20,10 @@ class EnrollmentIn(BaseModel):
         min_length=3,
         max_length=5,
         description="Fotos JPEG/PNG del rostro codificadas en base64 (con o sin data-url).",
+    )
+    consent: bool = Field(
+        default=False,
+        description="R13 (Ley 29733): consentimiento expreso del estudiante. Obligatorio en true.",
     )
 
 
@@ -32,7 +36,18 @@ async def enroll_student_faces(
     admin: RequireRole(UserRole.ADMIN),
 ) -> dict:
     """RF-04: registra el rostro del alumno (3-5 fotos → embedding promedio)."""
-    return await enrolar(db, admin, student_id, body.photos, ip=_client_ip(request))
+    return await enrolar(db, admin, student_id, body.photos, consent=body.consent, ip=_client_ip(request))
+
+
+@router.delete("/students/{student_id}/faces")
+async def delete_student_faces(
+    student_id: int,
+    request: Request,
+    db: DbSession,
+    admin: RequireRole(UserRole.ADMIN),
+) -> dict:
+    """R13 (derecho de cancelación): borra embeddings y foto del alumno."""
+    return await eliminar_rostro(db, admin, student_id, ip=_client_ip(request))
 
 
 @router.get("/students/{student_id}/faces")

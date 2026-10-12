@@ -70,19 +70,24 @@ async def test_enrolamiento_requiere_admin_y_valida_fotos(client, docente_header
 
 async def test_enrolamiento_rechaza_lotes_invalidos(client, admin_headers, estudiante_temp):
     sid = estudiante_temp["id"]
+    # R13 (Ley 29733): SIN consentimiento no se procesa nada (ni las fotos)
+    r = await client.post(f"{API}/students/{sid}/faces", headers=admin_headers,
+                          json={"photos": ["###", "###", "###"]})
+    assert r.status_code == 422
+    assert "consentimiento" in r.json()["detail"].lower()
     # menos fotos que el mínimo → 422 (pydantic) o 422 de dominio
     r = await client.post(f"{API}/students/{sid}/faces", headers=admin_headers,
-                          json={"photos": [_jpeg_b64(np.zeros((100, 100, 3), np.uint8))]})
+                          json={"consent": True, "photos": [_jpeg_b64(np.zeros((100, 100, 3), np.uint8))]})
     assert r.status_code == 422
     # fotos que no son base64 → 422 con mensaje claro
     r = await client.post(f"{API}/students/{sid}/faces", headers=admin_headers,
-                          json={"photos": ["###", "###", "###"]})
+                          json={"consent": True, "photos": ["###", "###", "###"]})
     assert r.status_code == 422
     assert "base64" in r.json()["detail"]
     # base64 válido pero sin rostro (imagen gris) → 422 de dominio
     gris = np.full((160, 160, 3), 90, dtype=np.uint8)
     r = await client.post(f"{API}/students/{sid}/faces", headers=admin_headers,
-                          json={"photos": [_jpeg_b64(gris)] * 3})
+                          json={"consent": True, "photos": [_jpeg_b64(gris)] * 3})
     assert r.status_code == 422
     assert "rostro" in r.json()["detail"].lower()
 
