@@ -48,7 +48,25 @@ async def get_current_user(
     return user
 
 
-CurrentUser = Annotated[AppUser, Depends(get_current_user)]
+async def get_current_user_active(user: Annotated[AppUser, Depends(get_current_user)]) -> AppUser:
+    """R14: con clave temporal pendiente TODO responde 403 (code
+    must_change_password) salvo los endpoints que usan CurrentUserPending."""
+    if user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "must_change_password",
+                "message": "Debes cambiar tu clave temporal antes de usar el sistema",
+            },
+        )
+    return user
+
+
+CurrentUser = Annotated[AppUser, Depends(get_current_user_active)]
+
+# Exclusivo de GET /auth/me y POST /auth/change-password (RF-11): entran
+# incluso con must_change_password=True (de lo contrario sería un callejón).
+CurrentUserPending = Annotated[AppUser, Depends(get_current_user)]
 
 
 def require_role(*allowed: UserRole) -> Callable[[AppUser], Awaitable[AppUser]]:

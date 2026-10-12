@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pwdlib import PasswordHash
 from sqlmodel import select
 
-from app.core.deps import CurrentUser, DbSession
+from app.core.deps import CurrentUserPending, DbSession
 from app.core.security import create_access_token, hash_password, verify_password
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -120,13 +120,16 @@ async def login(body: LoginRequest, request: Request, db: DbSession) -> LoginRes
 
 
 @router.get("/me", response_model=UserOut)
-async def me(user: CurrentUser) -> UserOut:
-    """Datos del usuario autenticado (usa el JWT Bearer)."""
+async def me(user: CurrentUserPending) -> UserOut:
+    """Datos del usuario autenticado (usa el JWT Bearer).
+
+    CurrentUserPending: accesible incluso con clave temporal pendiente —
+    el frontend necesita saber QUIÉN es para ofrecer el cambio (R14)."""
     return _build_user_out(user)
 
 
 @router.post("/change-password", response_model=MessageResponse)
-async def change_password(body: ChangePasswordRequest, user: CurrentUser, db: DbSession) -> MessageResponse:
+async def change_password(body: ChangePasswordRequest, user: CurrentUserPending, db: DbSession) -> MessageResponse:
     """RF-11: cambio de clave (obligatorio si must_change_password=True)."""
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La contraseña actual no es correcta")

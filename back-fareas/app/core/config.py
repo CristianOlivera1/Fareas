@@ -35,6 +35,10 @@ class Settings(BaseSettings):
 
     DEVICE_TOKEN_SECRET: str = "token-de-dispositivos"
 
+    # R15: dominio obligatorio del correo de docentes/estudiantes. Vacío =
+    # sin validar (los tests lo dejan vacío); el admin está exento.
+    ALLOWED_EMAIL_DOMAIN: str = "unamba.edu.pe"
+
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
