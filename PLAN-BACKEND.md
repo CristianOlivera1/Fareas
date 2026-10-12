@@ -192,8 +192,8 @@ back-fareas/
 - **Entregable:** alumno 221181 enrolado por API con 4 fotos del video demo → el pipeline lo identifica en vivo (video anotado `Downloads/fareas_demo_anotado.mp4`); 40/40 tests ✔
 
 ### Bloque 6 - Motor de asistencia (1–2 días) - RF-21…RF-26 - *el corazón* - **✅ COMPLETADO Y VERIFICADO**
-- [x] `services/attendance_engine.py` (lógica pura, testeable): `resolver_sesion(aula, now)` (cámara→aula→grupos activos→bloque vigente→`attendance_session` del día, creada al vuelo; NO abre en feriados RF-09 ni fuera del horario RF-34) → marca ÚNICA (`UNIQUE(session_id, student_id)`) → clasificación RF-23: `asistio` dentro del bloque, `tardanza` tras el fin DENTRO de la tolerancia; después la ventana cierra y la falta la genera el cierre (RF-26).
-- [x] `services/session_scheduler.py`: APScheduler en el `lifespan` (cada 60 s); `cerrar_sesiones_pendientes()` cierra toda sesión vencida —incluidas las de fechas anteriores si el servidor estuvo caído— generando faltas (marked_at NULL) a matriculados sin registro y alertas DPI.
+- [x] `services/attendance_engine.py` (lógica pura, testeable): `resolver_sesion(aula, now)` (cámara→aula→grupos activos→bloque vigente→`attendance_session` del día; NO abre en feriados RF-09 ni fuera del horario RF-34) → marca ÚNICA (`UNIQUE(session_id, student_id)`) → clasificación RF-23 ~~dentro del bloque~~ → **R2 (Bloque 11, 2026-10-11): `asistio` entre `inicio − apertura anticipada` y `inicio + tolerancia`; `tardanza` después de eso y hasta el `fin` del bloque; luego la ventana cierra y la falta la genera el cierre (RF-26). La sesión la abre el scheduler (R3).**
+- [x] `services/session_scheduler.py`: APScheduler en el `lifespan` (cada 60 s); **R3/R4 (Bloque 11): `abrir_sesiones_del_dia()` abre la sesión al iniciar su ventana de apertura (aunque nadie marque); `cerrar_sesiones_pendientes()` cierra al `fin` del bloque —incluidas las de fechas anteriores si el servidor estuvo caído—; con cero marcas queda `needs_review` SIN faltas, con marcas genera faltas (marked_at NULL) a los matriculados activos sin registro (nacen justificadas si hay justificación vigente, R6) y alertas DPI.**
 - [x] Alertas DPI al cierre (RF-24): SQL sobre la vista `v_student_dpi` + `services/notifications.py` (correo con la paleta institucional, rojo si ya supera el 1/3).
 - [x] `services/camera_loop.py`: un solo task asyncio en round-robin (~2 fps por aula activa) → pipeline → marca en BD → veredicto al ESP32 del aula + `ultimo_veredicto()` en memoria para el feed SSE del Bloque 8.
 - [x] `routers/attendance.py`: `GET /attendance/today` (vista `v_today_attendance`, filtros curso/aula/estado — alimenta app-student-list, PLAN §5), `POST /sessions/{id}/manual-mark` (RF-21, docente solo en SUS grupos), `PATCH /attendance/{id}/rectify` (RF-15 motivo obligatorio → audit_log), `POST /sessions/{id}/close` (admin). (Bloque 6b añade `GET /attendance/sessions-today` y `GET /attendance/me`; ver arriba).
@@ -201,8 +201,8 @@ back-fareas/
 - **Entregable VERIFICADO:** video demo → sesión auto-abierta → Raul (221181) identificado (sim 0.618) → marca `asistio` persistida → cierre sin faltas pendientes → todo en BD. **49/49 tests.**
 
 **Lecciones del bloque (para Bloques 7+):**
-1. Zona horaria: el motor usa hora Perú fija (UTC-5, sin DST). Las columnas TIMESTAMP (sin tz) RECHAZAN datetime aware (`closed_at`, `corrected_at` → `_naive_peru()`); la tabla `refresh_token` es TIMESTAMPTZ y exige lo contrario (aware).
-2. RF-23 correcto: tardanza = llegar DESPUÉS del fin del bloque pero DENTRO de la tolerancia (esa es la ventana que aún abre la sesión).
+1. Zona horaria: el motor usa hora Perú fija (UTC-5, sin DST). Las columnas TIMESTAMP (sin tz) RECHAZAN datetime aware (`closed_at`, `corrected_at` → `_naive_peru()`);
+2. ~~RF-23: tardanza = llegar DESPUÉS del fin del bloque pero DENTRO de la tolerancia~~ → **REVISADO (Bloque 11, decisión 2026-10-11): tardanza = llegar después de `inicio + tolerancia` y antes del `fin` del bloque. Llegar 55 min tarde a un bloque de 1 h es tardanza, no falta.**
 3. `db.exec()` de SQLModel NO acepta params posicionales: usar `text(...).bindparams(**params)`.
 4. La BD demo la edita el usuario: los demos NUNCA deben asumir emails/códigos del seed.
 5. Numeración de scripts BD: verificar `db/` antes de crear un 00N nuevo (003 ya estaba tomado por refresh tokens).
@@ -255,7 +255,63 @@ back-fareas/
 1. ~~"El rol ESTUDIANTE no entra al panel"~~ → **REVISADO: el estudiante SÍ entra a la app** con su vista personal "Mis asistencias" alimentada por `GET /attendance/me` (el resto del panel sigue restringido a admin/docente). Las alertas por correo (RF-24) se mantienen igual.
 - **Entregable VERIFICADO:** 72/72 tests incluyendo los nuevos (sessions-today + rate limit + /attendance/me).
 
-### Bloque 10 - Calidad y demo final (1–2 días)
+### Bloque 11 - Reglas de negocio (11.1–11.9) - R1…R15 - **✅ COMPLETADO Y VERIFICADO (2026-10-11)**
+
+> Complemento de los bloques 1-9 y 6b. Este bloque nació como documento aparte
+> ("REGLAS DE NEGOCIO") y quedó **unificado aquí**: semestre, cupos,
+> justificaciones, DPI con aviso único, seguridad y reportes.
+
+**Decisiones confirmadas por el usuario (2026-10-11):**
+
+| # | Tema | Decisión |
+|---|---|---|
+| 1 | Tardanza (RF-23) | *Asistió*: de `inicio − apertura anticipada` a `inicio + tolerancia`. *Tardanza*: después de eso y hasta el **fin del bloque**. *Falta*: no marcó antes del fin. Llegar **55 min tarde a un bloque de 1 h es tardanza, no falta**. |
+| 2 | Límite de inasistencia | 30 %, y la inhabilitación aplica **al SUPERARLO** (> 30 %), no al alcanzarlo. Las tardanzas no suman; las faltas justificadas no cuentan. Aviso preventivo ≥ 20 %. |
+| 3 | Quién justifica | Docente (solo sus grupos y su curso) o admin (todos). Todo queda en `audit_log`. Sin plazo para justificar. |
+| 4 | Bloques | Solo 1 h o 2 h; cada bloque es una sesión independiente (sin lógica de arrastre). `block_minutes` pasa a ser **informativo** (la duración real sale de `start_time/end_time`). |
+| 5 | Grupos | Los crea el admin al llenarse el cupo; cada uno con docente y aula propios. |
+| 6 | Cupo | **40 para todos los cursos** (editable por grupo). |
+| 7 | Cambio de grupo | Las faltas anteriores se **conservan y se suman al curso** (transferencia = retirar origen + matricular destino en una transacción). |
+| 8 | Fechas del semestre | **2026-II: 2026-08-17 → 2026-12-19** (propuesta cargada en `app_settings`); el admin las registra/modifica con `PATCH /settings`. |
+| 9 | Escuela / aula | Una sola escuela (sin campo "escuela"); el aula pertenece al grupo, no al bloque; **no** se implementa cambio de aula por fecha. |
+
+**Base de datos (scripts manuales, §1; ejecutados en este orden y verificados):**
+1. `db/005_reglas_negocio.sql` — zona horaria `America/Lima` de la BD; `course_group.semester_label` + `capacity` (UNIQUE por semestre); parámetros nuevos (`semester_start/end`, `early_open_minutes` 15, `rectify_days` 7, `dpi_min_sessions` 4, aviso 20/límite 30); `attendance_session.needs_review/cancel_reason/cancelled_by/cancelled_at`; `attendance_record.is_justified/justification_id` (CHECK: justificada ⇒ falta); `enrollment.withdrawn_at`; `app_user.face_consent_at` + CHECK NOT VALID de DNI/WhatsApp; `room.capacity`; tabla `dpi_alert_sent`.
+2. `db/006_session_cancelada.sql` — valor `cancelada` del enum `session_status` (archivo aparte: `ADD VALUE` no puede usarse en la misma transacción).
+3. `db/007_vistas_reglas.sql` — recrea `v_student_dpi` (semestre vigente, rango de matrícula, justificadas aparte, canceladas y needs_review fuera) y amplía `v_today_attendance` (+`is_justified`, `session_id`, franja, `correct_reason`, `teacher_id`; excluye canceladas).
+
+> **Nota de compatibilidad:** los valores por defecto de `001_schema.sql`
+> (`dpi_alert_percent` 30 / `dpi_limit_percent` 33.33) quedan **reemplazados por
+> 20/30** vía `005`; `block_minutes` pasa a ser informativo (la duración real
+> sale de `start_time/end_time` de cada bloque). `001` y `002` no se editan nunca.
+
+**Reglas y dónde viven (implementado):**
+
+| Id | Regla | Implementación |
+|---|---|---|
+| R1 Semestre | Grupos con `semester_label`; solo el vigente abre sesiones/valida choques; cambiar de semestre no borra nada | `services/settings.py`, `attendance_engine`, `services/schedule.py`, `courses.py` |
+| R2 Ventana | `clasificar()` con la tabla del ejemplo (07:44 · 07:45-08:10 · 08:11-10:00 · 10:01) | `attendance_engine.clasificar` |
+| R3 Apertura | El scheduler abre la sesión al iniciar la ventana (sin cámara); `resolver_sesion` solo la localiza (respaldo si nadie la abrió) | `abrir_sesiones_del_dia`, `resolver_sesion` |
+| R4 Cierre | Cierra al `fin` (máx. 60 s después); cero marcas → `needs_review` sin faltas; con marcas → faltas a matriculados activos | `cerrar_sesion`, `cerrar_sesiones_pendientes`, `resolver_revision` |
+| R5 Cancelación | `cancelada` con motivo y actor; docente (abiertas/por revisar de sus grupos) o admin (también cerradas); `cancel-day` admite fecha futura (crea la sesión cancelada) | `cancelar_sesion`, `cancelar_dia` |
+| R6 Justificación | `is_justified` + `justification_id`; crear marca faltas existentes y las futuras nacen justificadas; eliminar revierte; docente con curso obligatorio | `services/justifications.py`, `justificacion_vigente` |
+| R7 DPI | `absence_percent` = faltas no justificadas / sesiones válidas; aviso ≥ 20, límite > 30; correo solo con `sessions_held ≥ 4` y **una vez por nivel** (`dpi_alert_sent`); "faltas restantes" contra el total planificado | `services/dpi.py`, `v_student_dpi`, `notifications.py` |
+| R8 Matrícula | Cupo 40; un grupo activo por curso; sin cruces de horario del alumno; retiro con `withdrawn_at` (o DELETE si no hay registros); transferencia transaccional | `services/enrollments.py`, `courses.py` |
+| R9 Grupos | UNIQUE(course, group_code, semester); cupo por grupo; validación de cruce de los alumnos al crear/editar bloques | `courses.py`, `services/schedule.py` |
+| R10 Contiguos | Candidatos por aula+ventana; desempate por la matrícula del alumno reconocido y, si persiste, el bloque que empezó más tarde | `bloques_candidatos`, `resolver_sesion`, `camera_loop` |
+| R11 Rectificación | Docente solo últimos `rectify_days` (7); admin sin plazo; motivo obligatorio → `audit_log`; cambiar de falta limpia la justificación | `attendance.py` (`/rectify`) |
+| R12 Feriados | Alta por rango (omite fines de semana) y generador nacional (fijos + Semana Santa); al crear un feriado se cancelan las sesiones abiertas/por revisar de esa fecha | `calendar_admin.py`, `services/holidays_pe.py` |
+| R13 Biometría | Consentimiento obligatorio (`face_consent_at`); `DELETE /students/{id}/faces` borra embeddings y foto; galería solo con usuarios activos | `services/faces.py`, `enrollment_faces.py`, `ai/runtime.py` |
+| R14 Seguridad | Con `must_change_password` todo 403 (`code: must_change_password`) salvo `/auth/me` y `/auth/change-password`; `is_active` verificado por request; `rtsp_url` enmascarada en listados (y un PATCH con `***` se ignora) | `core/deps.py`, `catalog.py` |
+| R15 Formatos Perú | DNI 8 dígitos; WhatsApp 9 empezando en 9; correo `@unamba.edu.pe` configurable (`ALLOWED_EMAIL_DOMAIN`, vacío = sin validar; admin exento) | `services/formats.py`, `.env.example` |
+
+**Endpoints nuevos/modificados (resumen):** `POST /sessions/{id}/cancel` · `POST /blocks/{id}/cancel-day` (`fecha` opcional) · `GET /attendance/sessions-review` · `POST /sessions/{id}/resolve-review` · `PATCH /attendance/{id}/justify` · `GET/POST/DELETE /justifications` (docente con efecto) · `PATCH /attendance/{id}/rectify` (plazo) · `POST /groups/{id}/students` + `DELETE` + `POST …/transfer` (R8) · `GET /courses/{id}/groups` (`semester`, `capacity`, `enrolled_count`) · `GET /settings/semesters` · `GET /dpi/at-risk` · `GET /students/{id}/dpi` · `GET /attendance/me/dpi` · `POST /holidays/range` · `POST /holidays/national?year=` · `POST`/`DELETE /students/{id}/faces` (`consent`) · `GET /devices/{id}` · `GET /reports/group-matrix.xlsx?group_id=` · `GET /reports/dpi-risk.xlsx?course_id=` · `GET /audit-log` (+`actor_role`) · `GET /dashboard/summary` (+`en_riesgo`, `sessions_to_review`, filtro por docente).
+
+**Tests (11.9) — nuevos archivos:** `test_rules_window.py` (R2 y niveles DPI puros), `test_sessions_lifecycle.py` (R3/R4/R5/R10), `test_justifications.py` (R6/R11 + permisos), `test_enrollment_rules.py` (R8/R9), `test_dpi.py` (R7 + envío único + semestre), `test_security.py` (R13/R14). Los tests existentes se actualizaron a la nueva regla (tardanza R2, cierre con needs_review, consentimiento) y `helpers_b6` ahora crea grupos con el semestre vigente y limpia justificaciones/auditoría.
+
+**Fuera de alcance (se documenta como limitación):** detección de vida (anti-foto), multi-escuela/multi-sede, cambio de aula por fecha, panel completo de periodos académicos (basta etiqueta + fechas), subida de documentos de justificación (se mantiene `document_url` como enlace) y reasignación de docente con historial separado.
+
+### Bloque 10 - Calidad y demo final (1–2 días) - **se ejecuta DESPUÉS del Bloque 11**
 - [ ] Tests pytest (`fareas_test`); motor y auth con prioridad.
 - [ ] Producción simple: `fastapi run` + Cloudflare Tunnel; el build de Angular se sirve desde el propio FastAPI con `app.frontend("dist/fareas/browser")` (un solo origen, sin CORS).
 - [ ] README final con diagrama, protocolo ESP32 y guion de demo de tesis.
@@ -278,7 +334,8 @@ back-fareas/
 ### 4.2 ESP32 + anillo NeoPixel WS2812B + buzzer (RF-25, RF-27…RF-29, RF-33)
 - **Cableado:**
   - Anillo NeoPixel (16 LEDs): `VCC→5V` (USB del ESP32), `GND→GND`, `DATA→GPIO 13` con **resistencia 330–470 Ω** en serie y un condensador 1000 µF entre 5V y GND (buena práctica).
-  - Buzzer activo 5V: `+→GPIO 12` (para un buzzer pequeño de 3.3 V puede ser directo; si es de 5 V real, usa un transistor NPN 2N2222 con resistencia de base 1 kΩ) y `−→GND`.
+  - Buzzer activo 5V: `+→GPIO 26` (**⚠️ actualizado en el Bloque 11: era GPIO 12, que es pin de arranque del ESP32 y colgaba el boot**; para un buzzer pequeño de 3.3 V puede ser directo; si es de 5 V real, usa un transistor NPN 2N2222 con resistencia de base 1 kΩ) y `−→GND`.
+  - **Firmware (corrección Bloque 11):** el `hello` se envía en el evento `WStype_CONNECTED` (no en `setup()`), y se reserva **IP fija (DHCP)** para la PC del backend; el ESP32 solo usa WiFi de 2.4 GHz.
 - **Firmware (Arduino IDE):** librerías `WiFi.h`, `WebSocketsClient` (Links2004) y `Adafruit_NeoPixel`.
   - Conecta a `ws://IP-DE-TU-PC:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET del .env>`.
   - Envía `{"type":"hello","device_id":"esp32-lab305"}` (**debe coincidir con `device.device_key`** de la BD) y `{"type":"heartbeat"}` cada 30 s.
@@ -298,7 +355,7 @@ back-fareas/
 | Tarjeta "Asistencias hoy" (128 / 12 tardanzas) | `GET /api/v1/dashboard/summary` |
 | Tarjeta "Ausencias" (11 / 7.7 %) | `GET /api/v1/dashboard/summary` |
 | Tarjeta "Cámaras activas" (14/16, streams caídos) | `GET /api/v1/dashboard/summary` (detalle: `GET /devices/status`, RF-35) |
-| Tarjeta "Alertas críticas DPI" (>30 %) | `GET /api/v1/dashboard/summary` (fuente: vista `v_student_dpi`) |
+| Tarjeta "Alertas críticas DPI" (**R7: alerta ≥ 20 %, límite > 30 %**) | `GET /api/v1/dashboard/summary` (fuente: vista `v_student_dpi`; añade `en_riesgo` y `sessions_to_review`; con rol docente todo va filtrado por sus grupos) |
 | `app-activity-feed` (EN VIVO, similitud, veredicto) | `GET /api/v1/dashboard/live` - SSE (`EventSourceResponse`) |
 | `app-student-list` (estudiante, estado, curso, aula, hora) | `GET /api/v1/attendance/today?course=&group=&room=` (vista `v_today_attendance`) |
 | `app-hourly-chart` (asistencia por hora 07–20) | `GET /api/v1/stats/hourly?day=YYYY-MM-DD` |
@@ -322,4 +379,6 @@ Convención única de estados en todo el sistema: `asistio | tardanza | falta | 
 | 1 | ~~1, 3~~ ✅ | ~~App bajo app/main.py + login JWT~~ - COMPLETADO |
 | 2 | ~~4, 5~~ ✅ | ~~Malla académica + reconocimiento funcionando con video/MP4~~ - COMPLETADO |
 | 3 | ~~6, 7~~ ✅ | ~~Motor de asistencia + protocolo ESP32~~ — COMPLETADO (el ESP32 físico se conecta cuando lo armes) |
-| 4 | ~~8, 9~~ ✅, 10 | ~~Dashboard + reportes + OCR~~ — COMPLETADO; falta demo final (Bloque 10) |
+| 4 | ~~8, 9~~ ✅ | ~~Dashboard + reportes + OCR~~ — COMPLETADO |
+| 5 | **11 (reglas de negocio)** ✅ | Semestre, cupos, transferencias, justificaciones, DPI con aviso único, seguridad y reportes por grupo — COMPLETADO (ver §3, Bloque 11) |
+| 6 | 10 | Calidad y demo final (README, demo E2E, tunnel) |
