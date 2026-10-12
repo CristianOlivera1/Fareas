@@ -13,13 +13,20 @@ API = "/api/v1"
 @pytest.fixture(autouse=True)
 async def _limpiar_calendario(db_session):
     """Limpia los registros temporales de estos tests antes y después."""
+    from datetime import date
+
+    # Incluye los feriados de prueba del Bloque 11 (año 2027: rango + nacionales)
     await db_session.exec(delete(Holiday).where(Holiday.description == "Feriado de prueba B4"))  # type: ignore[arg-type]
+    await db_session.exec(delete(Holiday).where(Holiday.holiday_date >= date(2027, 1, 1)))  # type: ignore[arg-type]
     await db_session.exec(delete(Justification).where(Justification.reason == "Descanso médico de prueba B4"))  # type: ignore[arg-type]
+    await db_session.exec(delete(Justification).where(Justification.reason.like("Otra prueba B4%")))  # type: ignore[union-attr]
     await db_session.exec(delete(Room).where(Room.code == "LAB 997"))  # type: ignore[attr-defined]
     await db_session.commit()
     yield
     await db_session.exec(delete(Holiday).where(Holiday.description == "Feriado de prueba B4"))  # type: ignore[arg-type]
+    await db_session.exec(delete(Holiday).where(Holiday.holiday_date >= date(2027, 1, 1)))  # type: ignore[arg-type]
     await db_session.exec(delete(Justification).where(Justification.reason == "Descanso médico de prueba B4"))  # type: ignore[arg-type]
+    await db_session.exec(delete(Justification).where(Justification.reason.like("Otra prueba B4%")))  # type: ignore[union-attr]
     await db_session.exec(delete(Room).where(Room.code == "LAB 997"))  # type: ignore[attr-defined]
     await db_session.commit()
 
@@ -47,6 +54,44 @@ async def test_feriados_crud(client: AsyncClient, admin_headers: dict):
     assert r.status_code == 200
     r = await client.get(f"{API}/holidays", headers=admin_headers)
     assert all(h["id"] != holiday["id"] for h in r.json())
+
+
+# ---------------------------------------------------------------------------
+# Feriados por rango y nacionales - R12 (Bloque 11)
+# ---------------------------------------------------------------------------
+async def test_feriados_por_rango_y_nacionales(client: AsyncClient, admin_headers: dict, db_session):
+    """R12: alta por rango (omite fines de semana) y generador nacional
+    (fijos + Semana Santa por el algoritmo de Pascua)."""
+    from datetime import date
+
+    from sqlmodel import delete
+
+    from app.tables import Holiday
+
+    # Lunes 2027-01-04 → domingo 2027-01-10: 5 días hábiles (sáb/dom omitidos)
+    r = await client.post(f"{API}/holidays/range", headers=admin_headers,
+                          json={"desde": "2027-01-04", "hasta": "2027-01-10",
+                                "descripcion": "Paro de prueba B11"})
+    assert r.status_code == 201, r.text
+    assert r.json()["creados"] == 5
+
+    # Repetir el rango es idempotente: los 5 quedan omitidos
+    r = await client.post(f"{API}/holidays/range", headers=admin_headers,
+                          json={"desde": "2027-01-04", "hasta": "2027-01-10",
+                                "descripcion": "Paro de prueba B11"})
+    assert r.json()["creados"] == 0 and r.json()["omitidos"] == 5
+
+    # Nacionales 2027: 14 fijos + Jueves/Viernes Santo (2027-03-25/26) = 16
+    r = await client.post(f"{API}/holidays/national", headers=admin_headers, json={"year": 2027})
+    assert r.status_code == 201, r.text
+    assert r.json()["creados"] == 16
+    r = await client.get(f"{API}/holidays", headers=admin_headers)
+    fechas = {h["holiday_date"] for h in r.json()}
+    assert "2027-03-25" in fechas and "2027-12-25" in fechas
+
+    # Limpieza de todo lo creado para 2027
+    await db_session.exec(delete(Holiday).where(Holiday.holiday_date >= date(2027, 1, 1)))  # type: ignore[arg-type]
+    await db_session.commit()
 
 
 # ---------------------------------------------------------------------------

@@ -189,3 +189,6 @@ async def test_matricula_flujo(client: AsyncClient, admin_headers: dict, db_sess
     r = await client.post(f"{API}/groups/{group['id']}/students", headers=admin_headers,
                           json={"student_id": teachers["items"][0]["id"]})
     assert r.status_code == 422
+
+    # Limpieza final (este test no usa el fixture `curso`)
+    await _cleanup_course(db_session)

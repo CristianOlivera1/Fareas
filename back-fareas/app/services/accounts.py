@@ -14,9 +14,9 @@ from app.schemas.common import MessageResponse
 from app.services import errors
 from app.services.audit import audit
 from app.services.emailer import send_temporary_credentials
+from app.services.formats import validar_dni, validar_dominio_email, validar_whatsapp
 from app.tables import AppUser, UserRole
 
-_DNI_RE = re.compile(r"^\d{8}$")
 _CODE_RE = re.compile(r"^\d{6}$")
 
 
@@ -63,21 +63,21 @@ async def create_account(
     if role is UserRole.ADMIN:
         raise errors.DomainError("El admin no se crea por este endpoint")
     if role is UserRole.DOCENTE:
-        if not dni or not _DNI_RE.match(dni):
-            raise errors.DomainError("El docente requiere un DNI válido de 8 dígitos")
+        validar_dni(dni)  # R15: 8 dígitos
         code = None
         semester = None
     else:  # estudiante
-        if not dni or not _DNI_RE.match(dni):
-            raise errors.DomainError("El estudiante requiere un DNI válido de 8 dígitos")
+        validar_dni(dni)
         if not code or not _CODE_RE.match(code):
             raise errors.DomainError("El estudiante requiere un código de matrícula de 6 dígitos")
         if semester is None or not 1 <= semester <= 12:
             raise errors.DomainError("El estudiante requiere un ciclo (semestre) entre 1 y 12")
+    whatsapp = validar_whatsapp(whatsapp)
 
-    email = email.strip().lower()
-    if not email.endswith("@unamba.edu.pe"):
-        raise errors.DomainError("El correo debe ser institucional (@unamba.edu.pe)")
+    try:
+        email = validar_dominio_email(email)  # R15: dominio configurable
+    except ValueError as exc:
+        raise errors.DomainError(str(exc)) from exc
     await _ensure_unique(db, email=email, dni=dni, code=code)
 
     temp_password = _temp_password()

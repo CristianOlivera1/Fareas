@@ -24,6 +24,7 @@ class AuditEntryOut(BaseModel):
     entity_id: int | None
     actor_id: int | None
     actor_name: str | None
+    actor_role: str | None
     old_value: dict | list | None
     new_value: dict | list | None
     ip_address: str | None
@@ -39,6 +40,7 @@ async def list_audit_log(
     entity: str | None = Query(None, max_length=40),
     entity_id: int | None = None,
     actor_id: int | None = None,
+    actor_role: str | None = Query(None, max_length=20, description="admin | docente | estudiante"),
     since: datetime | None = Query(None, description="Filtro ISO p. ej. 2026-09-01T00:00:00"),  # noqa: B008
 ) -> Page[AuditEntryOut]:
     stmt = select(AuditLog, AppUser).outerjoin(AppUser, AppUser.id == AuditLog.actor_id)
@@ -55,6 +57,11 @@ async def list_audit_log(
     if actor_id is not None:
         stmt = stmt.where(AuditLog.actor_id == actor_id)
         count_stmt = count_stmt.where(AuditLog.actor_id == actor_id)
+    if actor_role:
+        stmt = stmt.where(AppUser.role == actor_role)  # type: ignore[arg-type]
+        count_stmt = count_stmt.where(
+            AuditLog.actor_id.in_(select(AppUser.id).where(AppUser.role == actor_role))  # type: ignore[union-attr]
+        )
     if since is not None:
         stmt = stmt.where(AuditLog.created_at >= since)  # type: ignore[arg-type]
         count_stmt = count_stmt.where(AuditLog.created_at >= since)  # type: ignore[arg-type]
@@ -71,6 +78,7 @@ async def list_audit_log(
             entity_id=log.entity_id,
             actor_id=log.actor_id,
             actor_name=actor.full_name if actor else None,
+            actor_role=getattr(actor.role, "value", actor.role) if actor else None,
             old_value=log.old_value,
             new_value=log.new_value,
             ip_address=log.ip_address,

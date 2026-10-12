@@ -17,7 +17,9 @@ from app.routers.catalog import _client_ip, _get_or_404
 from app.schemas.common import Page
 from app.services import errors
 from app.services.audit import audit
+from app.services.enrollments import matricular, retirar, transferir
 from app.services.schedule import add_block, update_block
+from app.services.settings import semestre_vigente, semesters_con_grupos
 from app.tables import AppUser, Course, CourseGroup, Enrollment, Room, ScheduleBlock, UserRole
 
 router = APIRouter(tags=["courses"])
@@ -78,6 +80,7 @@ class GroupIn(BaseModel):
     group_code: str = Field(min_length=1, max_length=5, examples=["A"])
     teacher_id: int
     room_id: int
+    capacity: int = Field(default=40, gt=0, description="Cupo del grupo (40 por defecto, R8)")
 
 
 class GroupOut(BaseModel):
@@ -90,10 +93,20 @@ class GroupOut(BaseModel):
     teacher_name: str
     room_id: int
     room_code: str
+    semester_label: str
+    capacity: int
+    enrolled_count: int
     is_active: bool
 
 
-def _group_out(g: CourseGroup, course: Course, teacher: AppUser, room: Room) -> GroupOut:
+async def _group_out(db, g: CourseGroup, course: Course, teacher: AppUser, room: Room) -> GroupOut:
+    activos = (
+        await db.exec(
+            select(func.count())
+            .select_from(Enrollment)
+            .where(Enrollment.group_id == g.id, Enrollment.withdrawn_at.is_(None))  # type: ignore[union-attr,arg-type]
+        )
+    ).one()
     return GroupOut(
         id=g.id,  # type: ignore[arg-type]
         course_id=course.id,  # type: ignore[arg-type]
@@ -104,12 +117,16 @@ def _group_out(g: CourseGroup, course: Course, teacher: AppUser, room: Room) -> 
         teacher_name=teacher.full_name,
         room_id=room.id,  # type: ignore[arg-type]
         room_code=room.code,
+        semester_label=g.semester_label,
+        capacity=g.capacity,
+        enrolled_count=activos,
         is_active=g.is_active,
     )
 
 
 async def _group_rows(db, *, group_id: int | None = None, course_id: int | None = None,
-                      teacher_id: int | None = None, active_only: bool = False):
+                      teacher_id: int | None = None, active_only: bool = False,
+                      semester: str | None = None):
     stmt = (
         select(CourseGroup, Course, AppUser, Room)
         .join(Course, Course.id == CourseGroup.course_id)
@@ -124,6 +141,8 @@ async def _group_rows(db, *, group_id: int | None = None, course_id: int | None 
         stmt = stmt.where(CourseGroup.teacher_id == teacher_id)
     if active_only:
         stmt = stmt.where(CourseGroup.is_active)  # type: ignore[arg-type]
+    if semester is not None:
+        stmt = stmt.where(CourseGroup.semester_label == semester)  # type: ignore[arg-type]
     return (await db.exec(stmt.order_by(Course.code, CourseGroup.group_code))).all()
 
 
@@ -134,33 +153,43 @@ async def list_groups(
     course_id: int | None = None,
     teacher_id: int | None = None,
     include_inactive: bool = False,
+    semester: str | None = Query(None, max_length=40, description="Default: todos"),
 ) -> list[GroupOut]:
     rows = await _group_rows(db, course_id=course_id, teacher_id=teacher_id,
-                             active_only=not include_inactive)
-    return [_group_out(g, c, t, r) for g, c, t, r in rows]
+                             active_only=not include_inactive, semester=semester)
+    return [await _group_out(db, g, c, t, r) for g, c, t, r in rows]
 
 
 @router.get("/courses/{course_id}/groups", response_model=list[GroupOut])
 async def list_course_groups(
-    course_id: int, db: DbSession, _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE)
+    course_id: int, db: DbSession, _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
+    semester: str | None = Query(None, max_length=40, description="Default: semestre vigente (R1)"),
 ) -> list[GroupOut]:
     await _get_or_404(db, Course, course_id, "Curso")
-    rows = await _group_rows(db, course_id=course_id)
-    return [_group_out(g, c, t, r) for g, c, t, r in rows]
+    if semester is None:
+        semester = await semestre_vigente(db)
+    rows = await _group_rows(db, course_id=course_id, semester=semester)
+    return [await _group_out(db, g, c, t, r) for g, c, t, r in rows]
 
 
 @router.post("/courses/{course_id}/groups", response_model=GroupOut, status_code=status.HTTP_201_CREATED)
 async def create_group(
     course_id: int, body: GroupIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> GroupOut:
+    """R9: crea el grupo con semester_label del semestre VIGENTE y cupo."""
     course = await _get_or_404(db, Course, course_id, "Curso")
     group_code = body.group_code.strip().upper()
+    semester = await semestre_vigente(db)
     if (await db.exec(
-        select(CourseGroup).where(CourseGroup.course_id == course_id, CourseGroup.group_code == group_code)
+        select(CourseGroup).where(
+            CourseGroup.course_id == course_id,
+            CourseGroup.group_code == group_code,
+            CourseGroup.semester_label == semester,
+        )
     )).first() is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"El curso {course.code} ya tiene un grupo '{group_code}'",
+            detail=f"El curso {course.code} ya tiene un grupo '{group_code}' en {semester}",
         )
     teacher = await _get_or_404(db, AppUser, body.teacher_id, "Docente")
     if teacher.role is not UserRole.DOCENTE or not teacher.is_active:
@@ -169,16 +198,18 @@ async def create_group(
     room = await _get_or_404(db, Room, body.room_id, "Aula")
 
     group = CourseGroup(course_id=course_id, group_code=group_code,
-                        teacher_id=body.teacher_id, room_id=body.room_id)
+                        teacher_id=body.teacher_id, room_id=body.room_id,
+                        semester_label=semester, capacity=body.capacity)
     db.add(group)
     await db.flush()  # obtiene group.id para la bitácora
     await audit(db, admin, action="grupo_creado", entity="course_group", entity_id=group.id,
-                new_value={"course": course.code, "group": group_code,
-                           "teacher_id": body.teacher_id, "room_id": body.room_id},
+                new_value={"course": course.code, "group": group_code, "semester": semester,
+                           "teacher_id": body.teacher_id, "room_id": body.room_id,
+                           "capacity": body.capacity},
                 ip_address=_client_ip(request))
     await db.commit()
     await db.refresh(group)
-    return _group_out(group, course, teacher, room)
+    return await _group_out(db, group, course, teacher, room)
 
 
 @router.delete("/groups/{group_id}", response_model=dict)
@@ -289,27 +320,46 @@ class EnrolledStudentOut(BaseModel):
     email: str
     semester: int | None
     enrolled_at: str | None
+    withdrawn_at: str | None = None  # R8: retiro (soft)
+    has_face: bool | None = None  # RF-04/B9: rostro vigente
 
 
 @router.get("/groups/{group_id}/students", response_model=list[EnrolledStudentOut])
 async def list_enrolled(
-    group_id: int, db: DbSession, _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE)
+    group_id: int, db: DbSession, _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
+    with_face: bool = Query(False, description="Incluye has_face (rostro vigente RF-04)"),
 ) -> list[EnrolledStudentOut]:
     await _get_or_404(db, CourseGroup, group_id, "Grupo")
     rows = (
         await db.exec(
-            select(AppUser, Enrollment.enrolled_at)
+            select(AppUser, Enrollment.enrolled_at, Enrollment.withdrawn_at)
             .join(Enrollment, Enrollment.student_id == AppUser.id)
             .where(Enrollment.group_id == group_id)
-            .order_by(AppUser.full_name)
+            .order_by(Enrollment.withdrawn_at.is_(None).desc(), AppUser.full_name)  # type: ignore[union-attr]
         )
     ).all()
+    con_rostro: set[int] = set()
+    if with_face and rows:
+        from app.tables import FaceEmbedding
+
+        ids = [u.id for u, _e, _w in rows]
+        filas = (
+            await db.exec(
+                select(FaceEmbedding.student_id).where(
+                    FaceEmbedding.student_id.in_(ids),  # type: ignore[attr-defined]
+                    FaceEmbedding.is_current,  # type: ignore[arg-type]
+                )
+            )
+        ).all()
+        con_rostro = {r[0] if isinstance(r, tuple) else r for r in filas}
     return [
         EnrolledStudentOut(
             id=u.id, code=u.code, full_name=u.full_name, email=u.email, semester=u.semester,  # type: ignore[arg-type]
             enrolled_at=ea.isoformat(timespec="seconds") if ea else None,
+            withdrawn_at=w.isoformat(timespec="seconds") if w else None,
+            has_face=(u.id in con_rostro) if with_face else None,
         )
-        for u, ea in rows
+        for u, ea, w in rows
     ]
 
 
@@ -317,44 +367,40 @@ async def list_enrolled(
 async def enroll_student(
     group_id: int, body: EnrollIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> dict:
-    group = await _get_or_404(db, CourseGroup, group_id, "Grupo")
-    if not group.is_active:
-        raise errors.DomainError("No se puede matricular en un grupo inactivo")
+    """R8: matrícula con cupo, grupo único por curso y cruce de horarios."""
+    enrollment = await matricular(
+        db, admin, group_id=group_id, student_id=body.student_id, ip=_client_ip(request)
+    )
     student = await _get_or_404(db, AppUser, body.student_id, "Estudiante")
-    if student.role is not UserRole.ESTUDIANTE:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            detail="Solo se matricula a usuarios con rol estudiante")
-    if (await db.exec(
-        select(Enrollment).where(Enrollment.student_id == body.student_id, Enrollment.group_id == group_id)
-    )).first() is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                            detail="El estudiante ya está matriculado en este grupo")
-    enrollment = Enrollment(student_id=body.student_id, group_id=group_id)
-    db.add(enrollment)
-    await audit(db, admin, action="matricula_creada", entity="enrollment",
-                new_value={"student_id": body.student_id, "group_id": group_id},
-                ip_address=_client_ip(request))
-    await db.commit()
-    return {"message": f"{student.full_name} matriculado en el grupo #{group_id}"}
+    return {"message": f"{student.full_name} matriculado en el grupo #{enrollment.group_id}"}
 
 
 @router.delete("/groups/{group_id}/students/{student_id}", response_model=dict)
 async def unenroll_student(
     group_id: int, student_id: int, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> dict:
-    enrollment = (
-        await db.exec(
-            select(Enrollment).where(Enrollment.group_id == group_id, Enrollment.student_id == student_id)
-        )
-    ).first()
-    if enrollment is None:
-        raise errors.NotFoundError("El estudiante no está matriculado en ese grupo")
-    await db.delete(enrollment)
-    await audit(db, admin, action="matricula_eliminada", entity="enrollment", entity_id=enrollment.id,
-                old_value={"student_id": student_id, "group_id": group_id},
-                ip_address=_client_ip(request))
-    await db.commit()
-    return {"message": "Matrícula eliminada"}
+    """R8d: retiro — borra la matrícula si no hay registros; si los hay la
+    marca con withdrawn_at (el historial del curso se conserva)."""
+    resultado = await retirar(db, admin, group_id=group_id, student_id=student_id,
+                              ip=_client_ip(request))
+    return {"message": f"Matrícula {resultado['modo']}"}
+
+
+@router.post("/groups/{group_id}/students/{student_id}/transfer")
+async def transfer_student(
+    group_id: int, student_id: int, body: dict, request: Request, db: DbSession,
+    admin: RequireRole(UserRole.ADMIN),
+) -> dict:
+    """R8e: transferencia entre grupos del MISMO curso (una transacción).
+    Body: {"destino_group_id": int}. Las faltas anteriores se conservan."""
+    destino = body.get("destino_group_id")
+    if not isinstance(destino, int):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            detail="Falta 'destino_group_id' (int)")
+    return await transferir(
+        db, admin, group_id=group_id, student_id=student_id,
+        destino_group_id=destino, ip=_client_ip(request),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -490,18 +536,24 @@ async def import_pdf_confirm(
                 curso.name = b.course_name  # completa el nombre faltante
                 db.add(curso)
 
-            # 2) Grupo (uno por curso+código; reutiliza el existente si ya hay)
+            # 2) Grupo (uno por curso+código en el SEMESTRE VIGENTE, R1;
+            #    reutiliza el existente si ya hay)
             clave = (b.course_code, b.group_code)
             if clave in vistos:
                 grupo = _grupos_en_sesion[clave]
             else:
+                sem_vigente = await semestre_vigente(db)
                 grupo = (await db.exec(
                     select(CourseGroup).where(
-                        CourseGroup.course_id == curso.id, CourseGroup.group_code == b.group_code)
+                        CourseGroup.course_id == curso.id,
+                        CourseGroup.group_code == b.group_code,
+                        CourseGroup.semester_label == sem_vigente,
+                    )
                 )).first()
                 if grupo is None:
                     grupo = CourseGroup(course_id=curso.id, group_code=b.group_code,
-                                        teacher_id=body.teacher_id, room_id=body.room_id)
+                                        teacher_id=body.teacher_id, room_id=body.room_id,
+                                        semester_label=sem_vigente, capacity=40)
                     db.add(grupo)
                     await db.flush()
                     grupos_nuevos.append(f"{curso.code}-{b.group_code}")
