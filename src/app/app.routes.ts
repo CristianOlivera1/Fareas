@@ -74,8 +74,26 @@ export const routes: Routes = [
         data: { title: 'Asistencias' },
       },
 
-      { path: 'courses', canActivate: [roleGuard('admin', 'docente')], ...pendiente('Cursos y grupos', 'F2 · Académico') },
-      { path: 'enrollments', canActivate: [roleGuard('admin', 'docente')], ...pendiente('Matrículas', 'F2 · Académico') },
+      {
+        path: 'courses',
+        canActivate: [roleGuard('admin', 'docente')],
+        loadComponent: () => import('./features/courses/courses/courses').then((m) => m.CoursesPage),
+        data: { title: 'Cursos y grupos' },
+      },
+      {
+        path: 'courses/:courseId',
+        canActivate: [roleGuard('admin', 'docente')],
+        loadComponent: () =>
+          import('./features/courses/course-detail/course-detail').then((m) => m.CourseDetailPage),
+        data: { title: 'Grupos y horario' },
+      },
+      {
+        path: 'enrollments',
+        canActivate: [roleGuard('admin', 'docente')],
+        loadComponent: () =>
+          import('./features/enrollments/enrollments/enrollments').then((m) => m.EnrollmentsPage),
+        data: { title: 'Matrículas' },
+      },
 
       {
         path: 'teachers',

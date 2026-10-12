@@ -12,6 +12,7 @@ import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { QueryParams } from '../../../shared/utils/query-params';
+import { extractDetail } from '../../../shared/utils/api-error';
 import { CatalogApi } from '../../../core/services/catalog-api';
 import { AuthService } from '../../../core/services/auth/auth';
 import { PageHeader } from '../../../shared/components/page-header/page-header';
@@ -23,10 +24,9 @@ import { DataTableCellDirective } from '../../../shared/components/data-table/da
 import { TableColumn } from '../../../core/models/table-column';
 import { Room } from '../../../core/models/catalog';
 
-export function extractDetail(err: unknown): string {
-  const anyErr = err as { error?: { detail?: string }; message?: string };
-  return anyErr?.error?.detail ?? anyErr?.message ?? 'Error de conexión con el servidor';
-}
+// Se re-exporta desde el helper compartido para no romper los imports
+// existentes (students, teachers, devices) que lo toman de este módulo.
+export { extractDetail };
 
 interface RoomForm {
   id: number | null;
