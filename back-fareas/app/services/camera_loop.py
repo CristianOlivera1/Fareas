@@ -17,15 +17,22 @@ import contextlib
 import logging
 import socket
 import time
-from datetime import datetime, timedelta
 
 from sqlmodel import select
 
 from app.ai.runtime import vision_pipeline
 from app.database import SessionLocal
 from app.services import errors
-from app.services.attendance_engine import _naive_peru, ahora_peru, registrar_marca, resolver_sesion
-from app.tables import AppSettings, Device, DeviceType, Enrollment
+from app.services.attendance_engine import (
+    _naive_peru,
+    ahora_peru,
+    bloques_candidatos,
+    clasificar,
+    registrar_marca,
+    resolver_sesion,
+)
+from app.services.settings import get_settings_row
+from app.tables import Device, DeviceType, Enrollment
 
 logger = logging.getLogger("fareas.cameras")
 
@@ -142,30 +149,42 @@ async def _procesar_aula(pipe, room_id: int) -> None:
             return
         _fallos[room_id] = 0
 
-        # Clase activa del aula (crea la sesión si corresponde, RF-26)
-        sesion, bloque = await resolver_sesion(db, room_id)
+        # R3/R10: el scheduler abre las sesiones; resolver_sesion localiza la
+        # vigente (respaldo si nadie la abrió). Con bloques CONTIGUOS en el
+        # aula, los candidatos son la UNIÓN de los matriculados de todos los
+        # bloques cuya ventana corre: cada alumno se clasifica con el SUYO
+        # (mapa alumno→bloque) y la marca se registra en SU sesión (abajo).
+        cfg = await get_settings_row(db)
+        ahora = _naive_peru(ahora_peru())
+        hoy = ahora.date()
+        pares = await bloques_candidatos(db, room_id, ahora, cfg)
         candidates: set[int] | None = None
         clasificador = None
-        if sesion is not None and bloque is not None:
-            ids = (
-                await db.exec(select(Enrollment.student_id).where(Enrollment.group_id == bloque.group_id))
-            ).all()
-            candidates = {r[0] if isinstance(r, tuple) else r for r in ids}
+        bloque_de_alumno: dict[int, object] = {}
+        if pares:
+            for b, g in pares:
+                ids = (
+                    await db.exec(
+                        select(Enrollment.student_id).where(
+                            Enrollment.group_id == g.id,  # type: ignore[arg-type]
+                            Enrollment.withdrawn_at.is_(None),  # type: ignore[union-attr]
+                        )
+                    )
+                ).all()
+                for sid in ids:
+                    bloque_de_alumno[sid[0] if isinstance(sid, tuple) else sid] = b
+            candidates = set(bloque_de_alumno)
 
-            # RF-23 en vivo: el clasificador decide asistio/tardanza por aula
-            settings = await db.get(AppSettings, 1)
-            tolerancia = timedelta(minutes=settings.late_tolerance_minutes if settings else 10)
-            fin = datetime.combine(sesion.session_date, bloque.end_time)
+            # R2 en vivo: asistio hasta inicio+tolerancia, tardanza hasta el
+            # fin del bloque del ALUMNO (no del que empezó más tarde).
+            def clasificador(sid: int, _t: float) -> str:
+                b = bloque_de_alumno.get(sid)
+                if b is None:
+                    return "sin_registro"
+                estado = clasificar(ahora, b, hoy, cfg)
+                return estado or "sin_registro"
 
-            def clasificador(_sid: int, _t: float) -> str:
-                ahora = _naive_peru(ahora_peru())
-                if ahora <= fin:
-                    return "asistio"
-                if ahora <= fin + tolerancia:
-                    return "tardanza"
-                return "sin_registro"
-
-        await db.commit()  # persiste la sesión recién creada (si la hubo)
+        await db.commit()  # persiste la sesión de respaldo (si la hubo)
 
         # Con clasificador activo el pipeline genera `mark` → persistencia BD;
         # sin clase, modo demo (solo LED).
@@ -179,16 +198,40 @@ async def _procesar_aula(pipe, room_id: int) -> None:
             "ts": ahora_peru().isoformat(timespec="seconds"),
         }
 
-        # Marca única en BD (solo con clase activa y alumno matriculado)
-        if sesion is not None and resultado.mark is not None:
-            try:
-                await registrar_marca(
-                    db, sesion, resultado.mark["student_id"],
-                    similarity=resultado.mark["similarity"], method="facial",
+        # R10: el conocido NO matriculado en ninguna clase del aula recibe
+        # ROJO con el grupo del mismo curso al que SÍ pertenece.
+        if resultado.verdict == "denegado" and resultado.student_id is not None and pares:
+            from app.tables import CourseGroup as _CG
+
+            cursos_del_aula = [g.course_id for (_b, g) in pares]
+            fila = (
+                await db.exec(
+                    select(_CG.group_code).join(Enrollment, Enrollment.group_id == _CG.id).where(
+                        Enrollment.student_id == resultado.student_id,  # type: ignore[arg-type]
+                        _CG.course_id.in_(cursos_del_aula),  # type: ignore[attr-defined]
+                        Enrollment.withdrawn_at.is_(None),  # type: ignore[union-attr]
+                    )
                 )
-                await db.commit()
-            except errors.ConflictError:
-                await db.rollback()  # ya marcó en esta sesión (UNIQUE)
+            ).first()
+            if fila is not None:
+                grupo_x = fila[0] if isinstance(fila, tuple) else fila
+                resultado.message = f"{resultado.message} (matriculado en el grupo {grupo_x})"
+
+        # R10: la marca va a la sesión del grupo DONDE EL ALUMNO ESTÁ
+        # MATRICULADO (re-resuelve con student_id; no al bloque tardío).
+        if resultado.mark is not None:
+            sesion_ok, _bloque_ok = await resolver_sesion(
+                db, room_id, student_id=resultado.mark["student_id"]
+            )
+            if sesion_ok is not None:
+                try:
+                    await registrar_marca(
+                        db, sesion_ok, resultado.mark["student_id"],
+                        similarity=resultado.mark["similarity"], method="facial",
+                    )
+                    await db.commit()
+                except errors.ConflictError:
+                    await db.rollback()  # ya marcó en esta sesión (UNIQUE)
 
         # Veredicto al ESP32 del aula (Bloque 7): por device_key registrado
         nodo = (

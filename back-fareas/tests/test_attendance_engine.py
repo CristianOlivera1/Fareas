@@ -51,12 +51,25 @@ async def test_fuera_de_horario_y_feriado(db_session, escenario):
 
 
 async def test_ventana_de_tardanza_rf23(db_session, escenario):
-    """10:05 sigue abriendo (tolerancia 10 min); 10:20 ya no."""
+    """R2 (Bloque 11): bloque 08:00-10:00, tolerancia T y apertura E.
+
+    - 07:44 (antes de inicio−E) → sin sesión.
+    - 08:10 (inicio+T) → asistio.
+    - 08:11 → tardanza; 10:00 (fin) → tardanza (decisión: 55 min tarde = tardanza).
+    - 10:01 (después del fin) → sin sesión.
+    """
     esc = escenario
-    s, _ = await resolver_sesion(db_session, esc["aula_id"], now=h(esc["lunes"], "10:05"))
-    assert s is not None
-    s2, _ = await resolver_sesion(db_session, esc["aula_id"], now=h(esc["lunes"], "10:20"))
-    assert s2 is None
+    cfg = await _cfg(db_session)
+    assert cfg.late_tolerance_minutes == 10 and cfg.early_open_minutes == 15
+
+    s, _ = await resolver_sesion(db_session, esc["aula_id"], now=h(esc["lunes"], "07:44"))
+    assert s is None  # todavía no abre
+    s, _ = await resolver_sesion(db_session, esc["aula_id"], now=h(esc["lunes"], "07:45"))
+    assert s is not None  # inicio − apertura anticipada
+    s2, _ = await resolver_sesion(db_session, esc["aula_id"], now=h(esc["lunes"], "10:00"))
+    assert s2 is not None and s2.id == s.id  # hasta el fin sigue abierta
+    s3, _ = await resolver_sesion(db_session, esc["aula_id"], now=h(esc["lunes"], "10:01"))
+    assert s3 is None  # cerrada: falta al cierre
 
 
 async def test_marca_unica_y_clasificacion(db_session, escenario):
@@ -72,15 +85,16 @@ async def test_marca_unica_y_clasificacion(db_session, escenario):
     with pytest.raises(errors.ConflictError):  # marca ÚNICA (RF-21/Tabla 2)
         await registrar_marca(db_session, sesion, esc["e1"], now=h(esc["lunes"], "08:20"))
 
-    r2 = await registrar_marca(db_session, sesion, esc["e2"], now=h(esc["lunes"], "10:04"))
-    assert r2.status.value == "tardanza"  # dentro de la tolerancia post-bloque
+    r2 = await registrar_marca(db_session, sesion, esc["e2"], now=h(esc["lunes"], "08:30"))
+    assert r2.status.value == "tardanza"  # R2: después de inicio+tolerancia
     await db_session.commit()
 
 
 async def test_cierre_genera_faltas_e_idempotente(db_session, escenario):
     esc = escenario
     sesion, _ = await resolver_sesion(db_session, esc["aula_id"], now=h(esc["lunes"], "08:10"))
-    await registrar_marca(db_session, sesion, esc["e1"], now=h(esc["lunes"], "08:15"))
+    # R2: 08:05 ≤ inicio+T (08:10) → asistio
+    await registrar_marca(db_session, sesion, esc["e1"], now=h(esc["lunes"], "08:05"))
     await db_session.commit()
 
     resumen = await cerrar_sesion(db_session, sesion)
@@ -104,14 +118,27 @@ async def test_cierre_genera_faltas_e_idempotente(db_session, escenario):
 
 
 async def test_estudiante_no_matriculado_no_recibe_falta(db_session, escenario):
-    """El cierre solo genera faltas para MATRICULADOS del grupo."""
+    """R4 + R8: cero marcas → needs_review sin faltas; al confirmar, faltas
+    SOLO para los MATRICULADOS activos del grupo."""
+    from app.services.attendance_engine import resolver_revision
+    from app.tables import AppUser
+
     esc = escenario
-    sesion, _ = await resolver_sesion(db_session, esc["aula_id"], now=h(esc["lunes"], "08:10"))
-    # un tercero NO matriculado intenta marca (el pipeline con candidates
-    # ya lo bloquea; el motor también por integridad del flujo):
+    sesion, _ = await resolver_sesion(db_session, esc["aula_id"], now=h(esc["lunes"], "10:30"))
+    assert sesion is None  # R2: después del fin no hay sesión nueva
+    sesion, _ = await resolver_sesion(db_session, esc["aula_id"], now=h(esc["lunes"], "09:00"))
+    assert sesion is not None
+
+    # R4: cierre con cero marcas → needs_review, sin faltas ni alertas
     resumen = await cerrar_sesion(db_session, sesion)
-    assert resumen["faltas"] == 2  # e1 y e2 (nadie marcó)
-    # EST1/EST2 existen como usuarios pero solo 2 faltas generadas
+    assert resumen["status"] == "needs_review" and resumen["faltas"] == 0
+    assert sesion.needs_review is True
+
+    # El admin confirma las faltas → e1 y e2 (matriculados), nadie más
+    admin = await db_session.get(AppUser, esc["docente_id"])  # docente=actor de prueba
+    resumen2 = await resolver_revision(db_session, sesion, admin, "confirmar_faltas")
+    assert resumen2["faltas"] == 2
+    assert sesion.needs_review is False
     assert (await cerrar_sesion(db_session, sesion))["status"] == "ya_cerrada"
 
 
@@ -123,3 +150,9 @@ async def test_smoke_horario_settings(db_session, escenario):
     assert s is not None
     assert s.attendance_hour_start < s.attendance_hour_end
     assert 0 < float(s.face_match_threshold) < 1
+
+
+async def _cfg(db_session):
+    from app.tables import AppSettings
+
+    return await db_session.get(AppSettings, 1)
