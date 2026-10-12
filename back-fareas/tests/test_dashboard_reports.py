@@ -172,6 +172,99 @@ async def test_reporte_excel_y_pdf(client, admin_headers, db_session, escenario)
     assert r.content[:5] == b"%PDF-"
 
 
+async def test_stats_y_summary_del_docente_van_filtrados(client, docente_headers):
+    """R7 (Bloque 11): con rol docente, dashboard Y stats van filtrados por
+    SUS grupos; el docente de prueba no tiene ninguno → todo en cero."""
+    r = await client.get(f"{API}/stats/hourly", headers=docente_headers)
+    assert r.status_code == 200, r.text
+    assert all(fila["total"] == 0 for fila in r.json())
+
+    r = await client.get(f"{API}/stats/distribution", headers=docente_headers)
+    assert r.status_code == 200
+    assert r.json() == {"asistio": 0, "tardanza": 0, "falta": 0, "sin_registro": 0}
+
+    r = await client.get(f"{API}/dashboard/summary", headers=docente_headers)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["asistencias_hoy"] == 0 and data["ausencias_hoy"] == 0
+    assert "en_riesgo" in data and "sessions_to_review" in data
+
+    # Y su vista de asistencia de hoy tampoco muestra grupos ajenos
+    r = await client.get(f"{API}/attendance/today", headers=docente_headers)
+    assert r.status_code == 200 and r.json() == []
+
+
+async def test_reportes_matriz_grupo_y_riesgo_dpi(client, admin_headers, docente_headers,
+                                                  db_session, escenario):
+    """Bloque 11 (11.8): matriz del grupo (A/T/F/FJ/—) y riesgo DPI."""
+    import datetime as _dt
+
+    from sqlmodel import select
+
+    from app.services.attendance_engine import cerrar_sesion
+    from app.tables import AttendanceRecord, AttendanceSession, SessionStatus
+
+    esc = escenario
+    sesion_id = await _sesion_hoy_con_marcas(db_session, client, admin_headers, esc)
+    sesion = (
+        await db_session.exec(select(AttendanceSession).where(AttendanceSession.id == sesion_id))
+    ).first()
+    await cerrar_sesion(db_session, sesion)  # cerrada: entra en la matriz (R4)
+
+    # --- Matriz del grupo: e1 asistio (A) y e2 tardanza (T) ---
+    r = await client.get(f"{API}/reports/group-matrix.xlsx", headers=admin_headers,
+                         params={"group_id": esc["grupo_id"]})
+    assert r.status_code == 200, r.text
+    assert r.content[:2] == b"PK"
+    assert "attachment" in r.headers.get("content-disposition", "")
+    ws = load_workbook(BytesIO(r.content)).active
+    headers = [c.value for c in ws[5]]
+    assert headers[0] == "Estudiante" and headers[1] == "Código"
+    assert {"A", "T", "F", "FJ", "% Asist."} <= set(headers)
+    assert ws.max_row == 7  # encabezado (1-5) + e1 y e2
+    marcas = {ws.cell(row=f, column=3).value for f in (6, 7)}
+    assert marcas == {"A", "T"}
+
+    # Docente ajeno → 403 (el backend ya valida pertenencia)
+    r = await client.get(f"{API}/reports/group-matrix.xlsx", headers=docente_headers,
+                         params={"group_id": esc["grupo_id"]})
+    assert r.status_code == 403
+
+    # --- Riesgo DPI: segunda sesión en la que e2 no marca → falta (50 %) ---
+    hoy = date.today()
+    bloque2 = ScheduleBlock(group_id=esc["grupo_id"], weekday=hoy.isoweekday(),
+                            start_time=time(11, 0), end_time=time(12, 0))
+    db_session.add(bloque2)
+    await db_session.flush()
+    ses2 = AttendanceSession(block_id=bloque2.id, session_date=hoy,
+                             status=SessionStatus.CERRADA, needs_review=False,
+                             closed_at=_dt.datetime.now())
+    db_session.add(ses2)
+    await db_session.flush()
+    db_session.add(AttendanceRecord(session_id=ses2.id, student_id=esc["e1"], status="asistio",
+                                    marked_at=_dt.datetime.now(), method="manual"))
+    db_session.add(AttendanceRecord(session_id=ses2.id, student_id=esc["e2"], status="falta",
+                                    marked_at=None, method="facial"))
+    await db_session.commit()
+
+    r = await client.get(f"{API}/reports/dpi-risk.xlsx", headers=admin_headers,
+                         params={"course_id": esc["curso_id"]})
+    assert r.status_code == 200, r.text
+    assert r.content[:2] == b"PK"
+    ws = load_workbook(BytesIO(r.content)).active
+    filas = [[c.value for c in row] for row in ws.iter_rows(min_row=6, max_row=ws.max_row)]
+    assert len(filas) == 1  # solo e2 supera el aviso del 20 %
+    fila = filas[0]
+    assert fila[0] == "Estudiante Dos B6"
+    assert fila[7] == 50.0 and "LÍMITE" in str(fila[8])
+
+    # Docente ajeno: la lista queda vacía (filtra por SUS cursos)
+    r = await client.get(f"{API}/reports/dpi-risk.xlsx", headers=docente_headers)
+    assert r.status_code == 200
+    ws = load_workbook(BytesIO(r.content)).active
+    assert ws.max_row == 5  # solo encabezados
+
+
 async def test_docente_solo_sus_grupos_en_reportes(client, admin_headers, docente_headers,
                                                   db_session, escenario):
     """RF-16 con RF-21: el docente ajeno al grupo obtiene un reporte VACÍO."""
