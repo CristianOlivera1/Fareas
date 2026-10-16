@@ -1,0 +1,157 @@
+<app-page-header title="Feriados"
+  subtitle="Días sin clase: registrar una fecha CANCELA las sesiones de ese día (RF-09 · R12)">
+  @if (auth.isAdmin()) {
+    <app-ui-button variant="outline" icon="material-symbols:event-busy" (click)="openRange()">
+      Paro por rango
+    </app-ui-button>
+    <app-ui-button icon="material-symbols:add" (click)="openCreate()">
+      Nuevo feriado
+    </app-ui-button>
+  }
+</app-page-header>
+
+<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+  <label class="w-full space-y-1 sm:w-40">
+    <span class="text-xs font-medium text-gray-500">Año</span>
+    <p-select class="w-full" appendTo="body" [options]="yearOptions" optionLabel="label"
+      optionValue="value" placeholder="Todos los años" showClear [ngModel]="year()"
+      (ngModelChange)="onYear($event)" />
+  </label>
+  <span class="text-sm text-gray-500 sm:pb-2">
+    {{ holidays().length }} feriado(s) ·
+    {{ countWeekend() }} caen en fin de semana (no afectan clases)
+  </span>
+</div>
+
+@if (auth.isAdmin()) {
+  <app-ui-alert variant="info" title="Feriados nacionales del Perú" class="mb-4">
+    <div class="mt-2 flex flex-wrap items-end gap-3">
+      <label class="space-y-1">
+        <span class="text-xs font-medium text-blue-800">Año a generar</span>
+        <p-select class="w-32" appendTo="body" [options]="yearOptions" optionLabel="label"
+          optionValue="value" [ngModel]="nationalYear()"
+          (ngModelChange)="nationalYear.set($event)" />
+      </label>
+      <app-ui-button size="sm" variant="outline" icon="material-symbols:flag"
+        [loading]="saving()" (click)="loadNational()">
+        Cargar feriados nacionales
+      </app-ui-button>
+      <span class="max-w-md text-xs text-blue-800">
+        Carga la lista por defecto (fijos + Jueves y Viernes Santo). Las fechas ya registradas se
+        omiten; contrasta el resultado con el calendario oficial vigente.
+      </span>
+    </div>
+  </app-ui-alert>
+}
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudieron cargar los feriados" class="mb-4 block">
+    {{ msg }}
+  </app-ui-alert>
+}
+
+<app-data-table
+  [columns]="columns" [data]="holidays()" [loading]="loading()"
+  emptyTitle="Sin feriados registrados"
+  emptyMessage="Agrega un feriado o genera los nacionales del año para que el sistema no abra sesiones esos días."
+  emptyIcon="material-symbols:event-busy-outline"
+>
+  <ng-template appCell="fecha" let-h>
+    <div class="flex items-center gap-2.5">
+      <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-xs font-bold uppercase text-(--fareas-primary)">
+        {{ monthShort(h.holiday_date) }}
+      </span>
+      <div class="min-w-0">
+        <div class="truncate text-sm font-medium text-gray-900">{{ h.holiday_date }}</div>
+        <div class="text-xs text-gray-500">{{ formatDate(h.holiday_date) }}</div>
+      </div>
+    </div>
+  </ng-template>
+  <ng-template appCell="dia" let-h>
+    <span class="text-sm text-gray-600">{{ weekday(h.holiday_date) }}</span>
+    @if (isWeekend(h.holiday_date)) {
+      <span class="ml-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+        Fin de semana
+      </span>
+    }
+  </ng-template>
+  <ng-template appCell="description" let-h>
+    <span class="text-sm text-gray-700">{{ h.description }}</span>
+  </ng-template>
+  <ng-template appCell="actions" let-h>
+    @if (auth.isAdmin()) {
+      <button type="button"
+        class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+        title="Eliminar el feriado" (click)="askDelete(h)">
+        <iconify-icon icon="material-symbols:delete-outline" width="18"></iconify-icon>
+      </button>
+    }
+  </ng-template>
+</app-data-table>
+
+<!-- Alta de un feriado puntual (cancela las sesiones de ese día, R12) -->
+<p-dialog header="Nuevo feriado" [(visible)]="createVisible" [modal]="true" [style]="{ width: '460px' }">
+  <div class="space-y-4 pt-2">
+    <label class="block space-y-1">
+      <span class="text-sm font-medium text-gray-700">Fecha <span class="text-red-500">*</span></span>
+      <input type="date" [ngModel]="form().holiday_date" (ngModelChange)="patch({ holiday_date: $event })"
+        class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+    </label>
+    <app-ui-input label="Motivo" placeholder="Día de la Independencia" [required]="true"
+      [ngModel]="form().description" (ngModelChange)="patch({ description: $event })" />
+    <app-ui-alert variant="warning" [inline]="true" icon="material-symbols:event-busy-outline">
+      Al registrar la fecha se cancelarán las sesiones de ese día (abiertas, cerradas o por revisar)
+      con el motivo "Feriado".
+    </app-ui-alert>
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="createVisible = false">Cancelar</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="save()">Registrar feriado</app-ui-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Paro por rango (R12): varios días de una vez, omitiendo fines de semana -->
+<p-dialog header="Paro o feriado por rango" [(visible)]="rangeVisible" [modal]="true"
+  [style]="{ width: '500px' }">
+  <div class="space-y-4 pt-2">
+    <div class="grid gap-3 sm:grid-cols-2">
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Desde <span class="text-red-500">*</span></span>
+        <input type="date" [ngModel]="range().desde" (ngModelChange)="patchRange({ desde: $event })"
+          class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Hasta <span class="text-red-500">*</span></span>
+        <input type="date" [ngModel]="range().hasta" (ngModelChange)="patchRange({ hasta: $event })"
+          class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+      </label>
+    </div>
+    <app-ui-input label="Motivo" placeholder="Paro de transporte" [required]="true"
+      [ngModel]="range().description" (ngModelChange)="patchRange({ description: $event })" />
+    <label class="flex items-center gap-2 text-sm text-gray-700">
+      <input type="checkbox" [ngModel]="range().omitir_fines_de_semana"
+        (ngModelChange)="patchRange({ omitir_fines_de_semana: $event })"
+        class="size-4 rounded border-gray-300 text-(--fareas-primary) focus:ring-(--fareas-primary)" />
+      Omitir sábados y domingos (recomendado: no hay clases esos días)
+    </label>
+    <app-ui-alert variant="warning" [inline]="true" icon="material-symbols:event-busy-outline">
+      Se cancelan las sesiones de cada fecha del rango. Las fechas ya registradas se cuentan como
+      omitidas.
+    </app-ui-alert>
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="rangeVisible = false">Cancelar</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="saveRange()">Registrar rango</app-ui-button>
+  </ng-template>
+</p-dialog>
+
+<app-modal-delete
+  [(visible)]="deleteVisible"
+  [itemLabel]="deleteLabel()"
+  entityName="feriado"
+  [softDelete]="false"
+  [loading]="deleting()"
+  warning="Eliminar el feriado NO reabre las sesiones que ya se cancelaron; esas sesiones siguen canceladas en el historial."
+  (confirmed)="confirmDelete()"
+  (canceled)="cancelDelete()"
+/>

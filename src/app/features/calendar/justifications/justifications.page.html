@@ -1,0 +1,163 @@
+<app-page-header title="Justificaciones"
+  subtitle="Faltas respaldadas por un documento: el alta marca las faltas del rango y la baja las revierte (RF-10 · R6)">
+  <app-ui-button icon="material-symbols:note-add" (click)="openCreate()">
+    Nueva justificación
+  </app-ui-button>
+</app-page-header>
+
+<div class="mb-4 grid gap-3 sm:grid-cols-3">
+  <label class="space-y-1 sm:col-span-2">
+    <span class="text-xs font-medium text-gray-500">Alumno</span>
+    <p-select class="w-full" appendTo="body" [options]="studentOptions()" optionLabel="label"
+      optionValue="value" placeholder="Busca por nombre, correo o código" [filter]="true"
+      [showClear]="true" [loading]="searchingStudents()" (onFilter)="onStudentFilter($event)"
+      [ngModel]="filterStudentId()" (ngModelChange)="onFilterStudent($event)" />
+  </label>
+  <label class="space-y-1">
+    <span class="text-xs font-medium text-gray-500">Curso</span>
+    <p-select class="w-full" appendTo="body" [options]="courseOptions()" optionLabel="label"
+      optionValue="value" placeholder="Todos los cursos" [filter]="true" filterBy="label"
+      [showClear]="true" [ngModel]="filterCourseId()" (ngModelChange)="onFilterCourse($event)" />
+  </label>
+</div>
+
+<div class="mb-3 flex items-center justify-between">
+  <p class="text-sm text-gray-500">{{ justifications().length }} justificación(es)</p>
+  <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="reload()">
+    Actualizar
+  </app-ui-button>
+</div>
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudieron cargar las justificaciones" class="mb-4 block">
+    {{ msg }}
+  </app-ui-alert>
+}
+
+<app-data-table
+  [columns]="columns" [data]="justifications()" [loading]="loading()"
+  emptyTitle="Sin justificaciones"
+  emptyMessage="Registra una justificación para que las faltas del alumno en ese rango queden como justificadas y no cuenten para el 30 %."
+  emptyIcon="material-symbols:medical-information-outline"
+>
+  <ng-template appCell="student" let-j>
+    <div class="min-w-0">
+      <div class="truncate text-sm font-medium text-gray-900">{{ j.student_name }}</div>
+      <div class="text-xs text-gray-500">Alumno #{{ j.student_id }}</div>
+    </div>
+  </ng-template>
+  <ng-template appCell="curso" let-j>
+    @if (j.course_code) {
+      <span class="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">{{ j.course_code }}</span>
+    } @else {
+      <span class="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-(--fareas-primary)">
+        Todos sus cursos
+      </span>
+    }
+  </ng-template>
+  <ng-template appCell="rango" let-j>
+    <div class="text-sm tabular-nums text-gray-700">{{ rangeLabel(j) }}</div>
+    <div class="text-xs text-gray-500">{{ days(j) }} día(s)</div>
+  </ng-template>
+  <ng-template appCell="reason" let-j>
+    <span class="line-clamp-2 max-w-xs text-sm text-gray-600">{{ j.reason }}</span>
+  </ng-template>
+  <ng-template appCell="document" let-j>
+    @if (j.document_url) {
+      <a [href]="j.document_url" target="_blank" rel="noopener"
+        class="inline-flex items-center gap-1 text-xs font-medium text-(--fareas-primary) hover:underline">
+        <iconify-icon icon="material-symbols:attach-file" width="14"></iconify-icon> Ver documento
+      </a>
+    } @else {
+      <span class="text-xs text-gray-400">—</span>
+    }
+  </ng-template>
+  <ng-template appCell="created_by_name" let-j>
+    <span class="text-sm text-gray-600">{{ j.created_by_name }}</span>
+  </ng-template>
+  <ng-template appCell="actions" let-j>
+    <button type="button"
+      class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+      title="Eliminar la justificación (revierte las faltas)" (click)="askDelete(j)">
+      <iconify-icon icon="material-symbols:delete-outline" width="18"></iconify-icon>
+    </button>
+  </ng-template>
+</app-data-table>
+
+<!-- Alta (R6): el efecto sobre las faltas lo aplica el backend -->
+<p-dialog header="Nueva justificación" [(visible)]="createVisible" [modal]="true"
+  [style]="{ width: '560px' }">
+  <div class="space-y-4 pt-2">
+    <label class="block space-y-1">
+      <span class="text-sm font-medium text-gray-700">Alumno <span class="text-red-500">*</span></span>
+      <p-select class="w-full" appendTo="body" [options]="studentOptions()" optionLabel="label"
+        optionValue="value" placeholder="Busca por nombre, correo o código" [filter]="true"
+        [loading]="searchingStudents()" (onFilter)="onStudentFilter($event)"
+        [ngModel]="form().student_id" (ngModelChange)="patch({ student_id: $event })" />
+    </label>
+
+    <label class="block space-y-1">
+      <span class="text-sm font-medium text-gray-700">
+        Curso
+        @if (!auth.isAdmin()) { <span class="text-red-500">*</span> }
+      </span>
+      <p-select class="w-full" appendTo="body" [options]="courseOptions()" optionLabel="label"
+        optionValue="value" [filter]="true" filterBy="label" [showClear]="true"
+        [placeholder]="auth.isAdmin() ? 'Vacío = todos sus cursos' : 'Elige el curso (obligatorio)'"
+        [ngModel]="form().course_id" (ngModelChange)="patch({ course_id: $event })" />
+      <span class="block text-[13px] text-gray-400">
+        @if (auth.isAdmin()) {
+          Déjalo vacío para justificar las faltas del alumno en TODOS sus cursos.
+        } @else {
+          El docente solo puede justificar faltas de sus propios cursos.
+        }
+      </span>
+    </label>
+
+    <div class="grid gap-3 sm:grid-cols-2">
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Desde <span class="text-red-500">*</span></span>
+        <input type="date" [ngModel]="form().start_date" (ngModelChange)="patch({ start_date: $event })"
+          class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Hasta <span class="text-red-500">*</span></span>
+        <input type="date" [ngModel]="form().end_date" (ngModelChange)="patch({ end_date: $event })"
+          class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+      </label>
+    </div>
+
+    <label class="block space-y-1">
+      <span class="text-sm font-medium text-gray-700">Motivo <span class="text-red-500">*</span></span>
+      <textarea rows="3" [ngModel]="form().reason" (ngModelChange)="patch({ reason: $event })"
+        placeholder="Certificado médico por reposo de 3 días (mínimo 5 caracteres)"
+        class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm placeholder-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)"></textarea>
+    </label>
+
+    <app-ui-input label="Documento (URL)" icon="material-symbols:attach-file"
+      placeholder="https://…/certificado.pdf"
+      [ngModel]="form().document_url" (ngModelChange)="patch({ document_url: $event })" />
+
+    <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
+      Al guardar, las faltas del alumno dentro del rango quedan como <strong>falta justificada (FJ)</strong>
+      y dejan de contar para el 30 % de inasistencias.
+    </app-ui-alert>
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="createVisible = false">Cancelar</app-ui-button>
+    <app-ui-button [loading]="saving()" [disabled]="!canSubmit()" (click)="save()">
+      Registrar
+    </app-ui-button>
+  </ng-template>
+</p-dialog>
+
+<app-modal-delete
+  [(visible)]="deleteVisible"
+  [itemLabel]="deleteLabel()"
+  entityName="justificación"
+  [softDelete]="false"
+  [loading]="deleting()"
+  warning="Al eliminarla, las faltas que había justificado vuelven a estado 'falta' y suman al 30 % de inasistencias."
+  (confirmed)="confirmDelete()"
+  (canceled)="cancelDelete()"
+/>

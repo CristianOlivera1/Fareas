@@ -7,6 +7,7 @@ import {
   signal,
   ElementRef,
   ViewChild,
+  effect,
 } from '@angular/core';
 import { NavigationEnd, Router, RouterModule } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -34,7 +35,7 @@ export class Sidebar implements OnInit {
   readonly currentUrl = signal('');
 
   /** Grupo actualmente expandido (uno a la vez); null = todos cerrados. */
-  readonly openGroup = signal<string | null>(null);
+  readonly openGroups = signal<Set<string>>(new Set());
 
   @ViewChild('userMenuContainer') userMenuContainer?: ElementRef<HTMLElement>;
 
@@ -58,6 +59,14 @@ export class Sidebar implements OnInit {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((e) => this.currentUrl.set(this.cleanUrl(e.urlAfterRedirects)));
+    effect(() => {
+      const currentEntries = this.entries();
+      const allGroupLabels = currentEntries
+        .filter(entry => 'children' in entry && entry.children)
+        .map(entry => entry.label);
+
+      this.openGroups.set(new Set(allGroupLabels));
+    }, { allowSignalWrites: true });
   }
 
   ngOnInit(): void {
@@ -98,7 +107,19 @@ export class Sidebar implements OnInit {
   }
 
   toggleGroup(label: string): void {
-    this.openGroup.update((current) => (current === label ? null : label));
+    this.openGroups.update((currentSet) => {
+      const newSet = new Set(currentSet);
+      if (newSet.has(label)) {
+        newSet.delete(label);
+      } else {
+        newSet.add(label);
+      }
+      return newSet;
+    });
+  }
+
+  isGroupOpen(label: string): boolean {
+    return this.openGroups().has(label);
   }
 
   toggleSidebar(): void {

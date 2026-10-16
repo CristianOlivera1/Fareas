@@ -89,6 +89,25 @@ export interface Holiday {
   readonly description: string;
 }
 
+/** Alta de feriado (R12): además de guardar la fecha CANCELA las sesiones de ese día. */
+export interface HolidayCreated extends Holiday {
+  readonly sesiones_canceladas: number;
+}
+
+/** POST /holidays/range (R12): paro por rango, omite fines de semana por defecto. */
+export interface HolidayRangeResult {
+  readonly creados: number;
+  readonly omitidos: number;
+  readonly sesiones_canceladas: number;
+}
+
+/** POST /holidays/national (R12): genera los feriados nacionales del año. */
+export interface HolidayNationalResult {
+  readonly anio: number;
+  readonly creados: number;
+  readonly omitidos: number;
+}
+
 export interface Justification {
   readonly id: number;
   readonly student_id: number;
@@ -99,7 +118,19 @@ export interface Justification {
   readonly end_date: string;
   readonly reason: string;
   readonly document_url: string | null;
+  readonly created_by: number;
   readonly created_by_name: string;
+}
+
+/** POST /justifications (R6): informa cuántas faltas quedaron justificadas. */
+export interface JustificationCreated {
+  readonly id: number;
+  readonly student_id: number;
+  readonly course_id: number | null;
+  readonly start_date: string;
+  readonly end_date: string;
+  readonly faltas_afectadas: number;
+  readonly message: string;
 }
 
 export interface Settings {
@@ -141,4 +172,25 @@ export interface AttendanceToday {
   readonly marked_at: string | null;
   readonly method: string;
   readonly similarity: number | null;
+  /** R6: la falta está justificada (no cuenta para el 30 % del DPI). */
+  readonly is_justified: boolean;
+  readonly session_id: number;
+}
+
+/** Sesión CERRADA marcada para revisión (R4: cero marcas al cierre). */
+export interface SessionReview {
+  readonly session_id: number;
+  readonly session_date: string;
+  readonly closed_at: string | null;
+  readonly start_time: string;
+  readonly end_time: string;
+  readonly group_id: number;
+  readonly group_code: string;
+  readonly course_id: number;
+  readonly course_code: string;
+  readonly course_name: string;
+  readonly room_id: number;
+  readonly room_code: string;
+  readonly teacher_id: number;
+  readonly teacher_name: string;
 }

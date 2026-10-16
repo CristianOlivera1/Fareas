@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BaseApi, ListParams } from '../api/api-url';
-import { AttendanceToday, AttendanceStatusApi } from '../models/catalog';
+import { AttendanceToday, AttendanceStatusApi, SessionReview } from '../models/catalog';
 
 /** Sesión abierta de HOY (GET /attendance/sessions-today). */
 export interface SessionToday {
@@ -56,10 +56,47 @@ export class AttendanceApi extends BaseApi {
     );
   }
 
+  /** R4: sesiones CERRADAS sin marcas (¿cámara caída?) pendientes de resolver. */
+  sessionsReview() {
+    return this.get<SessionReview[]>('/attendance/sessions-review');
+  }
+
+  /** R4: confirma las faltas de la sesión por revisar o la cancela (motivo obligatorio). */
+  resolveReview(sessionId: number, body: { action: 'confirmar_faltas' | 'cancelar'; reason?: string }) {
+    return this.post<{ session_id: number; status: string; faltas?: number; alertas?: number }>(
+      `/sessions/${sessionId}/resolve-review`,
+      body,
+    );
+  }
+
   /** RF-26: cierre manual de la sesión (admin). */
   closeSession(sessionId: number) {
     return this.post<{ session_id: number; status: string; faltas: number; alertas: number }>(
       `/sessions/${sessionId}/close`,
+    );
+  }
+
+  /** R5: cancela UNA sesión con motivo (docente: abiertas o por revisar). */
+  cancelSession(sessionId: number, body: { reason: string }) {
+    return this.post<{ session_id: number; status: string; reason: string }>(
+      `/sessions/${sessionId}/cancel`,
+      body,
+    );
+  }
+
+  /** R5: cancela (o pre-cancela en fecha futura) el día completo de un bloque. */
+  cancelDay(blockId: number, body: { reason: string; fecha?: string }) {
+    return this.post<{ session_id: number; status: string; anticipada?: boolean }>(
+      `/blocks/${blockId}/cancel-day`,
+      body,
+    );
+  }
+
+  /** R6: justifica UNA falta creando la justificación del día. */
+  justify(recordId: number, body: { reason: string }) {
+    return this.patch<{ record_id: number; is_justified: boolean; justification_id: number }>(
+      `/attendance/${recordId}/justify`,
+      body,
     );
   }
 }
