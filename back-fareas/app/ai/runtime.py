@@ -14,7 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
 
 from app.ai.recognizer import FaceGallery
 from app.core.config import get_settings
-from app.tables import FaceEmbedding
+from app.tables import AppUser, FaceEmbedding
 
 _lock = threading.Lock()
 _detector = None
@@ -59,8 +59,17 @@ def gallery() -> FaceGallery:
 
 
 async def recargar_galeria(db: SQLModelAsyncSession) -> int:
-    """Refresca la caché con los embeddings vigentes. Devuelve n. de alumnos."""
-    rows = (await db.exec(select(FaceEmbedding).where(FaceEmbedding.is_current))).all()
+    """Refresca la caché con los embeddings vigentes de usuarios ACTIVOS (R13).
+
+    Un usuario desactivado (p. ej. dado de baja) deja de reconocerse al instante.
+    """
+    rows = (
+        await db.exec(
+            select(FaceEmbedding)
+            .join(AppUser, AppUser.id == FaceEmbedding.student_id)  # type: ignore[arg-type]
+            .where(FaceEmbedding.is_current, AppUser.is_active)  # type: ignore[arg-type]
+        )
+    ).all()
     _gallery.reload(list(rows))
     return len(_gallery)
 

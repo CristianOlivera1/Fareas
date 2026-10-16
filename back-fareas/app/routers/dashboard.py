@@ -27,13 +27,14 @@ from app.core.deps import CurrentUser, DbSession
 from app.core.security import decode_access_token
 from app.database import SessionLocal
 from app.services.camera_loop import todos_los_veredictos
-from app.tables import AppUser, UserRole
+from app.tables import AppSettings, AppUser, UserRole
 
 logger = logging.getLogger("fareas.dashboard")
 router = APIRouter(tags=["dashboard"])
 
 # ---------------------------------------------------------------------------
-# 1) Resumen de tarjetas — RF-13
+# 1) Resumen de tarjetas — RF-13 (+ R5/R7: canceladas fuera, en_riesgo,
+#    sessions_to_review; docente: todo filtrado por SUS grupos)
 # ---------------------------------------------------------------------------
 class Summary(BaseModel):
     asistencias_hoy: int
@@ -44,12 +45,14 @@ class Summary(BaseModel):
     camaras_total: int
     camaras_activas: int
     streams_caidos: int
-    alertas_dpi: int
+    alertas_dpi: int  # R7: nivel 'limite' (superó dpi_limit_percent)
+    en_riesgo: int  # R7: nivel 'alerta' (≥ dpi_alert_percent, aún recuperable)
+    sessions_to_review: int  # R4: sesiones cerradas con cero marcas
     at: str
 
 
-async def _contar_marcas_hoy(db) -> dict:
-    """Tarjetas 1-2: marcas de HOY (sesiones abiertas y cerradas).
+async def _contar_marcas_hoy(db, teacher_id: int | None = None) -> dict:
+    """Tarjetas 1-2: marcas de HOY (sesiones abiertas y cerradas no canceladas).
 
     Ausencias = registros 'falta' de hoy (cierres o manuales); los matriculados
     de sesiones aún ABIERTAS sin marca no cuentan: todavía pueden llegar.
@@ -58,9 +61,19 @@ async def _contar_marcas_hoy(db) -> dict:
         "SELECT ar.status::text AS status, COUNT(*) "
         "FROM attendance_record ar "
         "JOIN attendance_session s ON s.id = ar.session_id "
-        "WHERE s.session_date = CURRENT_DATE GROUP BY ar.status"
+        "JOIN schedule_block sb ON sb.id = s.block_id "
+        "JOIN course_group cg ON cg.id = sb.group_id "
+        "WHERE s.session_date = CURRENT_DATE AND s.status <> 'cancelada'"
     )
-    rows = (await db.exec(sql_text(sql))).all()
+    if teacher_id is not None:
+        sql += " AND cg.teacher_id = :docente"
+    sql += " GROUP BY ar.status"
+    stmt = sql_text(sql)
+    rows = (
+        (await db.exec(stmt.bindparams(docente=teacher_id))).all()
+        if teacher_id is not None
+        else (await db.exec(stmt)).all()
+    )
     conteo = {r[0]: r[1] for r in rows}
     asistio = conteo.get("asistio", 0)
     tardanza = conteo.get("tardanza", 0)
@@ -82,22 +95,52 @@ async def _contar_camaras(db) -> dict:
     return {"total": total, "activas": total}
 
 
-async def _contar_alertas_dpi(db) -> int:
-    """Tarjeta 4: alumnos en/por encima del umbral DPI (RF-24, v_student_dpi)."""
+async def _contar_alertas_dpi(db, docente_id: int | None = None) -> dict:
+    """Tarjeta 4 (R7): 'limite' = superó dpi_limit_percent (inhabilitación al
+    superar, decisión 2026-10-11); 'en_riesgo' = entre alerta y límite."""
+    cfg = await db.get(AppSettings, 1)
+    alerta, limite = 20.0, 30.0
+    if cfg is not None:
+        alerta, limite = float(cfg.dpi_alert_percent), float(cfg.dpi_limit_percent)
+    sql = "SELECT COUNT(*) FROM v_student_dpi v WHERE v.absence_percent > :limite"
+    params: dict = {"limite": limite}
+    if docente_id is not None:
+        sql += (
+            " AND v.course_id IN (SELECT cg.course_id FROM course_group cg "
+            "WHERE cg.teacher_id = :docente)"
+        )
+        params["docente"] = docente_id
+    limite_n = (await db.exec(sql_text(sql).bindparams(**params))).scalar_one()
+    sql_riesgo = sql.replace("v.absence_percent > :limite", "v.absence_percent >= :alerta")
+    params2 = dict(params, alerta=alerta)
+    sql_riesgo += " AND v.absence_percent <= :limite"
+    en_riesgo = (await db.exec(sql_text(sql_riesgo).bindparams(**params2))).scalar_one()
+    return {"limite": limite_n, "en_riesgo": en_riesgo}
+
+
+async def _contar_por_revisar(db, teacher_id: int | None = None) -> int:
+    """R4: sesiones cerradas con needs_review (cero marcas) pendientes."""
     sql = (
-        "SELECT COUNT(*) FROM v_student_dpi v "
-        "CROSS JOIN app_settings st WHERE st.id = 1 "
-        "AND v.absence_percent >= st.dpi_alert_percent"
+        "SELECT COUNT(*) FROM attendance_session s "
+        "JOIN schedule_block sb ON sb.id = s.block_id "
+        "JOIN course_group cg ON cg.id = sb.group_id "
+        "WHERE s.needs_review AND s.status = 'cerrada'"
     )
+    if teacher_id is not None:
+        sql += " AND cg.teacher_id = :docente"
+        return (await db.exec(sql_text(sql).bindparams(docente=teacher_id))).scalar_one()
     return (await db.exec(sql_text(sql))).scalar_one()
 
 
 @router.get("/dashboard/summary", response_model=Summary)
-async def summary(db: DbSession, _user: CurrentUser) -> Summary:
-    """Tarjetas superiores del dashboard (RF-13, PLAN §5)."""
-    marcas = await _contar_marcas_hoy(db)
+async def summary(db: DbSession, user: CurrentUser) -> Summary:
+    """Tarjetas superiores del dashboard (RF-13, PLAN §5). Docente: filtrado
+    por sus grupos (R7/R9: mismo guard que /attendance/today)."""
+    docente_id = user.id if user.role is UserRole.DOCENTE else None
+    marcas = await _contar_marcas_hoy(db, docente_id)
     camaras = await _contar_camaras(db)
-    alertas = await _contar_alertas_dpi(db)
+    alertas = await _contar_alertas_dpi(db, docente_id)
+    por_revisar = await _contar_por_revisar(db, docente_id)
     return Summary(
         asistencias_hoy=marcas["asistencias"],
         tardanzas_hoy=marcas["tardanzas"],
@@ -107,7 +150,9 @@ async def summary(db: DbSession, _user: CurrentUser) -> Summary:
         camaras_total=camaras["total"],
         camaras_activas=camaras["activas"],
         streams_caidos=camaras["total"] - camaras["activas"],
-        alertas_dpi=alertas,
+        alertas_dpi=alertas["limite"],
+        en_riesgo=alertas["en_riesgo"],
+        sessions_to_review=por_revisar,
         at=datetime.now().isoformat(timespec="seconds"),
     )
 
@@ -125,6 +170,11 @@ async def _usuario_de_token(access_token: str) -> AppUser:
         user = (await db.exec(select(AppUser).where(AppUser.id == payload.user_id))).first()
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="Usuario inexistente o inactivo")
+    if user.must_change_password:  # R14: mismo bloqueo que el resto de la API
+        raise HTTPException(status_code=403, detail={
+            "code": "must_change_password",
+            "message": "Cambia tu clave temporal antes de usar el sistema",
+        })
     if user.role not in (UserRole.ADMIN, UserRole.DOCENTE):
         raise HTTPException(status_code=403, detail="No tienes permisos para esta operación")
     return user
@@ -176,13 +226,14 @@ HORA_INICIO, HORA_FIN = 7, 20  # franja institucional (app_settings 07:00–20:0
 @router.get("/stats/hourly")
 async def stats_hourly(
     db: DbSession,
-    _user: CurrentUser,
+    user: CurrentUser,
     day: date | None = Query(None, description="Día a consultar (default: hoy)"),
 ) -> list[dict]:
     """Marcas por hora de inicio de bloque (widget app-hourly-chart).
 
     La 'hora' es la del BLOQUE, no marked_at: así la curva muestra la carga
     de la franja 07–20 aunque la marca facial llegue minutos después.
+    R7: con rol docente todo va filtrado por sus grupos.
     """
     dia = day or date.today()
     sql = (
@@ -190,10 +241,15 @@ async def stats_hourly(
         "FROM attendance_record ar "
         "JOIN attendance_session s ON s.id = ar.session_id "
         "JOIN schedule_block sb ON sb.id = s.block_id "
-        "WHERE s.session_date = :dia "
-        "GROUP BY 1, 2 ORDER BY 1"
+        "JOIN course_group cg ON cg.id = sb.group_id "
+        "WHERE s.session_date = :dia AND s.status <> 'cancelada' AND NOT s.needs_review"
     )
-    rows = (await db.exec(sql_text(sql).bindparams(dia=dia))).all()
+    params: dict = {"dia": dia}
+    if user.role is UserRole.DOCENTE:
+        sql += " AND cg.teacher_id = :docente"
+        params["docente"] = user.id
+    sql += " GROUP BY 1, 2 ORDER BY 1"
+    rows = (await db.exec(sql_text(sql).bindparams(**params))).all()
     por_hora: dict[int, dict[str, int]] = {}
     for hora, status_, total in rows:
         h = por_hora.setdefault(int(hora), {"asistio": 0, "tardanza": 0, "falta": 0})
@@ -214,7 +270,7 @@ async def stats_hourly(
 @router.get("/stats/distribution")
 async def stats_distribution(
     db: DbSession,
-    _user: CurrentUser,
+    user: CurrentUser,
     desde: date | None = Query(None),
     hasta: date | None = Query(None),
 ) -> dict:
@@ -222,19 +278,29 @@ async def stats_distribution(
 
     ``sin_registro`` = matriculados de sesiones CERRADAS del rango sin marca
     (los 'faltados por cierre' ya son falta; esto cubre huecos históricos).
+    R7: con rol docente todo va filtrado por sus grupos.
     """
     hoy = date.today()
     d1, d2 = desde or hoy, hasta or hoy
     if d1 > d2:
         raise HTTPException(status_code=422, detail="'desde' no puede ser mayor que 'hasta'")
 
+    filtro = ""
+    params: dict = {"d1": d1, "d2": d2}
+    if user.role is UserRole.DOCENTE:
+        filtro = " AND cg.teacher_id = :docente"
+        params["docente"] = user.id
     sql = (
         "SELECT ar.status::text AS status, COUNT(*) "
         "FROM attendance_record ar "
         "JOIN attendance_session s ON s.id = ar.session_id "
-        "WHERE s.session_date BETWEEN :d1 AND :d2 GROUP BY ar.status"
+        "JOIN schedule_block sb ON sb.id = s.block_id "
+        "JOIN course_group cg ON cg.id = sb.group_id "
+        "WHERE s.session_date BETWEEN :d1 AND :d2 "
+        "AND s.status <> 'cancelada' AND NOT s.needs_review" + filtro +
+        " GROUP BY ar.status"
     )
-    rows = (await db.exec(sql_text(sql).bindparams(d1=d1, d2=d2))).all()
+    rows = (await db.exec(sql_text(sql).bindparams(**params))).all()
     out = {"asistio": 0, "tardanza": 0, "falta": 0, "sin_registro": 0}
     for status_, total in rows:
         if status_ in out:
@@ -245,9 +311,10 @@ async def stats_distribution(
         "JOIN course_group cg ON cg.id = e.group_id "
         "JOIN schedule_block sb ON sb.group_id = cg.id "
         "JOIN attendance_session s ON s.block_id = sb.id "
-        " AND s.status = 'cerrada' AND s.session_date BETWEEN :d1 AND :d2 "
+        " AND s.status = 'cerrada' AND NOT s.needs_review "
+        " AND s.session_date BETWEEN :d1 AND :d2 "
         "LEFT JOIN attendance_record ar ON ar.session_id = s.id AND ar.student_id = e.student_id "
-        "WHERE ar.id IS NULL"
+        "WHERE ar.id IS NULL" + filtro
     )
-    out["sin_registro"] = (await db.exec(sql_text(sql_sin).bindparams(d1=d1, d2=d2))).scalar_one()
+    out["sin_registro"] = (await db.exec(sql_text(sql_sin).bindparams(**params))).scalar_one()
     return out

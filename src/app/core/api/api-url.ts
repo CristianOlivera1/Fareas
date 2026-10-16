@@ -3,14 +3,10 @@ import { inject } from '@angular/core';
 
 import { environment } from '../../../environments/environment';
 
-/** URL base de la API: en desarrollo apunta al backend FastAPI (puerto 8000);
- * en producción el build de Angular se sirve desde el PROPIO FastAPI (PLAN-FRONTEND F8),
- * así que basta la ruta relativa /api/v1 (un solo origen, sin CORS). */
 export function apiUrl(path = ''): string {
   return `${environment.apiUrl}${path}`;
 }
 
-/** Página del backend (schemas/common.py → Page[T]). */
 export interface Page<T> {
   readonly items: T[];
   readonly total: number;
@@ -18,7 +14,6 @@ export interface Page<T> {
   readonly page_size: number;
 }
 
-/** Parámetros comunes de listado (core/pagination.py). */
 export interface ListParams {
   readonly page?: number;
   readonly page_size?: number;

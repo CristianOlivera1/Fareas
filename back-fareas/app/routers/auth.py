@@ -7,11 +7,11 @@ cliente (descartar el token). Alcance académico, sin sobre-ingeniería.
 import secrets
 import time
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pwdlib import PasswordHash
 from sqlmodel import select
 
-from app.core.deps import CurrentUser, DbSession
+from app.core.deps import CurrentUserPending, DbSession
 from app.core.security import create_access_token, hash_password, verify_password
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -29,6 +29,45 @@ from app.tables import AppUser
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 _pwd = PasswordHash.recommended()
+
+# ---------------------------------------------------------------------------
+# Rate limit de login en memoria (5 intentos fallidos por IP cada 60 s).
+# Alcance académico: un solo proceso, sin Redis — mismo patrón que el OTP.
+# La ventana es deslizante simple: se guarda la hora del último bloqueo y el
+# contador se limpia tras LOGIN_WINDOW_SECONDS sin fallos.
+# ---------------------------------------------------------------------------
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW_SECONDS = 60.0
+_login_attempts: dict[str, dict] = {}  # ip -> {"count", "first"}
+
+
+def _login_rate_ip(request: Request) -> str:
+    return request.client.host if request.client else "desconocida"
+
+
+def _login_rate_ok(request: Request) -> bool:
+    ip = _login_rate_ip(request)
+    entry = _login_attempts.get(ip)
+    if entry is None:
+        return True
+    if time.monotonic() - entry["first"] >= _LOGIN_WINDOW_SECONDS:
+        _login_attempts.pop(ip, None)
+        return True
+    return entry["count"] < _LOGIN_MAX_ATTEMPTS
+
+
+def _login_rate_register_failure(request: Request) -> None:
+    ip = _login_rate_ip(request)
+    entry = _login_attempts.get(ip)
+    if entry is None or time.monotonic() - entry["first"] >= _LOGIN_WINDOW_SECONDS:
+        _login_attempts[ip] = {"count": 1, "first": time.monotonic()}
+    else:
+        entry["count"] += 1
+
+
+def _login_rate_reset(request: Request) -> None:
+    """Login correcto: limpia la cuenta de fallos de esa IP."""
+    _login_attempts.pop(_login_rate_ip(request), None)
 
 # ---------------------------------------------------------------------------
 # OTP en memoria (RF-12). Alcance académico: un solo proceso; sin Redis.
@@ -53,30 +92,44 @@ def _build_user_out(user: AppUser) -> UserOut:
 # Endpoints
 # ---------------------------------------------------------------------------
 @router.post("/login", response_model=LoginResponse)
-async def login(body: LoginRequest, db: DbSession) -> LoginResponse:
-    """RF-11. ``body.email`` acepta correo institucional O código de matrícula."""
+async def login(body: LoginRequest, request: Request, db: DbSession) -> LoginResponse:
+    """RF-11. ``body.email`` acepta correo institucional O código de matrícula.
+
+    Rate limit: 5 intentos fallidos por minuto y por IP (401 no cuenta el
+    acierto); al acreditarse se limpia la ventana.
+    """
+    if not _login_rate_ok(request):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Demasiados intentos; espera un minuto antes de volver a intentarlo",
+        )
     lookup = body.email.strip().lower()
     query = select(AppUser).where(
         (AppUser.email == lookup) | (AppUser.code == lookup)  # type: ignore[operator]
     )
     user = (await db.exec(query)).first()
     if user is None or not user.is_active or not verify_password(body.password, user.password_hash):
+        _login_rate_register_failure(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas o usuario inactivo",
         )
+    _login_rate_reset(request)
     access = create_access_token(user.id, user.role.value)
     return LoginResponse(access_token=access, user=_build_user_out(user))
 
 
 @router.get("/me", response_model=UserOut)
-async def me(user: CurrentUser) -> UserOut:
-    """Datos del usuario autenticado (usa el JWT Bearer)."""
+async def me(user: CurrentUserPending) -> UserOut:
+    """Datos del usuario autenticado (usa el JWT Bearer).
+
+    CurrentUserPending: accesible incluso con clave temporal pendiente —
+    el frontend necesita saber QUIÉN es para ofrecer el cambio (R14)."""
     return _build_user_out(user)
 
 
 @router.post("/change-password", response_model=MessageResponse)
-async def change_password(body: ChangePasswordRequest, user: CurrentUser, db: DbSession) -> MessageResponse:
+async def change_password(body: ChangePasswordRequest, user: CurrentUserPending, db: DbSession) -> MessageResponse:
     """RF-11: cambio de clave (obligatorio si must_change_password=True)."""
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La contraseña actual no es correcta")

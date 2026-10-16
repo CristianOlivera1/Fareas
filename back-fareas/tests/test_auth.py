@@ -31,6 +31,39 @@ async def test_login_rechaza_credenciales_malas(client: AsyncClient, temp_user: 
     assert r.status_code == 401
 
 
+async def test_login_rate_limit(client: AsyncClient, temp_user: AppUser):
+    """Seguridad: 5 intentos fallidos por IP/minuto → 429 aunque la clave sea buena."""
+    from app.routers.auth import _login_attempts
+
+    _login_attempts.clear()
+    for _ in range(5):
+        r = await _login(client, temp_user.email, "clave-incorrecta")
+        assert r.status_code == 401
+    # 6º intento, ahora con la clave CORRECTA: igualmente 429
+    r = await _login(client, temp_user.email, "ClaveTemporal1")
+    assert r.status_code == 429
+    # Y sigue bloqueado un minuto más
+    r = await _login(client, temp_user.email, "ClaveTemporal1")
+    assert r.status_code == 429
+
+    _login_attempts.clear()  # no contamina otros tests
+
+
+async def test_login_correcto_limpia_rate_limit(client: AsyncClient, temp_user: AppUser):
+    """Tras un login exitoso la ventana se reinicia: se pueden volver a fallar 5."""
+    from app.routers.auth import _login_attempts
+
+    _login_attempts.clear()
+    for _ in range(3):
+        assert (await _login(client, temp_user.email, "clave-incorrecta")).status_code == 401
+    assert (await _login(client, temp_user.email, "ClaveTemporal1")).status_code == 200
+    # La ventana se limpió: 5 fallos nuevos no llegan a 429 hasta el 6º
+    for _ in range(5):
+        assert (await _login(client, temp_user.email, "clave-incorrecta")).status_code == 401
+    assert (await _login(client, temp_user.email, "ClaveTemporal1")).status_code == 429
+    _login_attempts.clear()
+
+
 async def test_me_requiere_token(client: AsyncClient):
     r = await client.get(f"{API}/me")
     assert r.status_code == 401

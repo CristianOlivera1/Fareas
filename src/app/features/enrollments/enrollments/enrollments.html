@@ -1,0 +1,238 @@
+<app-page-header title="Matrículas" subtitle="Alumnos por grupo: cupo 40, retiro con historial y transferencia (R8)">
+  @if (auth.isAdmin()) {
+    <app-ui-button icon="material-symbols:person-add" [disabled]="!group()" (click)="openEnroll()">
+      Matricular alumno
+    </app-ui-button>
+  }
+</app-page-header>
+
+<div class="mb-4 grid gap-3 sm:grid-cols-3">
+  <label class="space-y-1">
+    <span class="text-xs font-medium text-gray-500">Semestre</span>
+    <p-select class="w-full" appendTo="body" [options]="semesters()" placeholder="Vigente"
+      showClear [ngModel]="semester()" (ngModelChange)="onSemester($event)" />
+  </label>
+  <label class="space-y-1">
+    <span class="text-xs font-medium text-gray-500">Curso</span>
+    <p-select class="w-full" appendTo="body" [options]="courseOptions()" optionLabel="label"
+      optionValue="value" placeholder="Selecciona el curso" [filter]="true" filterBy="label"
+      showClear [ngModel]="courseIdNumber()" (ngModelChange)="onCourse($event)" />
+  </label>
+  <label class="space-y-1">
+    <span class="text-xs font-medium text-gray-500">Grupo</span>
+    <p-select class="w-full" appendTo="body" [options]="groupOptions()" optionLabel="label"
+      optionValue="value" placeholder="Selecciona el grupo"
+      [loading]="loadingGroups()" [disabled]="!courseId()"
+      [ngModel]="groupIdNumber()" (ngModelChange)="onGroup($event)" />
+  </label>
+</div>
+
+@if (group(); as g) {
+  <div class="mb-4 flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white p-4">
+    <div class="flex items-center gap-2">
+      <span class="grid size-9 place-items-center rounded-lg bg-blue-50 text-sm font-bold text-(--fareas-primary)">
+        {{ g.group_code }}
+      </span>
+      <div>
+        <div class="text-sm font-semibold text-gray-900">
+          {{ g.course_code }} · {{ g.course_name }}
+        </div>
+        <div class="text-xs text-gray-500">{{ g.semester_label }}</div>
+      </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-4 text-xs text-gray-600">
+      <span class="inline-flex items-center gap-1.5">
+        <iconify-icon icon="material-symbols:person-outline" width="15" class="text-gray-400"></iconify-icon>
+        {{ g.teacher_name }}
+      </span>
+      <span class="inline-flex items-center gap-1.5">
+        <iconify-icon icon="material-symbols:meeting-room-outline" width="15" class="text-gray-400"></iconify-icon>
+        {{ g.room_code }}
+      </span>
+    </div>
+    <div class="ml-auto min-w-40">
+      <div class="mb-1 flex items-center justify-between text-[11px] text-gray-500">
+        <span>Cupo</span>
+        <span class="tabular-nums font-medium text-gray-700">{{ activos() }}/{{ g.capacity }}</span>
+      </div>
+      <div class="h-1.5 overflow-hidden rounded-full bg-gray-100">
+        <div class="h-full rounded-full transition-all"
+          [class.bg-red-500]="activos() >= g.capacity"
+          [class.bg-amber-500]="activos() < g.capacity && activos() >= g.capacity * 0.8"
+          [class.bg-green-500]="activos() < g.capacity * 0.8"
+          [style.width.%]="g.capacity ? (activos() / g.capacity) * 100 : 0"></div>
+      </div>
+    </div>
+  </div>
+
+  @if (activos() >= g.capacity) {
+    <app-ui-alert variant="warning" class="mb-4 block" title="El grupo está lleno ({{ activos() }}/{{ g.capacity }})">
+      Para matricular más alumnos, crea otro grupo del mismo curso en Cursos y grupos: tendrá su
+      propio docente y su propia aula.
+    </app-ui-alert>
+  }
+}
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudo cargar la información" class="mb-4 block">
+    {{ msg }}
+  </app-ui-alert>
+}
+
+@if (!courseId()) {
+  <div class="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center">
+    <iconify-icon icon="material-symbols:how-to-reg-outline" width="36" class="text-gray-300"></iconify-icon>
+    <h2 class="mt-3 font-semibold text-gray-900">Elige un curso y un grupo</h2>
+    <p class="mx-auto mt-1 max-w-md text-sm text-gray-500">
+      Las matrículas se administran por grupo. Selecciona arriba el curso y después el grupo para
+      ver y registrar a sus alumnos.
+    </p>
+  </div>
+} @else if (!groupId()) {
+  <div class="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center">
+    <iconify-icon icon="material-symbols:groups-outline" width="36" class="text-gray-300"></iconify-icon>
+    <h2 class="mt-3 font-semibold text-gray-900">Selecciona un grupo</h2>
+    <p class="mx-auto mt-1 max-w-md text-sm text-gray-500">
+      Este curso tiene {{ groupOptions().length }} grupo(s) en el semestre elegido.
+    </p>
+  </div>
+} @else {
+  <div class="mb-3 flex items-center justify-between">
+    <p class="text-sm text-gray-500">
+      {{ activos() }} alumno(s) activo(s) · cupo libre {{ cupoLibre() }}
+    </p>
+    <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh"
+      (click)="reloadStudents()">
+      Actualizar
+    </app-ui-button>
+  </div>
+
+  <app-data-table
+    [columns]="columns" [data]="students()"
+    [loading]="loadingStudents()"
+    emptyTitle="Sin alumnos matriculados"
+    emptyMessage="Matricula al primer alumno de este grupo."
+    emptyIcon="material-symbols:how-to-reg-outline"
+  >
+    <ng-template appCell="student" let-s>
+      <div class="flex items-center gap-2.5">
+        <span class="grid size-8 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-bold text-(--fareas-primary)">
+          {{ initials(s.full_name) }}
+        </span>
+        <div class="min-w-0">
+          <div class="truncate text-sm font-medium text-gray-900">{{ s.full_name }}</div>
+          <div class="text-xs text-gray-500">{{ s.code ?? 'sin código' }} · {{ s.email }}</div>
+        </div>
+      </div>
+    </ng-template>
+    <ng-template appCell="rostro" let-s>
+      @if (s.has_face === true) {
+        <span class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+          <iconify-icon icon="material-symbols:face" width="13"></iconify-icon> Enrolado
+        </span>
+      } @else if (s.has_face === false) {
+        <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+          <iconify-icon icon="material-symbols:face-retouching-off" width="13"></iconify-icon> Sin rostro
+        </span>
+      } @else {
+        <span class="text-xs text-gray-400">—</span>
+      }
+    </ng-template>
+    <ng-template appCell="semester" let-s>
+      <span class="text-sm text-gray-600">{{ s.semester ? 'Ciclo ' + s.semester : '—' }}</span>
+    </ng-template>
+    <ng-template appCell="estado" let-s>
+      @if (s.withdrawn_at) {
+        <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+          <span class="size-1.5 rounded-full bg-gray-400"></span> Retirado
+        </span>
+      } @else {
+        <span class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+          <span class="size-1.5 rounded-full bg-green-500"></span> Activo
+        </span>
+      }
+    </ng-template>
+    <ng-template appCell="actions" let-s>
+      @if (auth.isAdmin()) {
+        <div class="flex items-center justify-center gap-1">
+          @if (s.withdrawn_at) {
+            <button type="button"
+              class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-(--fareas-primary) hover:bg-blue-50 transition-colors"
+              title="Reactivar su matrícula en este grupo" (click)="reactivar(s)">
+              <iconify-icon icon="material-symbols:restart-alt" width="16"></iconify-icon> Reactivar
+            </button>
+          } @else {
+            <button type="button"
+              class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+              title="Transferir a otro grupo del mismo curso" (click)="askTransfer(s)">
+              <iconify-icon icon="material-symbols:swap-horiz" width="18"></iconify-icon>
+            </button>
+            <button type="button"
+              class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+              title="Retirar del grupo" (click)="askRetirar(s)">
+              <iconify-icon icon="material-symbols:person-remove-outline" width="18"></iconify-icon>
+            </button>
+          }
+        </div>
+      }
+    </ng-template>
+  </app-data-table>
+}
+
+<!-- Alta de matrícula (R8: cupo, un grupo por curso y cruce de horarios) -->
+<p-dialog header="Matricular alumno" [(visible)]="enrollDialogVisible" [modal]="true"
+  [style]="{ width: '460px' }">
+  <div class="space-y-4 pt-2">
+    <label class="block space-y-1">
+      <span class="text-sm font-medium text-gray-700">Estudiante <span class="text-red-500">*</span></span>
+      <p-select class="w-full" appendTo="body" [options]="studentOptions()" optionLabel="label"
+        optionValue="value" placeholder="Busca por nombre, correo o código" [filter]="true"
+        [loading]="searchingStudents()" (onFilter)="onStudentFilter($event)"
+        [ngModel]="selectedStudentId()" (ngModelChange)="selectedStudentId.set($event)" />
+      <span class="block text-[13px] text-gray-400">
+        El cupo disponible de este grupo es {{ cupoLibre() }}.
+      </span>
+    </label>
+    <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
+      Se valida el cupo de 40, que el alumno no tenga otro grupo activo del mismo curso y que su
+      horario no se cruce con otros cursos del semestre.
+    </app-ui-alert>
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="enrollDialogVisible = false">Cancelar</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="confirmEnroll()">Matricular</app-ui-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Transferencia entre grupos del mismo curso (R8e) -->
+<p-dialog header="Transferir alumno" [(visible)]="transferDialogVisible" [modal]="true"
+  [style]="{ width: '460px' }">
+  <div class="space-y-4 pt-2">
+    <app-ui-alert variant="info" [inline]="true" title="{{ transferStudent()?.full_name }}">
+      Se retira del grupo actual y se matricula en el destino. Sus faltas anteriores se conservan y
+      se suman al curso.
+    </app-ui-alert>
+    <label class="block space-y-1">
+      <span class="text-sm font-medium text-gray-700">Grupo destino <span class="text-red-500">*</span></span>
+      <p-select class="w-full" appendTo="body" [options]="transferOptions()" optionLabel="label"
+        optionValue="value" placeholder="Selecciona el grupo destino"
+        emptyMessage="No hay otros grupos con cupo libre"
+        [ngModel]="transferTargetId()" (ngModelChange)="transferTargetId.set($event)" />
+    </label>
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="transferDialogVisible = false">Cancelar</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="confirmTransfer()">Transferir</app-ui-button>
+  </ng-template>
+</p-dialog>
+
+<app-modal-delete
+  [(visible)]="deleteVisible"
+  [itemLabel]="retirarLabel()"
+  entityName="matrícula"
+  [softDelete]="false"
+  [loading]="deleting()"
+  warning="Si el alumno ya tiene registros de asistencia, su matrícula queda retirada y el historial del curso se conserva; las faltas anteriores siguen contando. Podrás reactivarlo después."
+  (confirmed)="confirmRetirar()"
+  (canceled)="cancelRetirar()"
+/>

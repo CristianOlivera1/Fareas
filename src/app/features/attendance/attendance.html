@@ -1,60 +1,116 @@
-<section class="space-y-6">
-  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-    <div>
-      <h1 class="text-xl font-semibold tracking-tight text-gray-900">Asistencias</h1>
-      <p class="mt-1 text-sm text-gray-500">Registros de hoy por curso y grupo - datos de demostración, aún sin conexión al backend.</p>
-    </div>
-    <div class="flex flex-col sm:flex-row gap-2">
-      <label class="relative">
-        <span class="sr-only">Buscar</span>
-        <iconify-icon
-          icon="material-symbols:search"
-          width="18"
-          class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-        />
-        <input
-          [ngModel]="query()"
-          (ngModelChange)="query.set($event)"
-          type="search"
-          placeholder="Buscar por estudiante, curso o registro…"
-          class="w-full sm:w-64 rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)"
-        />
-      </label>
-      <p-select
-        [options]="statusOptions()"
-        [ngModel]="statusFilter()"
-        (ngModelChange)="statusFilter.set($event)"
-        placeholder="Estado"
-        aria-label="Filtrar por estado"
-        class="w-full sm:w-44"
-      />
-    </div>
-  </div>
+<app-page-header title="Asistencias" subtitle="Registros de hoy por curso y grupo (RF-23 · vista v_today_attendance)">
+  <span class="mr-2 inline-flex items-center gap-1.5 text-xs text-gray-500">
+    <span class="size-2 animate-pulse rounded-full bg-green-500"></span>
+    Auto-actualiza cada minuto · últ. {{ lastRefresh() }}
+  </span>
+  <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="reload()">
+    Actualizar
+  </app-ui-button>
+</app-page-header>
 
-  <app-data-table
-    [columns]="columns"
-    [data]="filtered()"
-    [trackBy]="trackById"
-    [showClearFilters]="true"
-    (clearFilters)="clearFilters()"
-    emptyTitle="Sin asistencias"
-    emptyMessage="No hay registros para los filtros actuales."
-  >
-    <ng-template appCell="group" let-row>
-      <span class="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">Grupo {{ row.group }}</span>
-    </ng-template>
-    <ng-template appCell="method" let-row>
-      <span class="inline-flex items-center gap-1.5 text-sm text-gray-700">
-        <iconify-icon
-          [icon]="row.method === 'Facial' ? 'material-symbols:face-outline' : 'material-symbols:edit-outline'"
-          width="16"
-          class="text-gray-400"
-        />
-        {{ row.method }}
-      </span>
-    </ng-template>
-    <ng-template appCell="status" let-row>
-      <p-tag [value]="row.status" [severity]="statusSeverity(row.status)" />
-    </ng-template>
-  </app-data-table>
-</section>
+@if (haySesiones() && auth.isAdmin()) {
+  <app-ui-alert variant="info" title="Sesiones abiertas ahora" class="mb-4">
+    <div class="mt-2 flex flex-wrap gap-2">
+      @for (s of sesiones(); track s.session_id) {
+        <app-ui-button size="sm" variant="outline" icon="material-symbols:how-to-reg"
+          (click)="openModal(s)">
+          {{ s.course_code }} · G{{ s.group_code }} ({{ s.room_code }})
+        </app-ui-button>
+      }
+    </div>
+  </app-ui-alert>
+}
+
+<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+  <app-ui-input class="w-full sm:w-72" icon="material-symbols:search" placeholder="Buscar estudiante o curso…"
+    [ngModel]="query()" (ngModelChange)="onSearch($event)" />
+  <p-select class="w-full sm:w-44" appendTo="body" [options]="estadoOptions"
+    [ngModel]="estadoSeleccionado()"
+    (ngModelChange)="onEstado($event)" placeholder="Estado" aria-label="Filtrar por estado" />
+</div>
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudieron cargar las asistencias" class="mb-4">{{ msg }}</app-ui-alert>
+}
+
+<app-data-table
+  [columns]="columns" [data]="filtered()" [trackBy]="trackById" mode="server"
+  [serverPage]="1" [serverTotal]="filtered().length" [serverPageSize]="500"
+  [loading]="loading()" [errorMessage]="error()"
+  [showClearFilters]="true" (clearFilters)="clearFilters()" (retry)="reload()"
+  emptyTitle="Sin asistencias hoy"
+  emptyMessage="Aún no hay registros para los filtros actuales. Aparecerán cuando las cámaras o el docente registren ingresos."
+>
+  <ng-template appCell="student_name" let-r>
+    <div class="min-w-0">
+      <div class="truncate text-sm font-medium text-gray-900">{{ r.student_name }}</div>
+      <div class="text-xs text-gray-500">{{ r.student_code ?? '—' }}</div>
+    </div>
+  </ng-template>
+  <ng-template appCell="course_code" let-r>
+    <span class="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">{{ r.course_code }}</span>
+  </ng-template>
+  <ng-template appCell="course_name" let-r>
+    <span class="text-sm text-gray-600">{{ r.course_name }}</span>
+  </ng-template>
+  <ng-template appCell="group_code" let-r>
+    <span class="text-sm font-medium text-gray-700">G{{ r.group_code }}</span>
+  </ng-template>
+  <ng-template appCell="marked_at" let-r>
+    <span class="text-sm tabular-nums text-gray-600">{{ shortHour(r.marked_at) }}</span>
+  </ng-template>
+  <ng-template appCell="method" let-r>
+    <span class="inline-flex items-center gap-1.5 text-sm text-gray-700">
+      <iconify-icon [icon]="r.method === 'manual' ? 'material-symbols:edit-outline' : 'material-symbols:face-outline'"
+        width="16" class="text-gray-400"></iconify-icon>
+      {{ r.method === 'manual' ? 'Manual' : 'Facial' }}
+    </span>
+  </ng-template>
+  <ng-template appCell="status" let-r>
+    <p-tag [value]="label(r.status)" [severity]="estadoSeverity(label(r.status))" />
+  </ng-template>
+</app-data-table>
+
+<!-- Modal RF-21: marca manual del docente/admin sobre la sesión abierta -->
+<p-dialog header="Marca manual — {{ modalSession()?.course_code }} G{{ modalSession()?.group_code }}"
+  [(visible)]="modalVisible" [modal]="true" [style]="{ width: '520px' }" (onHide)="closeModal()">
+  @if (modalSession(); as ses) {
+    <p class="text-sm text-gray-500">
+      {{ ses.course_name }} · {{ ses.room_code }} · {{ ses.start_time.slice(0,5) }}–{{ ses.end_time.slice(0,5) }} ·
+      Docente {{ ses.teacher_name }}
+    </p>
+  }
+  @if (modalError(); as merr) {
+    <app-ui-alert variant="danger" class="mt-3">{{ merr }}</app-ui-alert>
+  }
+  <div class="mt-4 max-h-80 space-y-1.5 overflow-y-auto">
+    @if (matLoading()) {
+      <p class="py-6 text-center text-sm text-gray-400">Cargando matriculados…</p>
+    } @else {
+      @for (e of matriculados(); track e.id) {
+        <div class="flex items-center justify-between gap-2 rounded-xl border border-gray-100 px-3 py-2 hover:bg-gray-50">
+          <div class="min-w-0">
+            <div class="truncate text-sm font-medium text-gray-900">{{ e.full_name }}</div>
+            <div class="text-xs text-gray-500">{{ e.code ?? '—' }}</div>
+          </div>
+          <div class="flex shrink-0 gap-1.5">
+            <app-ui-button size="sm" variant="outline" icon="material-symbols:check" [loading]="marcando() === e.id"
+              [disabled]="marcando() !== null" (click)="marcaManual(e.id, 'asistio')" title="Marcar Asistió">
+            </app-ui-button>
+            <app-ui-button size="sm" variant="outline" icon="material-symbols:schedule" [loading]="marcando() === e.id"
+              [disabled]="marcando() !== null" (click)="marcaManual(e.id, 'tardanza')" title="Marcar Tardanza">
+            </app-ui-button>
+            <app-ui-button size="sm" variant="danger" icon="material-symbols:close" [loading]="marcando() === e.id"
+              [disabled]="marcando() !== null" (click)="marcaManual(e.id, 'falta')" title="Marcar Falta">
+            </app-ui-button>
+          </div>
+        </div>
+      } @empty {
+        <p class="py-6 text-center text-sm text-gray-400">Sin matriculados en este grupo.</p>
+      }
+    }
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="closeModal()">Cerrar</app-ui-button>
+  </ng-template>
+</p-dialog>

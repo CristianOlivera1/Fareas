@@ -14,23 +14,36 @@ async def send_dpi_alert(
     absences: int,
     percent: float,
     umbral: float,
+    nivel: str = "alerta",
 ) -> bool:
-    """RF-24: aviso al alumno por acumular faltas (umbral 30 %, límite 1/3)."""
+    """R7: aviso al alumno por acumular faltas injustificadas.
+
+    nivel='alerta' (preventivo, ≥ 20 %) o 'limite' (inhabilitación al
+    SUPERAR el 30 % — decisión confirmada 2026-10-11). Un correo por nivel."""
     import html
 
-    subject = f"Fareas UNAMBA — Alerta de inasistencias en {course_code}"
+    limite = nivel == "limite"
+    encabezado = "Inhabilitación por inasistencias (DPI)" if limite else "Alerta de inasistencias"
+    subject = f"Fareas UNAMBA — {encabezado} en {course_code}"
     safe_name = html.escape(full_name)
     safe_course = html.escape(course_code)
-    color = "#B42318" if percent > 33.0 else "#155DFC"
+    color = "#B42318" if limite else "#155DFC"
+    aviso = (
+        f"Has SUPERADO el {umbral:.0f} % límite de inasistencias: quedarás inhabilitado "
+        "en este curso si el reglamento lo confirma."
+        if limite
+        else f"Has alcanzado el {percent:.0f} % de inasistencias (aviso preventivo; "
+        f"el límite es {umbral:.0f} %)."
+    )
 
     plain = (
         f"Hola {full_name},\n\n"
         f"Según el registro de asistencia del curso {course_code}:\n\n"
         f"  Sesiones dictadas: {sessions}\n"
         f"  Inasistencias: {absences} ({percent:.1f} %)\n\n"
-        f"Has superado el {umbral:.0f} % de alerta. Recuerda que el reglamento "
-        f"impide aprobar el curso con más de 1/3 de inasistencias (33.33 %).\n\n"
-        "Si tienes un descanso médico, entrégalo en secretaria de facultad (RF-10).\n\n"
+        f"{aviso}\n\n"
+        "Recuerda que las faltas justificadas (descansos médicos) no cuentan; "
+        "si tienes uno, entrégalo en secretaría académica (RF-10).\n\n"
         "— Sistema Fareas, Facultad de Informática UNAMBA"
     )
     content_html = (
@@ -44,12 +57,11 @@ async def send_dpi_alert(
         f'Sesiones dictadas: <strong>{sessions}</strong><br>'
         f'Inasistencias: <strong>{absences}</strong> ({percent:.1f} %)</td></tr></table>'
         f'<p style="margin:12px 0 0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;'
-        f'font-size:14px;color:{color};font-weight:700;">'
-        f'Has superado el {umbral:.0f} % de alerta.</p>'
+        f'font-size:14px;color:{color};font-weight:700;">{aviso}</p>'
         f'<p style="margin:8px 0 0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;'
         f'font-size:13px;color:#374151;">'
-        f'El reglamento impide aprobar el curso con más de 1/3 de inasistencias (33.33 %). '
-        f'Si tienes un descanso médico, entrégalo en secretaria (RF-10).</p>'
+        f'Las faltas justificadas no cuentan para el límite. Si tienes un descanso '
+        f'médico, entrégalo en secretaría (RF-10).</p>'
     )
     html_body = (
         f'<!doctype html><html lang="es"><body style="margin:0;background:#F6F9FF;">'
@@ -60,7 +72,7 @@ async def send_dpi_alert(
         f'<tr><td style="padding:28px 28px 0;font-family:Arial,sans-serif;font-size:20px;'
         f'font-weight:700;color:#111827;">Fareas<span style="color:#155DFC;">.</span></td></tr>'
         f'<tr><td style="padding:20px 28px 0;font-family:Arial,sans-serif;font-size:18px;'
-        f'font-weight:700;color:#111827;">Alerta de inasistencias</td></tr>'
+        f'font-weight:700;color:{color};">{encabezado}</td></tr>'
         f'<tr><td style="padding:12px 28px;font-family:Arial,sans-serif;font-size:14px;'
         f'line-height:1.6;color:#374151;">{content_html}</td></tr>'
         f'<tr><td style="padding:0 28px 28px;font-family:Arial,sans-serif;font-size:11px;'

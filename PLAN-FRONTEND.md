@@ -19,22 +19,33 @@
 | Layout admin | `layouts/admin` con Sidebar + Header funcionales (menú PLANO: Dashboard, Asistencias) |
 | Dashboard mock | 4 tarjetas, activity-feed con `setInterval`, hourly-chart, distribution-chart, student-list (todos con MOCK data) |
 | Asistencia mock | `features/attendance` con tabla estática |
+| Cursos y matrículas REALES (F2, 2026-10-12) | `features/courses` (lista de cursos + detalle con grupos y grilla semanal) y `features/enrollments` (cupo 40, retiro y transferencia) conectados a la API |
+| Host global de toasts (2026-10-12) | `app.html` incluye `<p-toast>`; sin él, TODOS los `toast.add()` de la app (errores 409 incluidos) quedaban invisibles |
 | Build OK | `ng build --configuration development` pasa; `dist/fareas` generado |
 
 **Stack fijo:** Angular 21 (standalone + signals + OnPush), PrimeNG 20, Tailwind 4,
-Chart.js 4, material-symbols/akar-icons ya en uso.
+Chart.js 4, material-symbols/akar-icons ya en uso.## 1. Decisiones definitivas (respondidas por el usuario)
 
-## 1. Decisiones definitivas (respondidas por el usuario)
-
-1. **El rol ESTUDIANTE no entra al panel** (por ahora): el guard de `/admin` solo
-   deja pasar `admin` y `docente`. El estudiante recibe sus alertas por correo
-   (RF-24). Si en el futuro se quiere "Mis asistencias", se añade `GET /attendance/me`.
+1. **~~El rol ESTUDIANTE no entra al panel~~ → REVISADO: el estudiante SÍ entra a la app**:
+   el backend ya expone `GET /attendance/me` (historial personal, solo rol estudiante) y
+   el estudiante recibirá su propia vista "Mis asistencias" (Responsive list con curso,
+   grupo, estado, fecha, método y motivo de rectificación RF-15). El panel admin/docente
+   sigue restringido por `authGuard`/`roleGuard`; las alertas por correo (RF-24) se mantienen.
+   **Estado frontend:** este bloque NO se ha implementado aún; queda documentado aquí para
+   insertarse como sub-bloque de F3b (ver §4 F3b).
 2. **Hardware al final (F7)**: cámara Hikvision + ESP32 se conectan cuando el
    frontend puede MONITOREARLOS (RF-35) — así cada paso se verifica desde la UI.
 3. **Sidebar agrupado con submenús** (secciones colapsables), con visibilidad por rol.
 4. **Backend mínimo extra aprobado**: `GET /attendance/sessions-today`
    (sesiones abiertas de hoy con session_id/curso/grupo/aula/estado) para el modal
-   de marca manual RF-21 — se implementa al inicio de F3 (~30 líneas, patrón ya existente).
+   de marca manual RF-21 — **✅ YA IMPLEMENTADO EN EL BACKEND** (Bloque 6b del
+   PLAN-BACKEND, excluye cerradas; el frontend ya lo consume en la pantalla
+   Asistencias con el modal RF-21 pre-integrado).
+5. **Rate limit de login en el backend**: añadido en el Bloque 6b (5 fallos/IP/min → 429;
+   login correcto limpia). El rate limit del cliente (`auth-rate-limit.ts`) se mantiene
+   como primera capa UX.
+6. **`/attendance/me` (estudiante)**: endpoint YA IMPLEMENTADO en el backend (Bloque 6b);
+   su pantalla en el frontend queda para F3b (ver §4).
 
 ## 2. Estructura de rutas objetivo (Bloque F1 las crea; F2-F6 las llenan)
 
@@ -121,12 +132,44 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   `PATCH /devices/{id}`; **pestaña "Monitoreo" RF-35**: tarjetas por aula con estado en línea
   (verde/gris) desde `GET /devices/status` (público) con auto-refresh cada 30 s.
 - [ ] **Cursos y grupos** `/courses`: lista de cursos (`GET/POST /courses`) → detalle de curso con
-  sus grupos (`GET /courses/{id}/groups`), crear grupo (docente+aula: selects de `/teachers` y
-  `/rooms`) → detalle de grupo con BLOQUES horarios (grid semanal LUN-DOM, crear/patch/delete con
-  detección de choque RF-06 mostrando el 409 del backend como toast).
+  sus grupos (`GET /courses/{id}/groups?semester=` — **Bloque 11: cada grupo trae `semester_label`,
+  `capacity` y `enrolled_count`**), crear grupo (docente+aula+**cupo, 40 por defecto**: selects de
+  `/teachers` y `/rooms`) → detalle de grupo con BLOQUES horarios (grid semanal LUN-DOM,
+  crear/patch/delete con detección de choque RF-06 mostrando el 409 del backend como toast).
 - [ ] **Matrículas** `/enrollments`: selector curso→grupo (`GET /courses` + `GET /courses/{id}/groups`)
   + listar/alta/quitar alumnos (`GET/POST/DELETE /groups/{id}/students`, autocomplete de estudiantes).
+  **Bloque 11 (R8):** el alta puede responder 409 con mensajes claros ("Grupo lleno 40/40",
+  "ya está matriculado en el grupo B", "el horario se cruza con …"); el listado trae
+  `withdrawn_at` (retirados) y `has_face`; hay **transferencia** entre grupos del mismo curso:
+  `POST /groups/{id}/students/{student_id}/transfer` con `{destino_group_id}`.
+  La pestaña de parámetros usa `GET /settings/semesters` para el selector de semestre.
 - **Entregable:** admin puede montar la malla completa desde la UI sin pgAdmin; docente la ve.
+
+### F2 - Estado real (actualizado al 2026-10-12) - ✅ LISTO
+- [x] **Cursos** `/courses`: lista paginada con búsqueda + alta de curso (código 3-20, nombre);
+  acción "Grupos y horario" que navega al detalle (ruta RELATIVA, el panel vive bajo `/admin`).
+- [x] **Detalle de curso** `/courses/:courseId`: selector de semestre (por defecto el vigente,
+  tomado de `GET /settings` y persistido en la URL), tarjetas de grupo con **cupo X/40**
+  (barra con umbral verde/ámbar/rojo), docente, aula y semestre; alta de grupo (código, cupo
+  con 40 por defecto, selects de docente y aula); baja lógica del grupo con `app-modal-delete`.
+- [x] **Grilla semanal de bloques** (LUN–DOM): chips `HH:MM–HH:MM`, alta por columna (día
+  preseleccionado + hora de inicio "inteligente" tras el último bloque del día, 1 h o 2 h) y
+  borrado por bloque. El **409 de choque (RF-06)** se muestra como toast con el mensaje del
+  backend y el diálogo permanece abierto para corregir la hora.
+- [x] **Matrículas** `/enrollments`: selector semestre → curso → grupo (con cupo y aula en la
+  etiqueta), tarjeta resumen del grupo (docente, aula, cupo con `activos()/capacity` y aviso
+  "grupo lleno"), tabla de alumnos con badge **Enrolado/Sin rostro** (`with_face=1`), estado
+  Activo/Retirado y acciones: **matricular** (buscador de estudiantes contra el servidor con
+  retardo de 250 ms), **retirar** (dialog con aviso de historial), **reactivar** y **transferir**
+  a otro grupo del mismo curso (solo grupos con cupo libre).
+- [x] **Reglas R8 verificadas en navegador contra la BD real**: cupo, "ya está matriculado en el
+  grupo A de ISA903; usa la transferencia" (un grupo activo por curso), "el horario se cruza con
+  otro curso del alumno: ISA901 (grupo A)", retiro (borra si no hay registros; el cupo baja a
+  5/40) y transferencia (la matrícula de origen queda `withdrawn_at` y se crea la del destino).
+- [x] **Arreglos de shell** (bugs reales encontrados al verificar): host global `<p-toast>` en
+  `app.ts`/`app.html` (antes ningún toast se veía), `isActive()` del sidebar marca también las
+  subrutas (`/admin/courses/3` resalta "Cursos y grupos") y el helper `extractDetail` pasó a
+  `shared/utils/api-error.ts` (re-exportado desde `rooms.ts` para no romper imports).
 
 ### F3 - Asistencia y calendario (1 día) - RF-09, RF-10, RF-15, RF-21, RF-26, RF-34
 - [ ] **Backend (~30 min, aprobado):** `GET /attendance/sessions-today` →
@@ -137,18 +180,64 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   (de `sessions-today`) → estudiante (solo matriculados del grupo) → estado → `POST /sessions/{id}/manual-mark`;
   **rectificar RF-15**: acción de fila con dialog motivo → `PATCH /attendance/{id}/rectify`;
   botón "Cerrar sesión" (admin) → `POST /sessions/{id}/close` con resumen de faltas.
-- [ ] **Feriados** `/calendar/holidays`: lista + alta/baja — `GET/POST /holidays`, `DELETE /holidays/{id}`.
+- [ ] **Bloque 11 (backend ya listo):**
+  - **Día sin clase / paro:** `POST /sessions/{id}/cancel` y `POST /blocks/{id}/cancel-day`
+    (body `{reason, fecha?}`; admin también pre-cancela fechas futuras).
+  - **Sesiones por revisar (R4):** `GET /attendance/sessions-review` (cerradas con cero marcas;
+    la cámara pudo caerse) → botón por fila: `POST /sessions/{id}/resolve-review`
+    `{action: confirmar_faltas | cancelar, reason?}` (cancelar exige motivo).
+  - **Justificar UNA falta:** acción de fila → `PATCH /attendance/{id}/justify` `{reason}`
+    (solo admin/docente; el estado de la fila pasa a "Falta justificada", FJ).
+  - **Plazo de rectificación:** el backend responde 403 a docentes fuera de los 7 días
+    (`rectify_days`); la UI puede ocultar la acción en filas antiguas y mostrar el motivo.
+- [ ] **Feriados** `/calendar/holidays`: lista + alta/baja — `GET/POST /holidays`, `DELETE /holidays/{id}`;
+  **Bloque 11:** botón "Cargar feriados nacionales del año" → `POST /holidays/national?year=`
+  (o body `{year}`) y "Paro por rango" → `POST /holidays/range` `{desde, hasta, descripcion,
+  omitir_fines_de_semana}` → chip con `{creados, omitidos, sesiones_canceladas}`.
 - [ ] **Justificaciones** `/calendar/justifications`: lista filtrable por alumno + alta
   (rango fechas, motivo, curso opcional, documento URL) — `GET/POST /justifications`, `DELETE /justifications/{id}`.
-- [ ] **Parámetros** `/calendar/settings`: formulario semestre/bloque/tolerancia/umbrales —
-  `GET/PATCH /settings` (aviso: "aplica a sesiones siguientes, nunca retroactivo" RF-34).
+  **Bloque 11 (R6):** la respuesta de alta trae `faltas_afectadas` (mostrarlo en el toast) y el
+  docente está obligado a elegir curso; eliminar revierte las faltas (confirmar con dialog).
+- [ ] **Parámetros** `/calendar/settings`: formulario semestre/bloque/tolerancia/**ventana de
+  apertura (early_open_minutes), rectify_days, dpi_min_sessions y fechas del semestre
+  (semester_start/end)** — `GET/PATCH /settings` (aviso: "aplica a sesiones siguientes, nunca
+  retroactivo" RF-34; validación cliente: aviso < límite; inicio < fin).
 - **Entregable:** el flujo completo de un día lectivo se opera 100% desde la UI.
+
+### F3 - Estado real (actualizado al 2026-10-11)
+- [x] `GET /attendance/sessions-today` — **backend ✅ (Bloque 6b) y frontend ✅**:
+  la pantalla Asistencias ya es REAL (`GET /attendance/today` + `sessions-today`,
+  auto-refresh 60 s, filtro ?status=, columna N°) y el modal RF-21 (marca manual
+  con matriculados del grupo vía AttendanceApi) está pre-integrado.
+- [ ] Rectificación RF-15 en la tabla (acción de fila → dialog motivo) — **pendiente**.
+- [ ] Botón "Cerrar sesión de clase" (admin) → `POST /sessions/{id}/close` — **pendiente**.
+- [ ] Feriados / Justificaciones / Parámetros — **pendientes** (arriba).
+
+### F3b - "Mis asistencias" del ESTUDIANTE (nuevo, ½ día) - RF-22/RF-24 con vista propia
+> Decisión 1 revisada: el estudiante SÍ entra a la app. El backend YA expone
+> `GET /attendance/me` (Bloque 6b del PLAN-BACKEND: solo rol estudiante, filtros
+> ?desde=&hasta=, devuelve curso, grupo, estado, marked_at, method y correct_reason).
+- [ ] Ruta `​/me` (o `/my-attendance`) FUERA de `/admin` (otro guard: solo rol estudiante;
+  el panel admin/docente sigue con roleGuard) con layout propio simple.
+- [ ] Pantalla: lista de asistencias del alumno (curso, grupo, fecha/franja, badge de estado
+  asistio/tardanza/falta con colores Tabla 8, método facial/manual) + filtro de rango de fechas.
+  **Bloque 11:** la respuesta trae `is_justified` → badge propio para la **falta justificada (FJ)**
+  (no cuenta para el 30 %); añadir una tarjeta de **DPI por curso** con `GET /attendance/me/dpi`
+  (porcentaje, nivel alerta/límite, sesiones planificadas y faltas restantes).
+- [ ] Mostrar `correct_reason` si la marca fue rectificada (RF-15 visible para el alumno).
+- [ ] El estudiante no puede navegar a `/admin` (authGuard y roleDocente ya lo bloquean;
+  verificar la redirección de login para rol estudiante → `/me` y no a `/admin/dashboard`).
+- **Entregable:** el estudiante entra con su cuenta del BD (código o correo), ve SU historial
+  y sus alertas DPI siguen llegando por correo (RF-24) sin cambio en el backend.
 
 ### F4 - Enrolamiento facial (½-1 día) - RF-04, RF-20
 - [ ] Página `/faces`: buscar estudiante → `GET /students/{id}/faces` muestra estado actual
   (enrolado sí/no, foto, fecha); flujo de captura: **webcam** (`navigator.mediaDevices.getUserMedia`,
   botón capturar ×N) O **subir archivos** (input multiple); client-side: comprimir a JPEG ~640px,
-  convertir a base64 → `POST /students/{id}/faces` con `{photos: [...]}` (3-5).
+  convertir a base64 → `POST /students/{id}/faces` con `{photos: [...], consent: true}`.
+  **Bloque 11 (R13, Ley 29733):** obligatorio un **checkbox de consentimiento** antes de enviar
+  (sin `consent: true` el backend responde 422) y acción "Eliminar rostro" (admin) →
+  `DELETE /students/{id}/faces` con dialog de confirmación (borra embeddings y foto).
 - [ ] Manejo de errores del validador facial: 1 rostro por foto, consistencia ≥0.55,
   duplicado → mensajes claros del backend en toasts.
 - [ ] En `/students`: badge de enrolamiento + acción directa "Enrolar rostro".
@@ -156,8 +245,10 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   (`scripts/simulate_camera.py`) sin tocar la BD a mano.
 
 ### F5 - Dashboard en vivo (1 día) - RF-13, RF-35, PLAN §5
-- [ ] `DashboardApi`: `GET /dashboard/summary` → las 4 tarjetas reales (asistencias/tardanzas/
-  ausencias con %, cámaras activas, alertas DPI) con auto-refresh 30 s.
+- [ ] `DashboardApi`: `GET /dashboard/summary` → las tarjetas reales (asistencias/tardanzas/
+  ausencias con %, cámaras activas, alertas DPI) con auto-refresh 30 s. **Bloque 11:** la tarjeta
+  DPI distingue `en_riesgo` (≥ 20 %) de `alertas_dpi` (> 30 %, inhabilitación) y hay un
+  **banner/contador `sessions_to_review`** que enlaza a la pantalla de sesiones por revisar (F3).
 - [ ] **Activity-feed con SSE real** (reemplaza el `setInterval`):
   `new EventSource(\`${api}/dashboard/live?access_token=${token}&room_id=...\`)`
   evento `verdict` → feed con nombre/código/similitud/veredicto (colores Tabla 8);
@@ -176,12 +267,19 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   "Excel" / "PDF" → `GET /reports/attendance.xlsx|pdf` con `responseType: 'blob'` +
   descarga vía `URL.createObjectURL` (respeta el `filename` del Content-Disposition);
   docente ve solo SUS grupos (el backend ya filtra).
+  **Bloque 11:** dos reportes adicionales — "Registro de asistencia" del grupo
+  (`GET /reports/group-matrix.xlsx?group_id=` → matriz alumnos × fechas con **A/T/F/FJ/—**)
+  y "Riesgo DPI" (`GET /reports/dpi-risk.xlsx?course_id=` → alumnos en alerta/límite con
+  faltas restantes). El estado `FJ` = falta justificada (no cuenta para el 30 %).
 - [ ] **Importar horario** `/imports` (RF-07, 2 pasos): subir PDF → tabla editable de la
   previsualización (`POST /courses/import-pdf`) con filas ambiguas resaltadas (chip "Ambiguo"
   + `nota`), select de docente y aula → confirmar → `POST /courses/import-pdf/confirm`
   → resumen de creados (cursos/grupos/bloques) y manejo del 409 de choque (todo-o-nada).
 - [ ] **Bitácora** `/audit` (admin): tabla paginada `GET /audit-log` con filtros
-  action/entity/entity_id/actor/since (backend ya los soporta) + visor de old/new_value (JSON).
+  action/entity/entity_id/actor/**actor_role**/since (backend ya los soporta) + visor de
+  old/new_value (JSON); la respuesta trae `actor_name` y `actor_role` para la columna "Quién".
+  **Bloque 11:** aquí se ven las acciones nuevas (sesión cancelada/revisada, justificación,
+  matrícula retirada/transferida, rostro eliminado, consentimiento, feriado por rango).
 - **Entregable:** tesis puede mostrar: subir PDF real → propuesta → confirmar → bloques en horario.
 
 ### F7 - DISPOSITIVOS REALES: cámara + ESP32 (1-1.5 días) — guía completa de armado
@@ -222,7 +320,7 @@ cable USB con DATOS · protoboard (opcional).
 | Anillo GND | GND del ESP32 | común |
 | Anillo DIN | **GPIO 13** vía resistencia 330–470 Ω | en serie, acorta el cable de datos |
 | Condensador 1000 µF | entre 5V y GND del anillo | banda larga (++) a 5V — protege picos |
-| Buzzer + | **GPIO 12** | si el buzzer es de 5 V "duro": transistor 2N2222 (base 1 kΩ a GPIO12) |
+| Buzzer + | **GPIO 26** | ⚠️ actualizado en el Bloque 11: GPIO 12 es pin de ARRANQUE del ESP32 y colgaba el boot. Si el buzzer es de 5 V "duro": transistor 2N2222 (base 1 kΩ a GPIO26) |
 | Buzzer − | GND | |
 
 **Software en la PC:**
@@ -248,7 +346,7 @@ const char* WS_PATH = "/api/v1/ws/devices?token=COPIA_DEVICE_TOKEN_SECRET";
 const char* DEVICE_ID = "esp32-lab305";  // device.device_key en la BD
 
 #define LED_PIN 13
-#define BUZZ_PIN 12
+#define BUZZ_PIN 26   // Bloque 11: GPIO12 es pin de arranque (bootstrapping)
 #define LED_COUNT 16
 
 Adafruit_NeoPixel ring(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -268,6 +366,9 @@ void mostrar(const char* color, int beeps, int ms, int segundos) {
 }
 
 void onEvent(WStype_t type, uint8_t* payload, size_t len) {
+  if (type == WStype_CONNECTED) {
+    enviarHello();                            // Bloque 11: el hello va AQUÍ
+  }
   if (type == WStype_TEXT) {
     StaticJsonDocument<384> doc;
     if (deserializeJson(doc, payload, len)) return;
@@ -287,6 +388,9 @@ void setup() {
   ws.begin(WS_HOST, WS_PORT, WS_PATH);
   ws.onEvent(onEvent);
   ws.setReconnectInterval(5000);
+}
+
+void enviarHello() {  // Bloque 11: al CONECTAR, no en setup()
   String hello = String("{\"type\":\"hello\",\"device_id\":\"") + DEVICE_ID + "\",\"mac\":\"" + WiFi.macAddress() + "\"}";
   ws.sendTXT(hello);                          // presentación RF-33
 }
@@ -311,7 +415,11 @@ void loop() {
   (RF-35); 4) video/entrada con alumno enrolado → LED verde + 1 beep y marca en `/attendance`;
   5) desconectar USB → EN LÍNEA pasa a FUERA DE LÍNEA en ≤150 s (90 latido + 60 scheduler).
 - **Tono completo (Tabla 8):** verde+beep_1 · amarillo+beep_2 · rojo+tono_denegado (600 ms)
-  · azul = animación de reposo (el sketch hace fade simple: ampliable en F7).
+  · azul = animación de reposo **sin beeps** (el backend manda `buzzer:"ninguno"`; el sketch
+  hace fade simple).
+- **Red (Bloque 11):** reservar **IP fija por DHCP** para la PC del backend (la IP del ESP32
+  cambia de red; el `WS_HOST` del firmware debe seguir siendo válido) y usar WiFi de **2.4 GHz**
+  (el ESP32 no soporta 5 GHz).
 
 ### F8 - Producción y demo de tesis (½ día) - (par con Bloque 10 del backend)
 - [ ] `environment.prod.ts` con `apiUrl: '/api/v1'` (mismo origen, sin CORS).
@@ -337,31 +445,37 @@ void loop() {
 | `GET/POST /devices` · `PATCH /devices/{id}` · `GET /devices/status` | Dispositivos + Monitoreo RF-35 (F2/F5) | A admin · status público |
 | `GET/POST /teachers` · `GET/POST /students` · `GET/PATCH /accounts/{id}` · `POST /accounts/{id}/send-temp-password` | Catálogo de personas (F2) | A admin · L docente |
 | `GET/POST /courses` · `GET/POST /courses/{id}/groups` · `GET/POST /groups/{id}/blocks` · `PATCH/DELETE /blocks/{id}` · `DELETE /groups/{id}` | Cursos y grupos (F2) | A admin · L docente |
-| `GET/POST/DELETE /groups/{id}/students` | Matrículas (F2) | A admin · L docente |
-| `GET /attendance/today` · `POST /sessions/{id}/manual-mark` · `PATCH /attendance/{id}/rectify` · `POST /sessions/{id}/close` · `GET /attendance/sessions-today` (nuevo) | Asistencias (F3) | A admin · D suyo |
-| `GET/POST/DELETE /holidays` · `GET/POST/DELETE /justifications` · `GET/PATCH /settings` | Calendario (F3) | A admin · L docente |
-| `POST/GET /students/{id}/faces` | Enrolamiento (F4) | A admin · L docente |
-| `GET /dashboard/summary` · `/dashboard/live` (SSE) · `GET /stats/hourly` · `GET /stats/distribution` | Dashboard (F5) | A+D (SSE por query) |
-| `GET /reports/attendance.xlsx|pdf` · `POST /courses/import-pdf(+/confirm)` · `GET /audit-log` | Reportes/Importación/Bitácora (F6) | A admin (reportes: D suyo) |
+| `GET/POST/DELETE /groups/{id}/students` · `POST /groups/{id}/students/{sid}/transfer` · `GET /settings/semesters` | Matrículas con reglas R8 (F2) | A admin · L docente |
+| `GET /attendance/today` · `POST /sessions/{id}/manual-mark` · `PATCH /attendance/{id}/rectify` (plazo 7 d al docente) · `POST /sessions/{id}/close` · `GET /attendance/sessions-today` | Asistencias (F3) | A admin · D suyo |
+| `GET /attendance/sessions-review` · `POST /sessions/{id}/resolve-review` · `POST /sessions/{id}/cancel` · `POST /blocks/{id}/cancel-day` · `PATCH /attendance/{id}/justify` | Ciclo de sesiones y justificación puntual (F3, Bloque 11) | A admin · D suyo |
+| `GET /attendance/me` · `GET /attendance/me/dpi` | "Mis asistencias" y DPI del estudiante (F3b) | Solo rol estudiante |
+| `GET /dpi/at-risk` · `GET /students/{id}/dpi` | Riesgo DPI (F5/F6) | A admin · D sus cursos |
+| `GET/POST/DELETE /holidays` · `POST /holidays/range` · `POST /holidays/national` · `GET/POST/DELETE /justifications` · `GET/PATCH /settings` | Calendario (F3) | A admin · L docente |
+| `POST/GET/DELETE /students/{id}/faces` (`consent: true` obligatorio) | Enrolamiento (F4) | A admin · L docente |
+| `GET /dashboard/summary` (+`en_riesgo`, `sessions_to_review`) · `/dashboard/live` (SSE) · `GET /stats/hourly` · `GET /stats/distribution` | Dashboard (F5) | A+D (ambos ya filtrados por grupo si es docente) |
+| `GET /reports/attendance.xlsx|pdf` · `GET /reports/group-matrix.xlsx` · `GET /reports/dpi-risk.xlsx` · `POST /courses/import-pdf(+/confirm)` · `GET /audit-log` (+`actor_role`) | Reportes/Importación/Bitácora (F6) | A admin (reportes: D suyo) |
+| `GET /devices/{id}` | Detalle de cámara con `rtsp_url` COMPLETA (R14: el listado la enmascara; un PATCH reenviando `***` se ignora) | A admin |
 
 `A`=admin escribe, `D`=docente en sus grupos, `L`=solo lectura. El backend YA aplica todo esto;
 la UI solo oculta botones con `@if (auth.isAdmin())`.
 
 ## 6. Inconsistencias y avisos detectados al revisar el backend (sin acción urgente)
 
-1. **`GET /attendance/sessions-today` NO existe** → aprobado añadirlo (inicio de F3). Sin él,
-   el modal de marca manual no sabe qué sesión abierta corresponde a cada aula/curso.
+1. **~~`GET /attendance/sessions-today` NO existe~~ → RESUELTO** (Bloque 6b del
+   PLAN-BACKEND; el frontend ya lo consume). **Bloque 11 (2026-10-11):** además el backend
+   añadió el ciclo completo de sesiones (apertura por scheduler, `needs_review`,
+   cancelación), justificaciones con efecto, DPI con aviso único por nivel y reportes por
+   grupo — todo documentado arriba en F2/F3/F4/F5/F6 y en PLAN-BACKEND §3 (Bloque 11).
 2. **`app.frontend()` no está implementado** en `main.py` (el plan del backend lo menciona
    para el Bloque 10) → F8 lo implementa junto con la config de producción.
-3. **Rate limit de login SOLO en el cliente** (`auth-rate-limit.ts`): el endpoint
-   `POST /auth/login` del backend no limita intentos. Para la tesis alcanza; si el tribunal
-   pregunta por seguridad, añadir un limitador simple en el backend (dict IP→intentos, 5/min).
+3. **~~Rate limit de login SOLO en el cliente~~ → RESUELTO**: el backend ya limita
+   (Bloque 6b: 5 fallos IP/min → 429, login correcto limpia la ventana; con tests).
 4. **`GET /devices/status` es PÚBLICO** (sin token): pensado para el panel RF-35 en un solo
    origen. Exponer estados en línea de equipos sin credencial es discutible en producción
    real; opción futura: exigir JWT (1 línea en el endpoint).
-5. **El badge "Enrolado" en `/students`** requeriría N llamadas (`GET /students/{id}/faces` por
-   alumno). Para el directorio completo: opcional añadir `GET /students?with_face=1` al backend
-   (o aceptar N llamadas solo al abrir el enrolamiento individual — plan actual).
+5. **~~El badge "Enrolado" en `/students` requeriría N llamadas~~ → RESUELTO**: el backend ya
+   soporta `GET /students?with_face=1` (UNA query extra por página, no N por alumno) y el
+   frontend ya lo usa para el badge Enrolado/Sin rostro.
 6. **Las vistas SQL (`v_today_attendance`) usan `CURRENT_DATE` del servidor**: asume la zona
    horaria de Perú en la PC servidor (la del dev ya lo está). No tocar.
 7. **`PersonOut` no expone `photo_url`**: la foto de portada se ve solo en `/faces`; suficiente.
@@ -369,4 +483,6 @@ la UI solo oculta botones con `@if (auth.isAdmin())`.
 ## 7. Fuera de alcance (coherente con PLAN-BACKEND §7)
 - Sin PWA/SSR/i18n; sin NgRx/NGXS (signals + services); sin tests e2e Cypress (los smokes
   son manuales por bloque; si sobra tiempo: 2-3 specs de `ng test` para guards y auth).
-- El estudiante NO entra al panel (decisión §1); notificaciones por correo RF-24 ya existentes.
+- El estudiante NO entra al PANEL ADMIN (el guard seguirá bloqueando `/admin`); su vista
+  propia "Mis asistencias" (`GET /attendance/me`) se construye en F3b (ver §4). Las
+  notificaciones por correo RF-24 se mantienen.

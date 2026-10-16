@@ -36,6 +36,10 @@ export class CalendarApi extends BaseApi {
   settings() {
     return this.get<Settings>('/settings');
   }
+  /** R1: etiquetas de semestre que ya tienen grupos (selectores del panel). */
+  semesters() {
+    return this.get<string[]>('/settings/semesters');
+  }
   updateSettings(body: Partial<Omit<Settings, 'updated_at' | 'attendance_hour_start' | 'attendance_hour_end'>>) {
     return this.patch<Settings>('/settings', body);
   }

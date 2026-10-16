@@ -56,9 +56,6 @@ back-fareas/
 ├── db/                       # SQL MANUAL (ver workflow abajo)
 │   ├── 001_schema.sql        # esquema completo (idempotente)
 │   ├── 002_seed.sql          # datos demo (idempotente)
-│   ├── 003_refresh_tokens.sql     # (OBSOLETO) fue aplicado y revertido por 005
-│   ├── 004_umbral_facial_055.sql  # calibración RF-20 del Bloque 5
-│   └── 005_eliminar_refresh_tokens.sql  # sin refresh tokens: JWT simple 120 min
 ├── models/                   # pesos .onnx (gitignored) - det_10g + w600k_r50
 ├── ai/                       # pipeline de visión (Bloque 5) - sin lógica HTTP
 │   ├── boxes.py              # IoU + NMS en NumPy
@@ -176,13 +173,18 @@ temporal que se crea y elimina solo (no toca los datos del seed).
 - `PATCH /attendance/{id}/rectify` — RF-15: rectifica el estado con motivo obligatorio (audit_log).
 - `POST /sessions/{id}/close` — RF-26: cierre manual (admin); el automático corre cada 60 s
   (APScheduler) y genera faltas a matriculados sin registro + alertas DPI (RF-24).
-- Clasificación RF-23: `asistio` dentro del bloque · `tardanza` tras el fin dentro de la
-  tolerancia (`late_tolerance_minutes`) · `falta` la genera el cierre.
+- Clasificación RF-23 (**R2, Bloque 11**): `asistio` entre `inicio − apertura
+  anticipada` y `inicio + tolerancia`; `tardanza` después de eso y hasta el **fin
+  del bloque** (55 min tarde en 1 h = tardanza, no falta); `falta` la genera el cierre.
 
-La suite completa es de **67 tests**: auth (7) + catálogo (9) +
+La suite completa es de **101 tests**: auth (7) + catálogo (9) +
 cursos/choques/matrículas (4) + calendario/parámetros/auditoría (5) +
 visión y enrolamiento (15) + motor de asistencia y su API (9) + WebSocket
-de dispositivos (4) + dashboard/SSE/reportes (7) + importación OCR (7).
+de dispositivos (4) + dashboard/SSE/reportes (7) + importación OCR (7) +
+**reglas del Bloque 11 (29)**: ventana R2 y niveles DPI (2), ciclo de vida de
+sesiones R3/R4/R5/R10 (5), justificaciones y rectificación R6/R11 (5),
+matrículas R8/R9 (4), DPI R7 (4), seguridad/biometría R13/R14 (6) y
+dashboard/feriados/reportes con las reglas nuevas (3).
 Todos son idempotentes: crean sus propios datos temporales y los limpian.
 Los smokes de visión se saltan solos si faltan los modelos ONNX o el video demo.
 
@@ -230,6 +232,44 @@ Protocolo en `ws://localhost:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET>`
   crea cursos/grupos/bloques con la misma validación de choques RF-06, **todo o nada** (rollback).
   Un PDF escaneado (sin texto) → 422 con explicación: RF-07 procesa constancias digitales.
 
+  > Los grupos importados toman el **semestre vigente** (R1, Bloque 11).
+
+### Bloque 11 — reglas de negocio (R1…R15)
+
+> Se aplican con los scripts manuales `db/005_reglas_negocio.sql` →
+> `db/006_session_cancelada.sql` → `db/007_vistas_reglas.sql` (en ese orden) y
+> reiniciando el backend. Nunca se edita `001`.
+
+**Decisiones confirmadas (2026-10-11):** tardanza hasta el fin del bloque ·
+inhabilitación **al superar** el 30 % (aviso ≥ 20 %) · cupo **40 para todos** ·
+al transferirse de grupo las faltas anteriores **se conservan** · fechas del
+semestre en `app_settings` (**2026-II: 2026-08-17 → 2026-12-19**, editables por
+el admin con `PATCH /settings`).
+
+- **Sesiones:** el scheduler abre la sesión al iniciar la ventana (R3) aunque
+  nadie marque; al cierre con cero marcas queda `needs_review` sin faltas (R4) y
+  se resuelve en `GET /attendance/sessions-review` → `confirmar_faltas | cancelar`.
+  Cancelación con motivo (`POST /sessions/{id}/cancel`, `POST /blocks/{id}/cancel-day`
+  con `fecha` opcional) — nunca genera faltas (R5).
+- **Justificaciones (R6):** crear marca las faltas del rango (`is_justified` +
+  `justification_id`) y las futuras nacen justificadas; eliminar revierte. El
+  docente solo justifica a sus alumnos y con su curso; sin plazo.
+- **DPI (R7):** `absence_percent` = faltas no justificadas / sesiones válidas;
+  niveles 20/30; correo solo con ≥ 4 sesiones y **una vez por nivel** por
+  semestre. `GET /dpi/at-risk`, `GET /students/{id}/dpi`, `GET /attendance/me/dpi`.
+- **Matrículas (R8):** cupo, un grupo activo por curso, sin cruce de horarios,
+  retiro con `withdrawn_at`, `POST /groups/{id}/students/{sid}/transfer`.
+- **Rectificación (R11):** el docente solo los últimos 7 días; el admin sin plazo.
+- **Seguridad (R14):** con clave temporal todo responde 403 `must_change_password`
+  salvo `/auth/me` y `/auth/change-password`; usuario inactivo → 401 al instante;
+  `rtsp_url` enmascarada en listados (completa en `GET /devices/{id}`).
+- **Biometría (R13, Ley 29733):** `POST /students/{id}/faces` exige `consent: true`;
+  `DELETE /students/{id}/faces` borra embeddings y foto.
+- **Feriados (R12):** `POST /holidays/range` (rango, omite fines de semana) y
+  `POST /holidays/national?year=` (fijos + Semana Santa, ajustables).
+- **Reportes:** `GET /reports/group-matrix.xlsx?group_id=` (alumnos × fechas con
+  **A/T/F/FJ/—**) y `GET /reports/dpi-risk.xlsx?course_id=` (alerta/límite).
+
 ## Scripts de hardware / simulación
 
 ```bash
@@ -244,8 +284,14 @@ python scripts/simulate_esp32.py esp32-lab305
 
 1. Conexión: `ws://localhost:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET>`
 2. Presentación: `{"type":"hello","device_id":"esp32-lab305"}` - debe coincidir
-   con `device.device_key` en la BD.
+   con `device.device_key` en la BD. **Corrección del Bloque 11:** enviarlo en el
+   evento `WStype_CONNECTED` (no en `setup()`).
 3. Latido cada 30 s: `{"type":"heartbeat"}` → sin latidos por 90 s el nodo
    queda fuera de línea (RF-35).
 4. Comando del backend (Tabla 8):
    `{"type":"verdict","status":"asistio","message":"Registro correcto","color":"verde","buzzer":"beep_1","seconds":3}`
+
+> **Hardware (Bloque 11):** el buzzer va a **GPIO 26** (GPIO 12 es pin de
+> arranque del ESP32). Reserva IP fija (DHCP) para la PC del backend; el ESP32
+> solo usa WiFi de 2.4 GHz. El veredicto `azul` (sin clase/desconocido) no lleva
+> beeps, solo la animación del anillo.

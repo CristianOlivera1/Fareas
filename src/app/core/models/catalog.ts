@@ -52,12 +52,19 @@ export interface Group {
   readonly teacher_name: string;
   readonly room_id: number;
   readonly room_code: string;
+  /** R1: semestre al que pertenece el grupo ('2026-II'). */
+  readonly semester_label: string;
+  /** R8/R9: cupo del grupo (40 por defecto). */
+  readonly capacity: number;
+  /** Matrículas activas (no retiradas). */
+  readonly enrolled_count: number;
   readonly is_active: boolean;
 }
 
 export interface Block {
   readonly id: number;
   readonly group_id: number;
+  /** 1=Lunes … 7=Domingo (isoweekday). */
   readonly weekday: number;
   readonly start_time: string; // 'HH:MM:SS'
   readonly end_time: string;
@@ -70,6 +77,10 @@ export interface EnrolledStudent {
   readonly email: string;
   readonly semester: number | null;
   readonly enrolled_at: string | null;
+  /** R8d: si tiene fecha, la matrícula fue retirada (soft). */
+  readonly withdrawn_at: string | null;
+  /** RF-04: rostro vigente del alumno. */
+  readonly has_face: boolean | null;
 }
 
 export interface Holiday {
@@ -93,8 +104,17 @@ export interface Justification {
 
 export interface Settings {
   readonly semester_label: string;
+  /** R1: fechas del semestre vigente (null = sin restricción de fechas). */
+  readonly semester_start: string | null;
+  readonly semester_end: string | null;
   readonly block_minutes: number;
   readonly late_tolerance_minutes: number;
+  /** R2/R3: minutos de apertura anticipada de la ventana de marca. */
+  readonly early_open_minutes: number;
+  /** R11: días que un docente puede rectificar hacia atrás. */
+  readonly rectify_days: number;
+  /** R7: mínimo de sesiones para enviar correos de alerta DPI. */
+  readonly dpi_min_sessions: number;
   readonly face_match_threshold: number;
   readonly dpi_alert_percent: number;
   readonly dpi_limit_percent: number;
@@ -102,6 +122,9 @@ export interface Settings {
   readonly attendance_hour_end: string;
   readonly updated_at: string | null;
 }
+
+/** Registro de HOY (vista v_today_attendance + attendance.py). */
+export type AttendanceStatusApi = 'asistio' | 'tardanza' | 'falta';
 
 /** Registro de HOY (vista v_today_attendance + attendance.py). */
 export interface AttendanceToday {
@@ -114,7 +137,7 @@ export interface AttendanceToday {
   readonly course_name: string;
   readonly group_code: string;
   readonly room_code: string;
-  readonly status: 'asistio' | 'tardanza' | 'falta';
+  readonly status: AttendanceStatusApi;
   readonly marked_at: string | null;
   readonly method: string;
   readonly similarity: number | null;

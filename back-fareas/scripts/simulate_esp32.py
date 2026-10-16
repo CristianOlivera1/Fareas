@@ -58,9 +58,14 @@ async def main() -> None:
                     msg = json.loads(raw)
                     if msg.get("type") == "verdict":
                         color = COLORES.get(msg.get("color", ""), "")
-                        # Aquí el ESP32 real enciende el anillo y el buzzer:
-                        print(f"{color}[LED {msg.get('color', '?').upper():8}] buzzer={msg.get('buzzer', '-'):14} "
-                              f"{msg.get('seconds', 0)}s  {msg.get('message', '')}{RESET}  (status={msg.get('status')})")
+                        # Aquí el ESP32 real enciende el anillo y el buzzer.
+                        # Bloque 11: 'azul' (sin clase/desconocido) NO lleva beeps
+                        # (buzzer='ninguno'): solo la animación del anillo.
+                        buzzer = msg.get("buzzer", "-")
+                        etiqueta = "(sin beeps)" if buzzer == "ninguno" else ""
+                        print(f"{color}[LED {msg.get('color', '?').upper():8}] buzzer={buzzer:14} "
+                              f"{msg.get('seconds', 0)}s  {msg.get('message', '')}{RESET} "
+                              f"{etiqueta} (status={msg.get('status')})")
                     else:
                         print(f"<- {raw}")
             except websockets.ConnectionClosed as e:

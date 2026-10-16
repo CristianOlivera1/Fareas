@@ -78,9 +78,12 @@ export class Sidebar implements OnInit {
     }
   }
 
-  /** /courses → /courses (los ítems de nav son relativos a /admin). */
+  /** /courses → /courses (los ítems de nav son relativos a /admin).
+   * También marca activo cuando se está en una subruta (p. ej. /courses/3). */
   isActive(route: string): boolean {
-    return this.currentUrl() === `/admin${route}`;
+    const target = `/admin${route}`;
+    const url = this.currentUrl();
+    return url === target || url.startsWith(`${target}/`);
   }
 
   /** true si el grupo contiene la ruta activa (para auto-expandir al navegar). */

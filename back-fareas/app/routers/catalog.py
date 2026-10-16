@@ -7,7 +7,7 @@ el filtrado del dashboard. Dispositivos: GET /devices/status es público para
 el panel de monitoreo (RF-35).
 """
 from fastapi import APIRouter, HTTPException, Query, Request, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlmodel import func, select
 
 from app.core.deps import DbSession, RequireRole
@@ -15,6 +15,7 @@ from app.core.pagination import PageParams, PageParamsDep
 from app.schemas.common import Page
 from app.services.accounts import create_account, resend_credentials
 from app.services.audit import audit
+from app.services.formats import validar_whatsapp
 from app.tables import AppUser, Device, DeviceType, FaceEmbedding, Room, UserRole
 
 router = APIRouter(tags=["catalog"])
@@ -41,11 +42,13 @@ class RoomIn(BaseModel):
     code: str = Field(min_length=1, max_length=20, examples=["LAB 304"])
     name: str | None = Field(default=None, max_length=120)
     building: str | None = Field(default=None, max_length=80)
+    capacity: int | None = Field(default=None, gt=0, description="Aforo informativo (R9)")
 
 
 class RoomUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=120)
     building: str | None = Field(default=None, max_length=80)
+    capacity: int | None = Field(default=None, gt=0)
     is_active: bool | None = None
 
 
@@ -54,11 +57,15 @@ class RoomOut(BaseModel):
     code: str
     name: str | None
     building: str | None
+    capacity: int | None
     is_active: bool
 
 
 def room_out(r: Room) -> RoomOut:
-    return RoomOut(id=r.id, code=r.code, name=r.name, building=r.building, is_active=r.is_active)  # type: ignore[arg-type]
+    return RoomOut(
+        id=r.id, code=r.code, name=r.name, building=r.building,  # type: ignore[arg-type]
+        capacity=r.capacity, is_active=r.is_active,
+    )
 
 
 @router.get("/rooms", response_model=Page[RoomOut])
@@ -140,9 +147,23 @@ class DeviceOut(BaseModel):
     is_online: bool
     last_heartbeat: str | None
     is_active: bool
+    rtsp_url: str | None = None  # R14: enmascarada en listados; completa en GET /devices/{id}
 
 
-def device_out(d: Device, room_code: str | None) -> DeviceOut:
+_RTSP_MASK = "***"
+
+
+def _rtsp_enmascarada(rtsp_url: str | None) -> str | None:
+    """R14: oculta la contraseña embebida del RTSP en los listados.
+    'rtsp://admin:secreta@10.14.5.11:554/...' → 'rtsp://admin:***@10.14.5.11:554/...'"""
+    if not rtsp_url:
+        return None
+    import re as _re
+
+    return _re.sub(r"(://[^:/@]+):([^@]+)@", rf"\1:{_RTSP_MASK}@", rtsp_url)
+
+
+def device_out(d: Device, room_code: str | None, *, mask_rtsp: bool = True) -> DeviceOut:
     return DeviceOut(
         id=d.id,  # type: ignore[arg-type]
         room_id=d.room_id,
@@ -154,6 +175,7 @@ def device_out(d: Device, room_code: str | None) -> DeviceOut:
         is_online=d.is_online,
         last_heartbeat=d.last_heartbeat.isoformat(timespec="seconds") if d.last_heartbeat else None,
         is_active=d.is_active,
+        rtsp_url=_rtsp_enmascarada(d.rtsp_url) if mask_rtsp else d.rtsp_url,
     )
 
 
@@ -194,6 +216,17 @@ async def devices_status(db: DbSession) -> list[DeviceOut]:
     return [device_out(d, rc) for d, rc in rows]
 
 
+@router.get("/devices/{device_id}", response_model=DeviceOut)
+async def get_device(
+    device_id: int, db: DbSession, _admin: RequireRole(UserRole.ADMIN)
+) -> DeviceOut:
+    """Detalle completo de un dispositivo (solo admin): aquí SÍ va la
+    rtsp_url sin enmascarar, para configurar la cámara (R14)."""
+    device = await _get_or_404(db, Device, device_id, "Dispositivo")
+    room = await db.get(Room, device.room_id)
+    return device_out(device, room.code if room else None, mask_rtsp=False)
+
+
 @router.post("/devices", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
 async def create_device(
     body: DeviceIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
@@ -225,8 +258,13 @@ async def update_device(
     device_id: int, body: DeviceUpdate, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> DeviceOut:
     device = await _get_or_404(db, Device, device_id, "Dispositivo")
-    old = {"name": device.name, "rtsp_url": device.rtsp_url, "is_active": device.is_active}
-    for field, value in body.model_dump(exclude_unset=True).items():
+    old = {"name": device.name, "rtsp_url": _rtsp_enmascarada(device.rtsp_url), "is_active": device.is_active}
+    data = body.model_dump(exclude_unset=True)
+    # R14: un rtsp_url que llega con la MÁSCARA se ignora (el cliente estaba
+    # reenviando el listado enmascarado; no hay que pisar la clave real).
+    if "rtsp_url" in data and data["rtsp_url"] and _RTSP_MASK in data["rtsp_url"]:
+        data.pop("rtsp_url")
+    for field, value in data.items():
         setattr(device, field, value)
     db.add(device)
     await audit(db, admin, action="dispositivo_actualizado", entity="device", entity_id=device.id,
@@ -246,12 +284,28 @@ class TeacherIn(BaseModel):
     dni: str = Field(pattern=r"^\d{8}$")
     whatsapp: str | None = Field(default=None, max_length=20)
 
+    @field_validator("whatsapp")
+    @classmethod
+    def _whatsapp_pe(cls, v: str | None) -> str | None:
+        try:
+            return validar_whatsapp(v)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+
 
 class PersonUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=3, max_length=160)
     whatsapp: str | None = Field(default=None, max_length=20)
     is_active: bool | None = None
     semester: int | None = Field(default=None, ge=1, le=12)
+
+    @field_validator("whatsapp")
+    @classmethod
+    def _whatsapp_pe(cls, v: str | None) -> str | None:
+        try:
+            return validar_whatsapp(v)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
 
 
 class PersonOut(BaseModel):
@@ -337,6 +391,14 @@ class StudentIn(BaseModel):
     code: str = Field(pattern=r"^\d{6}$", description="Código de matrícula")
     semester: int = Field(ge=1, le=12, description="Ciclo actual")
     whatsapp: str | None = Field(default=None, max_length=20)
+
+    @field_validator("whatsapp")
+    @classmethod
+    def _whatsapp_pe(cls, v: str | None) -> str | None:
+        try:
+            return validar_whatsapp(v)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
 
 
 @router.get("/students", response_model=Page[PersonOut])

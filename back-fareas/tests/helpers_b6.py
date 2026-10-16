@@ -8,14 +8,17 @@ from sqlmodel import delete, select
 
 from app.services.attendance_engine import PERU_TZ
 from app.tables import (
+    AppSettings,
     AppUser,
     AttendanceRecord,
     AttendanceSession,
+    AuditLog,
     Course,
     CourseGroup,
     Device,
     Enrollment,
     Holiday,
+    Justification,
     Room,
     ScheduleBlock,
     UserRole,
@@ -42,6 +45,16 @@ def h(lunes: date, hhmm: str) -> datetime:
 
 async def limpiar(db) -> None:
     """Borra el escenario en orden inverso de dependencias (por IDs)."""
+    # R6: justificaciones creadas por los tests (referencian curso y alumnos)
+    actores = [
+        u.id
+        for email in (DOCENTE, EST1, EST2)
+        if (u := (await db.exec(select(AppUser).where(AppUser.email == email))).first()) is not None
+    ]
+    if actores:
+        await db.exec(delete(Justification).where(Justification.student_id.in_(actores)))  # type: ignore[attr-defined]
+        await db.exec(delete(Justification).where(Justification.created_by.in_(actores)))  # type: ignore[attr-defined]
+        await db.commit()
     aula = (await db.exec(select(Room).where(Room.code == AULA))).first()
     if aula is not None:
         grupo_ids = (await db.exec(select(CourseGroup.id).where(CourseGroup.room_id == aula.id))).all()
@@ -69,6 +82,8 @@ async def limpiar(db) -> None:
     for email in (DOCENTE, EST1, EST2):
         user = (await db.exec(select(AppUser).where(AppUser.email == email))).first()
         if user is not None:
+            # Las acciones auditadas de los tests (R6/R11) referencian a los actores.
+            await db.exec(delete(AuditLog).where(AuditLog.actor_id == user.id))  # type: ignore[arg-type]
             await db.delete(user)
     await db.exec(delete(Holiday).where(Holiday.description == FERIADO_DESC))  # type: ignore[arg-type]
     await db.commit()
@@ -81,13 +96,19 @@ async def crear(db) -> dict:
     docente = AppUser(role=UserRole.DOCENTE, email=DOCENTE, full_name="Docente B6",
                       password_hash="x" * 20, must_change_password=False, dni="74444000")
     e1 = AppUser(role=UserRole.ESTUDIANTE, email=EST1, code="996001",
-                 full_name="Estudiante Uno B6", password_hash="x" * 20, semester=5, dni="74444001")
+                 full_name="Estudiante Uno B6", password_hash="x" * 20, semester=5,
+                 must_change_password=False, dni="74444001")
     e2 = AppUser(role=UserRole.ESTUDIANTE, email=EST2, code="996002",
-                 full_name="Estudiante Dos B6", password_hash="x" * 20, semester=5, dni="74444002")
+                 full_name="Estudiante Dos B6", password_hash="x" * 20, semester=5,
+                 must_change_password=False, dni="74444002")
     db.add_all([aula, curso, docente, e1, e2])
     await db.flush()
 
-    grupo = CourseGroup(course_id=curso.id, group_code="A", teacher_id=docente.id, room_id=aula.id)
+    # R1: los grupos creados "a mano" (sin API) usan el semestre VIGENTE.
+    cfg = await db.get(AppSettings, 1)
+    semestre = cfg.semester_label if cfg is not None else "2026-I"
+    grupo = CourseGroup(course_id=curso.id, group_code="A", teacher_id=docente.id,
+                        room_id=aula.id, semester_label=semestre)
     db.add(grupo)
     await db.flush()
     bloque = ScheduleBlock(
