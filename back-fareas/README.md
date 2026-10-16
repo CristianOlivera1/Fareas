@@ -26,7 +26,7 @@ back-fareas/
 │   ├── core/deps.py          # DbSession, CurrentUser (Bearer), RequireRole (RF-01)
 │   ├── core/security.py      # argon2 (pwdlib) + JWT (pyjwt)
 │   ├── database.py           # engine asyncpg + SessionLocal (SQLModel)
-│   ├── tables.py             # 14 entidades SQLModel que MAPEAN db/001_schema.sql
+│   ├── tables.py             # 15 entidades SQLModel que MAPEAN db/001_schema.sql
 │   ├── schemas/              # DTOs: auth.py, common.py (Page/Message), …
 │   ├── ai/                   # pipeline de visión (Bloque 5): detector, embedder,
 │   │                         #   recognizer, pipeline (Tabla 8), frame_source, runtime
@@ -53,9 +53,9 @@ back-fareas/
 │       ├── reports.py        # descarga Excel/PDF de asistencia (RF-16, Bloque 8)
 │       ├── health.py         # GET /api/v1/health (app + BD)
 │       └── ws_devices.py     # WS ESP32 Bloque 7: hello/heartbeat/veredictos (RF-25/33/35)
-├── db/                       # SQL MANUAL (ver workflow abajo)
-│   ├── 001_schema.sql        # esquema completo (idempotente)
-│   ├── 002_seed.sql          # datos demo (idempotente)
+├── db/                       # SQL MANUAL (ver "Actualizaciones de la base de datos")
+│   ├── 001_schema.sql        # ESQUEMA COMPLETO Y VIGENTE (fuente de verdad)
+│   ├── 002_seed.sql          # datos demo + parámetros vigentes (re-ejecutable)
 ├── models/                   # pesos .onnx (gitignored) - det_10g + w600k_r50
 ├── ai/                       # pipeline de visión (Bloque 5) - sin lógica HTTP
 │   ├── boxes.py              # IoU + NMS en NumPy
@@ -85,8 +85,8 @@ pip install -r requirements.txt
 
 copy .env.example .env 
 
-psql -U postgres -d fareas -f db/001_schema.sql
-psql -U postgres -d fareas -f db/002_seed.sql
+psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/001_schema.sql
+psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/002_seed.sql
 
 fastapi dev          # entrypoint de pyproject.toml (app.main:app)
 # alternativas: uvicorn app.main:app --reload  |  python main.py
@@ -95,6 +95,49 @@ fastapi dev          # entrypoint de pyproject.toml (app.main:app)
 - Swagger: <http://localhost:8000/docs>
 - Health: <http://localhost:8000/api/v1/health> →
   `{"status":"ok","database":"ok","users":9}` con el seed cargado
+
+## Actualizaciones de la base de datos (regla del proyecto)
+
+**Un cambio de BD se aplica con 2 scripts como máximo: `db/001_schema.sql` +
+`db/002_seed.sql`.** No hay herramienta de migraciones (Alembic, Flyway): el
+esquema se mantiene a mano, pero con estas reglas.
+
+1. **`001_schema.sql` SIEMPRE se actualiza.** Es la fuente de verdad de la
+   estructura y refleja la BD de desarrollo tal cual. Si el cambio toca el
+   esquema (tabla, columna, índice, CHECK, vista, valor de enum), se deja al día
+   **en el mismo commit** del cambio.
+2. **`002_seed.sql` también**, si el cambio toca datos demo o parámetros (p. ej.
+   `app_settings`: semestre, niveles DPI, umbral facial), o si agrega columnas
+   `NOT NULL` a tablas que el seed llena.
+3. **Para las BD que ya existen, además va un ALTER numerado nuevo**
+   (`db/003_algo.sql`, `004_…`): el paso a paso para la BD que ya tiene datos.
+   Debe ser **re-ejecutable** (`ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT
+   EXISTS`, bloques `DO $$ … EXCEPTION WHEN duplicate_object THEN NULL; END $$`)
+   y nunca recrea ni borra datos.
+4. **Cuando todo el equipo ya aplicó el ALTER, SE BORRA** (su contenido ya vive
+   en `001`) y se menciona en el commit. Así: un dev nuevo instala con 2
+   scripts, y una BD vieja se pone al día con el ALTER pendiente + esos 2.
+5. El `ADD VALUE` de un enum no se puede usar en la misma transacción que lo
+   agrega: va en su propio archivo (por eso `006` existió como archivo aparte).
+
+Lo que se revisa al actualizar (la comparación que prueba que `001` + `002`
+reproducen la BD real):
+
+```bash
+# 1) DDL de la BD de desarrollo ya migrada = base para editar 001_schema.sql
+pg_dump -U postgres -d fareas --schema-only --no-owner --no-acl > /tmp/fareas.sql
+
+# 2) BD limpia + los 2 scripts; su DDL debe coincidir con el anterior
+createdb -U postgres fareas_check
+psql -U postgres -d fareas_check -v ON_ERROR_STOP=1 -f db/001_schema.sql
+psql -U postgres -d fareas_check -v ON_ERROR_STOP=1 -f db/002_seed.sql
+pg_dump -U postgres -d fareas_check --schema-only --no-owner --no-acl > /tmp/check.sql
+diff /tmp/fareas.sql /tmp/check.sql   # solo deben variar los SET/comentarios
+dropdb -U postgres fareas_check
+```
+
+`001` y `002` se ejecutan sobre una BD **vacía**: no son idempotentes a nivel
+de esquema (`CREATE TYPE/TABLE` fallan si los objetos ya existen).
 
 ## Usuarios demo (tras ejecutar 002_seed.sql)
 
@@ -234,9 +277,12 @@ Protocolo en `ws://localhost:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET>`
 
 ### Bloque 11 — reglas de negocio (R1…R15)
 
-> Se aplican con los scripts manuales `db/005_reglas_negocio.sql` →
-> `db/006_session_cancelada.sql` → `db/007_vistas_reglas.sql` (en ese orden) y
-> reiniciando el backend. Nunca se edita `001`.
+> Las reglas R1…R15 ya viven dentro de `db/001_schema.sql`: los scripts
+> `005_reglas_negocio.sql`, `006_session_cancelada.sql` y `007_vistas_reglas.sql`
+> se consolidaron ahí y **se borraron el 2026-10-16** (ya los había aplicado
+> todo el equipo). Si tu BD es anterior, aplica los ALTER pendientes y luego
+> `001` + `002` (2 scripts, ver "Actualizaciones de la base de datos"), y
+> reinicia el backend.
 
 **Decisiones confirmadas (2026-10-11):** tardanza hasta el fin del bloque ·
 inhabilitación **al superar** el 30 % (aviso ≥ 20 %) · cupo **40 para todos** ·

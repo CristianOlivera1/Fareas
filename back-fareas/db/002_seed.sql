@@ -1,11 +1,21 @@
 -- FAREAS - 002_seed.sql
--- Usuarios demo (contraseña de TODOS: 12345678 - argon2id):
+-- Datos demo sobre el esquema de 001_schema.sql (re-ejecutable: ON CONFLICT /
+-- NOT EXISTS). Usuarios demo (contraseña de TODOS: 12345678 - argon2id):
 --   admin / docente / estudiante
+-- Requiere el esquema vigente: si tu BD es vieja, corre antes 001_schema.sql
+-- (ver README >> "Actualizaciones de la base de datos").
 BEGIN;
 
--- app_settings (RF-34) - fila única
-INSERT INTO app_settings (id, semester_label)
-VALUES (1, '2026-I')
+-- app_settings (RF-34) - fila única con los valores VIGENTES del semestre.
+-- Umbral facial 0.55 = punto de operación calibrado (RF-20, Bloque 5);
+-- DPI 20/30 % (R7: aviso desde 20, inhabilitación al SUPERAR el 30).
+-- El resto de parámetros conservan los DEFAULT de 001_schema.sql
+-- (early_open_minutes 15, rectify_days 7, dpi_min_sessions 4, bloque 120 min).
+INSERT INTO app_settings (
+    id, semester_label, semester_start, semester_end,
+    face_match_threshold, dpi_alert_percent, dpi_limit_percent
+)
+VALUES (1, '2026-II', DATE '2026-08-17', DATE '2026-12-19', 0.550, 20.00, 30.00)
 ON CONFLICT (id) DO NOTHING;
 
 -- Usuarios demo
@@ -56,8 +66,8 @@ INSERT INTO course (code, name) VALUES
   ('ISA906', 'Interacción Humano Computador')
 ON CONFLICT (code) DO NOTHING;
 
--- Grupo único (A) por curso con su docente y aula
-INSERT INTO course_group (course_id, group_code, teacher_id, room_id)
+-- Grupo único (A) por curso con su docente, aula y el semestre vigente (R1)
+INSERT INTO course_group (course_id, group_code, teacher_id, room_id, semester_label)
 SELECT c.id, 'A',
        (SELECT id FROM app_user WHERE email = CASE c.code
            WHEN 'ISA903' THEN 'aquino.mario@unamba.edu.pe'
@@ -69,14 +79,20 @@ SELECT c.id, 'A',
            WHEN 'ISA903' THEN 'LAB 304'
            WHEN 'ISA904' THEN 'LAB 304'
            WHEN 'ISA905' THEN 'LAB 305'
-           WHEN 'ISA906' THEN 'LAB 304' END)
+           WHEN 'ISA906' THEN 'LAB 304' END),
+       (SELECT semester_label FROM app_settings WHERE id = 1)
 FROM course c
-WHERE NOT EXISTS (SELECT 1 FROM course_group g WHERE g.course_id = c.id AND g.group_code = 'A');
+WHERE NOT EXISTS (
+  SELECT 1 FROM course_group g
+  WHERE g.course_id = c.id AND g.group_code = 'A'
+    AND g.semester_label = (SELECT semester_label FROM app_settings WHERE id = 1)
+);
 
 -- Bloques horarios (weekday: 1=Lun ... 5=Vie), según el horario de ejemplo.
 -- Nota: ISA904 Jueves 11:00-13:00 se solapa con ISA906 (distinto aula y
--- distinto docente), por eso la restricción única es (weekday,start_time,end_time)
--- solo para la demo simplificada; la validación real de choques la hace la API.
+-- distinto docente), por eso la BD solo impide duplicar el bloque exacto de un
+-- grupo (uq_group_course_code_sem); la validación real de choques RF-06 la
+-- aplica la API al crear bloques.
 INSERT INTO schedule_block (group_id, weekday, start_time, end_time)
 SELECT g.id, v.weekday, v.start_time::time, v.end_time::time
 FROM (VALUES
@@ -110,6 +126,7 @@ WHERE NOT EXISTS (
   JOIN course_group g2 ON g2.id = sb.group_id
   JOIN course c2 ON c2.id = g2.course_id
   WHERE c2.code = v.course_code AND g2.group_code = 'A'
+    AND g2.semester_label = (SELECT semester_label FROM app_settings WHERE id = 1)
     AND sb.weekday = v.weekday AND sb.start_time = v.start_time::time
 );
 

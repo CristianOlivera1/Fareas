@@ -1,9 +1,9 @@
 """Tests del catálogo - RF-02, RF-03, RF-05, RF-08, RF-35 (contra la BD fareas real)."""
 import pytest
 from httpx import AsyncClient
-from sqlmodel import delete
+from sqlmodel import delete, select
 
-from app.tables import AppUser, Device, Room
+from app.tables import AppUser, Device, FaceEmbedding, Room
 from tests.conftest import TEMP_EMAIL
 
 pytestmark = pytest.mark.asyncio
@@ -215,16 +215,29 @@ async def test_temp_user_fixture_intacto(client: AsyncClient, temp_user: AppUser
 
 
 async def test_students_with_face_flag(client, admin_headers, db_session):
-    """with_face=1 añade enrolled (RF-04) con UNA query por página (no N)."""
-    r = await client.get(
-        f"{API}/students", headers=admin_headers,
-        params={"with_face": "true", "page_size": 50},
-    )
-    assert r.status_code == 200, r.text
-    items = r.json()["items"]
-    assert items
-    raul = next((i for i in items if i["code"] == "221181"), None)
-    assert raul is not None and raul["enrolled"] is True
+    """with_face=1 añade enrolled (RF-04) con UNA query por página (no N).
+
+    El test se CREA su propio embedding y lo borra al final: 002_seed.sql no
+    trae biometría (los vectores salen de fotos reales), así que una BD recién
+    instalada no debe depender de datos cargados a mano en la BD de desarrollo.
+    """
+    alumno = (await db_session.exec(select(AppUser).where(AppUser.code == "221181"))).one()
+    embedding = FaceEmbedding(student_id=alumno.id, vector=[0.0] * 512)
+    db_session.add(embedding)
+    await db_session.commit()
+    try:
+        r = await client.get(
+            f"{API}/students", headers=admin_headers,
+            params={"with_face": "true", "page_size": 50},
+        )
+        assert r.status_code == 200, r.text
+        items = r.json()["items"]
+        assert items
+        raul = next((i for i in items if i["code"] == "221181"), None)
+        assert raul is not None and raul["enrolled"] is True
+    finally:
+        await db_session.delete(embedding)
+        await db_session.commit()
 
     r = await client.get(f"{API}/students", headers=admin_headers, params={"page_size": 5})
     assert r.status_code == 200
