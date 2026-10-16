@@ -10,7 +10,7 @@
 | ✅ Hecho | Detalle |
 |---|---|
 | Base de datos creada | PostgreSQL **17.11** (instalador oficial Windows). BD `fareas` creada y migrada |
-| Esquema completo | `back-fareas/db/001_schema.sql` ejecutado: 14 tablas, 4 enums, vistas `v_today_attendance` y `v_student_dpi` |
+| Esquema completo | `back-fareas/db/001_schema.sql` ejecutado: 15 tablas, 4 enums, vistas `v_today_attendance` y `v_student_dpi` |
 | Datos demo cargados | `back-fareas/db/002_seed.sql`: 1 admin + 2 docentes + 6 estudiantes, 6 aulas, 12 dispositivos, 6 cursos (ISA901…ISA906), 16 bloques horarios, 36 matrículas |
 | Modelos ONNX en su sitio | `back-fareas/models/`: `det_10g.onnx` (17 MB, SCRFD) + `w600k_r50.onnx` (174 MB, ArcFace 512-d) - copiados desde tus descargas |
 | Stack instalado | SQLModel, asyncpg, APScheduler, opencv-python 4.10, onnxruntime 1.20, numpy 2.1, openpyxl, reportlab, pdfplumber - todos importan OK en el venv |
@@ -32,7 +32,7 @@
 
 ```
 back-fareas/db/
-├── 001_schema.sql    # esquema completo (idempotente: DROP IF EXISTS + CREATE)
+├── 001_schema.sql    # esquema completo y vigente (se corre sobre BD vacía)
 ├── 002_seed.sql      # datos demo (idempotente: ON CONFLICT DO NOTHING)
 └── 003_..., 004_...  # ACTUALIZACIONES futuras: un archivo por cambio
 ```
@@ -275,15 +275,28 @@ back-fareas/
 | 8 | Fechas del semestre | **2026-II: 2026-08-17 → 2026-12-19** (propuesta cargada en `app_settings`); el admin las registra/modifica con `PATCH /settings`. |
 | 9 | Escuela / aula | Una sola escuela (sin campo "escuela"); el aula pertenece al grupo, no al bloque; **no** se implementa cambio de aula por fecha. |
 
-**Base de datos (scripts manuales, §1; ejecutados en este orden y verificados):**
-1. `db/005_reglas_negocio.sql` — zona horaria `America/Lima` de la BD; `course_group.semester_label` + `capacity` (UNIQUE por semestre); parámetros nuevos (`semester_start/end`, `early_open_minutes` 15, `rectify_days` 7, `dpi_min_sessions` 4, aviso 20/límite 30); `attendance_session.needs_review/cancel_reason/cancelled_by/cancelled_at`; `attendance_record.is_justified/justification_id` (CHECK: justificada ⇒ falta); `enrollment.withdrawn_at`; `app_user.face_consent_at` + CHECK NOT VALID de DNI/WhatsApp; `room.capacity`; tabla `dpi_alert_sent`.
-2. `db/006_session_cancelada.sql` — valor `cancelada` del enum `session_status` (archivo aparte: `ADD VALUE` no puede usarse en la misma transacción).
-3. `db/007_vistas_reglas.sql` — recrea `v_student_dpi` (semestre vigente, rango de matrícula, justificadas aparte, canceladas y needs_review fuera) y amplía `v_today_attendance` (+`is_justified`, `session_id`, franja, `correct_reason`, `teacher_id`; excluye canceladas).
+**Base de datos (scripts manuales, §1; verificados):**
+1. `db/001_schema.sql` — **esquema completo y vigente** (absorbe lo que se aplicó
+   en los ya borrados `005`/`006`/`007`): zona horaria `America/Lima` de la BD;
+   `course_group.semester_label` + `capacity` (UNIQUE por semestre); parámetros
+   nuevos (`semester_start/end`, `early_open_minutes` 15, `rectify_days` 7,
+   `dpi_min_sessions` 4, aviso 20/límite 30);
+   `attendance_session.needs_review/cancel_reason/cancelled_by/cancelled_at`;
+   `attendance_record.is_justified/justification_id` (CHECK: justificada ⇒
+   falta); `enrollment.withdrawn_at`; `app_user.face_consent_at` + CHECK NOT
+   VALID de DNI/WhatsApp; `room.capacity`; tabla `dpi_alert_sent`; valor
+   `cancelada` del enum `session_status`; vistas `v_student_dpi` y
+   `v_today_attendance` con las reglas R5/R6/R7.
+2. `db/002_seed.sql` — datos demo + los parámetros vigentes del semestre
+   (umbral facial calibrado 0.55, DPI 20/30, semestre 2026-II).
 
-> **Nota de compatibilidad:** los valores por defecto de `001_schema.sql`
-> (`dpi_alert_percent` 30 / `dpi_limit_percent` 33.33) quedan **reemplazados por
-> 20/30** vía `005`; `block_minutes` pasa a ser informativo (la duración real
-> sale de `start_time/end_time` de cada bloque). `001` y `002` no se editan nunca.
+> **Nota de compatibilidad (regla vigente, 2026-10-16):** `001_schema.sql` **sí
+> se edita**: es la foto del esquema real, y `002_seed.sql` fija los valores
+> vigentes. Un cambio de BD = ALTER nuevo (`003_…` para las BD ya existentes) +
+> `001`/`002` actualizados en el mismo commit + borrado del ALTER que ya aplicó
+> todo el equipo. Así una BD nueva **o vieja** se pone al día con 2 scripts
+> (detalle en `back-fareas/README.md` >> "Actualizaciones de la base de datos").
+> `block_minutes` es informativo: la duración real sale de `start_time/end_time`.
 
 **Reglas y dónde viven (implementado):**
 

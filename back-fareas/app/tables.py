@@ -1,8 +1,11 @@
 """Entidades SQLModel que MAPEAN las tablas creadas por back-fareas/db/001_schema.sql.
 
 Regla del proyecto: la base de datos manda. Este módulo NUNCA ejecuta
-create_all() ni genera DDL - cualquier cambio de esquema se hace con un
-script SQL nuevo (db/003_xxx.sql, 004_xxx.sql …) ejecutado manualmente.
+create_all() ni genera DDL - cualquier cambio de esquema se hace en
+back-fareas/db/001_schema.sql (la foto vigente de la BD), acompañado de un
+ALTER nuevo (db/003_xxx.sql …) para las BD ya existentes y de su borrado
+cuando todo el equipo lo aplicó (ver README >> "Actualizaciones de la base
+de datos").
 
 IMPORTANTE: las columnas con DEFAULT NOW() se declaran con server_default
 para que SQLAlchemy las OMITA del INSERT y el valor lo genere PostgreSQL
@@ -11,7 +14,7 @@ para que SQLAlchemy las OMITA del INSERT y el valor lo genere PostgreSQL
 Enums PostgreSQL nativos (creados en 001_schema.sql):
   user_role         : 'admin' | 'docente' | 'estudiante'          (RF-01)
   attendance_status : 'asistio' | 'tardanza' | 'falta'            (RF-23)
-  session_status    : 'abierta' | 'cerrada'                       (RF-26)
+  session_status    : 'abierta' | 'cerrada' | 'cancelada'         (RF-26, R5)
   device_type       : 'camara' | 'esp32'                          (RF-05)
 
 Los StrEnum de Python comparten los valores exactos de los enums de PG.
@@ -43,7 +46,7 @@ class AttendanceStatus(StrEnum):
 class SessionStatus(StrEnum):
     ABIERTA = "abierta"
     CERRADA = "cerrada"
-    CANCELADA = "cancelada"  # R5 (db/006): no genera faltas ni cuenta en DPI
+    CANCELADA = "cancelada"  # R5: no genera faltas ni cuenta en DPI
 
 
 class DeviceType(StrEnum):
@@ -309,7 +312,7 @@ class AuditLog(SQLModel, table=True):
     ip_address: str | None = Field(default=None, max_length=45)
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
 
-# dpi_alert_sent (R7, db/005): UN correo por nivel (alerta/limite) por
+# dpi_alert_sent (R7, 001_schema.sql): UN correo por nivel (alerta/limite) por
 # alumno-curso-semestre. El servicio inserta primero (ON CONFLICT DO NOTHING):
 # si no insertó, ya se envió antes y no se repite.
 class DpiAlertSent(SQLModel, table=True):
