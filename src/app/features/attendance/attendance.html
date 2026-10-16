@@ -8,14 +8,68 @@
   </app-ui-button>
 </app-page-header>
 
-@if (haySesiones() && auth.isAdmin()) {
+<!-- Sesiones abiertas AHORA: marcar a mano (RF-21), cerrar (RF-26) o cancelar (R5) -->
+@if (haySesiones()) {
   <app-ui-alert variant="info" title="Sesiones abiertas ahora" class="mb-4">
-    <div class="mt-2 flex flex-wrap gap-2">
+    <div class="mt-2 space-y-2">
       @for (s of sesiones(); track s.session_id) {
-        <app-ui-button size="sm" variant="outline" icon="material-symbols:how-to-reg"
-          (click)="openModal(s)">
-          {{ s.course_code }} · G{{ s.group_code }} ({{ s.room_code }})
-        </app-ui-button>
+        <div class="flex flex-wrap items-center gap-2 rounded-lg bg-white/60 px-3 py-2">
+          <span class="text-sm font-medium text-blue-900">
+            {{ s.course_code }} · G{{ s.group_code }} · {{ s.room_code }}
+          </span>
+          <span class="text-xs text-blue-800">
+            {{ s.start_time.slice(0, 5) }}–{{ s.end_time.slice(0, 5) }} · {{ s.teacher_name }}
+          </span>
+          <div class="ml-auto flex flex-wrap items-center gap-1.5">
+            <app-ui-button size="sm" variant="outline" icon="material-symbols:how-to-reg"
+              (click)="openModal(s)">
+              Marcar
+            </app-ui-button>
+            @if (auth.isAdmin()) {
+              <app-ui-button size="sm" variant="outline" icon="material-symbols:lock-clock"
+                [loading]="busy() === 'close-' + s.session_id" (click)="askClose(s)">
+                Cerrar
+              </app-ui-button>
+            }
+            <app-ui-button size="sm" variant="ghost" icon="material-symbols:event-busy"
+              (click)="askCancel(s)">
+              Cancelar
+            </app-ui-button>
+          </div>
+        </div>
+      }
+    </div>
+  </app-ui-alert>
+}
+
+<!-- Sesiones por revisar (R4): cerradas sin ninguna marca (¿cámara caída?) -->
+@if (hayRevisiones()) {
+  <app-ui-alert variant="warning" title="Sesiones por revisar (R4)" class="mb-4">
+    <p class="mt-1 text-sm">
+      Estas sesiones se cerraron sin ninguna marca. Confirma las faltas o cancela la clase con su
+      motivo; hasta resolverlas no suman al DPI.
+    </p>
+    <div class="mt-3 space-y-2">
+      @for (rv of reviews(); track rv.session_id) {
+        <div class="flex flex-wrap items-center gap-2 rounded-lg bg-white/70 px-3 py-2">
+          <span class="text-sm font-medium text-amber-900">
+            {{ rv.session_date }} · {{ rv.course_code }} · G{{ rv.group_code }} · {{ rv.room_code }}
+          </span>
+          <span class="text-xs text-amber-800">
+            {{ rv.start_time }}–{{ rv.end_time }} · {{ rv.teacher_name }}
+          </span>
+          <div class="ml-auto flex flex-wrap items-center gap-1.5">
+            <app-ui-button size="sm" variant="outline" icon="material-symbols:person-cancel"
+              [loading]="busy() === 'review-' + rv.session_id"
+              (click)="askReviewConfirm(rv)">
+              Confirmar faltas
+            </app-ui-button>
+            <app-ui-button size="sm" variant="ghost" icon="material-symbols:event-busy"
+              (click)="askReviewCancel(rv)">
+              Cancelar la clase
+            </app-ui-button>
+          </div>
+        </div>
       }
     </div>
   </app-ui-alert>
@@ -67,7 +121,26 @@
     </span>
   </ng-template>
   <ng-template appCell="status" let-r>
-    <p-tag [value]="label(r.status)" [severity]="estadoSeverity(label(r.status))" />
+    <p-tag [value]="label(r)" [severity]="estadoSeverity(label(r))" />
+  </ng-template>
+  <ng-template appCell="actions" let-r>
+    <div class="flex items-center justify-center gap-1">
+      <button type="button"
+        class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-blue-50 hover:text-(--fareas-primary) transition-colors"
+        title="Rectificar la marca (RF-15)" (click)="openRectify(r)">
+        <iconify-icon icon="material-symbols:edit-note" width="18"></iconify-icon>
+      </button>
+      @if (r.status === 'falta' && !r.is_justified) {
+        <button type="button"
+          class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+          title="Justificar esta falta (R6)" (click)="openJustify(r)">
+          <iconify-icon icon="material-symbols:note-add" width="18"></iconify-icon>
+        </button>
+      } @else if (r.is_justified) {
+        <span class="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-(--fareas-primary)"
+          title="Falta justificada: no cuenta para el 30 %">FJ</span>
+      }
+    </div>
   </ng-template>
 </app-data-table>
 
@@ -112,5 +185,179 @@
   </div>
   <ng-template pTemplate="footer">
     <app-ui-button variant="ghost" (click)="closeModal()">Cerrar</app-ui-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Rectificación (RF-15): motivo obligatorio, el docente tiene plazo (R11) -->
+<p-dialog header="Rectificar asistencia" [(visible)]="rectifyVisible" [modal]="true"
+  [style]="{ width: '500px' }">
+  @if (rectifyTarget(); as r) {
+    <div class="space-y-4 pt-2">
+      <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+        <div class="text-sm font-medium text-gray-900">{{ r.student_name }}</div>
+        <div class="text-xs text-gray-500">
+          {{ r.course_code }} · G{{ r.group_code }} · estado actual {{ r.status }} ·
+          {{ shortHour(r.marked_at) }}
+        </div>
+      </div>
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Nuevo estado <span class="text-red-500">*</span></span>
+        <p-select class="w-full" appendTo="body" [options]="statusChoices" optionLabel="label"
+          optionValue="value" [ngModel]="rectifyStatus()" (ngModelChange)="rectifyStatus.set($event)" />
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Motivo <span class="text-red-500">*</span></span>
+        <textarea rows="3" [ngModel]="rectifyReason()" (ngModelChange)="rectifyReason.set($event)"
+          placeholder="El alumno presentó su carné físico al llegar tarde (mínimo 5 caracteres)"
+          class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm placeholder-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)"></textarea>
+      </label>
+      <app-ui-alert variant="info" [inline]="true" icon="material-symbols:history">
+        La rectificación queda en la bitácora con tu usuario y el motivo (RF-15/RF-32). Si el estado
+        cambia a "Asistió" o "Tardanza", la falta deja de estar justificada.
+      </app-ui-alert>
+    </div>
+  }
+  <!-- El footer debe ser hijo DIRECTO de p-dialog: dentro de un @if no se proyecta -->
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="rectifyVisible = false">Cancelar</app-ui-button>
+    <app-ui-button [loading]="busy() === 'rectify-' + rectifyTarget()?.record_id" (click)="confirmRectify()">
+      Rectificar
+    </app-ui-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Justificar UNA falta (R6): crea la justificación del día y liga el registro -->
+<p-dialog header="Justificar falta" [(visible)]="justifyVisible" [modal]="true"
+  [style]="{ width: '500px' }">
+  @if (justifyTarget(); as r) {
+    <div class="space-y-4 pt-2">
+      <div class="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2">
+        <div class="text-sm font-medium text-amber-900">{{ r.student_name }}</div>
+        <div class="text-xs text-amber-800">{{ r.course_code }} · G{{ r.group_code }}</div>
+      </div>
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Motivo <span class="text-red-500">*</span></span>
+        <textarea rows="3" [ngModel]="justifyReason()" (ngModelChange)="justifyReason.set($event)"
+          placeholder="Presentó certificado médico del 12 al 14 de octubre (mínimo 5 caracteres)"
+          class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm placeholder-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)"></textarea>
+      </label>
+      <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
+        La falta pasa a <strong>falta justificada (FJ)</strong> y deja de contar para el 30 % de
+        inasistencias. Para revertirla, elimina la justificación desde Calendario → Justificaciones.
+      </app-ui-alert>
+    </div>
+  }
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="justifyVisible = false">Cancelar</app-ui-button>
+    <app-ui-button [loading]="busy() === 'justify-' + justifyTarget()?.record_id" (click)="confirmJustify()">
+      Justificar
+    </app-ui-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Cierre manual de la sesión (RF-26, admin) -->
+<p-dialog header="Cerrar sesión de clase" [(visible)]="closeVisible" [modal]="true"
+  [style]="{ width: '480px' }">
+  @if (closeTarget(); as s) {
+    <div class="space-y-3 pt-2">
+      <p class="text-sm text-gray-700">
+        {{ s.course_code }} · G{{ s.group_code }} · {{ s.room_code }} ·
+        {{ s.start_time.slice(0, 5) }}–{{ s.end_time.slice(0, 5) }}
+      </p>
+      <app-ui-alert variant="warning" [inline]="true" icon="material-symbols:warning-outline">
+        Al cerrar se generan automáticamente las <strong>faltas</strong> de los matriculados sin marca
+        y se disparan las alertas DPI correspondientes. Si nadie marcó, la sesión queda "por revisar"
+        sin faltas.
+      </app-ui-alert>
+    </div>
+  }
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="closeVisible = false">Cancelar</app-ui-button>
+    <app-ui-button variant="danger" [loading]="busy() === 'close-' + closeTarget()?.session_id"
+      (click)="confirmClose()">
+      Cerrar sesión
+    </app-ui-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Cancelar la sesión (R5): día sin clase, paro, falla del docente -->
+<p-dialog header="Cancelar la sesión" [(visible)]="cancelVisible" [modal]="true"
+  [style]="{ width: '480px' }">
+  @if (cancelTarget(); as s) {
+    <div class="space-y-4 pt-2">
+      <p class="text-sm text-gray-700">
+        {{ s.course_code }} · G{{ s.group_code }} · {{ s.room_code }} ·
+        {{ s.start_time.slice(0, 5) }}–{{ s.end_time.slice(0, 5) }}
+      </p>
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Motivo <span class="text-red-500">*</span></span>
+        <textarea rows="3" [ngModel]="cancelReason()" (ngModelChange)="cancelReason.set($event)"
+          placeholder="Día sin clase por paro de transporte (mínimo 5 caracteres)"
+          class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm placeholder-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)"></textarea>
+      </label>
+      <app-ui-alert variant="warning" [inline]="true" icon="material-symbols:event-busy-outline">
+        No se generan faltas y la sesión desaparece de las consultas y del cálculo de DPI. Los
+        registros ya marcados se conservan en la base de datos.
+      </app-ui-alert>
+    </div>
+  }
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="cancelVisible = false">Volver</app-ui-button>
+    <app-ui-button variant="danger" [loading]="busy() === 'cancel-' + cancelTarget()?.session_id"
+      (click)="confirmCancel()">
+      Cancelar sesión
+    </app-ui-button>
+  </ng-template>
+</p-dialog>
+
+<!-- R4: confirmar faltas de una sesión cerrada sin marcas -->
+<p-dialog header="Confirmar faltas de la sesión" [(visible)]="reviewConfirmVisible" [modal]="true"
+  [style]="{ width: '480px' }">
+  @if (reviewConfirmTarget(); as rv) {
+    <div class="space-y-3 pt-2">
+      <p class="text-sm text-gray-700">
+        {{ rv.session_date }} · {{ rv.course_code }} · G{{ rv.group_code }} · {{ rv.room_code }}
+      </p>
+      <app-ui-alert variant="warning" [inline]="true" icon="material-symbols:warning-outline">
+        Se generará una <strong>falta</strong> para cada matriculado activo sin registro en esa
+        sesión (las que tengan justificación vigente nacen justificadas) y se dispararán las alertas
+        DPI correspondientes. Si la clase realmente no se dictó, cancélala en su lugar.
+      </app-ui-alert>
+    </div>
+  }
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="reviewConfirmVisible = false">Volver</app-ui-button>
+    <app-ui-button [loading]="busy() === 'review-' + reviewConfirmTarget()?.session_id"
+      (click)="confirmReviewFaltas()">
+      Confirmar faltas
+    </app-ui-button>
+  </ng-template>
+</p-dialog>
+
+<!-- R4: cancelar la clase que quedó por revisar -->
+<p-dialog header="Cancelar la clase" [(visible)]="reviewCancelVisible" [modal]="true"
+  [style]="{ width: '480px' }">
+  @if (reviewCancelTarget(); as rv) {
+    <div class="space-y-4 pt-2">
+      <p class="text-sm text-gray-700">
+        {{ rv.session_date }} · {{ rv.course_code }} · G{{ rv.group_code }} · {{ rv.room_code }}
+      </p>
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Motivo <span class="text-red-500">*</span></span>
+        <textarea rows="3" [ngModel]="reviewReason()" (ngModelChange)="reviewReason.set($event)"
+          placeholder="La clase no se dictó por mantenimiento del laboratorio (mínimo 5 caracteres)"
+          class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm placeholder-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)"></textarea>
+      </label>
+      <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
+        No se generan faltas y la sesión sale de la lista de revisión. El motivo queda en la bitácora.
+      </app-ui-alert>
+    </div>
+  }
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="reviewCancelVisible = false">Volver</app-ui-button>
+    <app-ui-button variant="danger" [loading]="busy() === 'review-' + reviewCancelTarget()?.session_id"
+      (click)="confirmReviewCancel()">
+      Cancelar la clase
+    </app-ui-button>
   </ng-template>
 </p-dialog>

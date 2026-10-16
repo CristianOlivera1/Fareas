@@ -204,14 +204,32 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   retroactivo" RF-34; validación cliente: aviso < límite; inicio < fin).
 - **Entregable:** el flujo completo de un día lectivo se opera 100% desde la UI.
 
-### F3 - Estado real (actualizado al 2026-10-11)
-- [x] `GET /attendance/sessions-today` — **backend ✅ (Bloque 6b) y frontend ✅**:
-  la pantalla Asistencias ya es REAL (`GET /attendance/today` + `sessions-today`,
-  auto-refresh 60 s, filtro ?status=, columna N°) y el modal RF-21 (marca manual
-  con matriculados del grupo vía AttendanceApi) está pre-integrado.
-- [ ] Rectificación RF-15 en la tabla (acción de fila → dialog motivo) — **pendiente**.
-- [ ] Botón "Cerrar sesión de clase" (admin) → `POST /sessions/{id}/close` — **pendiente**.
-- [ ] Feriados / Justificaciones / Parámetros — **pendientes** (arriba).
+### F3 - Estado real (actualizado al 2026-10-12) - ✅ LISTO
+- [x] **Asistencias** `/attendance`: tabla en vivo de HOY (`GET /attendance/today` +
+  `sessions-today`, auto-refresh 60 s, filtro `?status=` y buscador por estudiante/curso con
+  `app-ui-input`), **modal marca manual RF-21** (solo matriculados del grupo),
+  **rectificación RF-15** (diálogo con motivo ≥5 → `PATCH /attendance/{id}/rectify`),
+  **justificación puntual R6** (`PATCH /attendance/{id}/justify` → la fila pasa a **FJ**)
+  y tarjeta de **sesiones abiertas** con **cierre RF-26** (admin), cancelación R5 y
+  **sesiones por revisar R4** (confirmar faltas / cancelar la clase con motivo obligatorio).
+- [x] **Feriados** `/calendar/holidays`: lista por año + alta/baja, **"Cargar feriados
+  nacionales"** (`POST /holidays/national`) y **"Paro por rango"** (`POST /holidays/range`
+  con chip de creados/omitidos/sesiones canceladas).
+- [x] **Justificaciones** `/calendar/justifications`: tabla filtrable por alumno y curso, alta
+  en diálogo (rango, motivo, curso obligatorio para docente, documento URL) con
+  `faltas_afectadas` en el toast y baja que revierte las faltas.
+- [x] **Parámetros** `/calendar/settings`: formulario completo (semestre y fechas, bloques,
+  tolerancia, ventana de apertura, días de rectificación, umbral facial y % de DPI) con aviso
+  "aplica a sesiones siguientes, nunca retroactivo" (RF-34), validación cliente y botón
+  deshabilitado mientras no haya cambios; `PATCH /settings` ✅.
+- [x] **Verificado en navegador contra la BD real** (fixture temporal `ZZF301` con una sesión
+  abierta y dos por revisar): marca manual, rectificación, justificación, confirmar faltas,
+  cerrar sesión y cancelar la clase; feriados nacionales y por rango, alta de justificación y
+  guardado de parámetros (todos con su `POST/PATCH` en 200/201).
+- [x] **Bugs reales corregidos al verificar**: `attendance.ts` usaba `<app-ui-input>` sin
+  importarlo — con `CUSTOM_ELEMENTS_SCHEMA` no fallaba el build pero lanzaba `NG01203` en runtime
+  y el buscador no se renderizaba; y Justificaciones pedía `page_size=200` cuando el backend
+  limita a 100 (422 → el selector de cursos quedaba vacío).
 
 ### F3b - "Mis asistencias" del ESTUDIANTE (nuevo, ½ día) - RF-22/RF-24 con vista propia
 > Decisión 1 revisada: el estudiante SÍ entra a la app. El backend YA expone

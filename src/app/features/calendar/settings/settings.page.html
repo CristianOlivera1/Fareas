@@ -1,0 +1,194 @@
+<app-page-header title="Parámetros del sistema"
+  subtitle="Semestre vigente, ventana de marca, rectificación y umbrales DPI (RF-34)">
+  @if (changed().length > 0) {
+    <app-ui-button variant="ghost" icon="material-symbols:undo" [disabled]="saving()" (click)="restore()">
+      Descartar
+    </app-ui-button>
+  }
+  <app-ui-button icon="material-symbols:save" [loading]="saving()" [disabled]="!canSave()"
+    (click)="save()">
+    Guardar cambios
+  </app-ui-button>
+</app-page-header>
+
+@if (loading()) {
+  <div class="space-y-4" aria-busy="true">
+    @for (i of [1, 2, 3]; track i) {
+      <div class="rounded-xl border border-gray-200 bg-white p-5">
+        <div class="h-4 w-40 animate-pulse rounded bg-gray-100"></div>
+        <div class="mt-4 grid gap-4 sm:grid-cols-3">
+          @for (j of [1, 2, 3]; track j) {
+            <div class="h-16 animate-pulse rounded-lg bg-gray-50"></div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+} @else if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudieron cargar los parámetros" class="block">
+    {{ msg }}
+    <div class="mt-3">
+      <app-ui-button variant="danger" size="sm" icon="material-symbols:refresh" (click)="reload()">
+        Reintentar
+      </app-ui-button>
+    </div>
+  </app-ui-alert>
+} @else {
+  @if (problems().length > 0) {
+    <app-ui-alert variant="warning" title="Hay valores por corregir" class="mb-4">
+      <ul class="mt-1 list-inside list-disc space-y-0.5 text-sm">
+        @for (p of problems(); track p) {
+          <li>{{ p }}</li>
+        }
+      </ul>
+    </app-ui-alert>
+  }
+
+  <app-ui-alert variant="info" [inline]="true" icon="material-symbols:schedule"
+    class="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+    Los cambios se aplican a las sesiones <strong>siguientes</strong>: nunca modifican asistencias ya
+    registradas. Cambiar el semestre no altera los grupos existentes (conservan su etiqueta histórica).
+  </app-ui-alert>
+
+  <div class="space-y-4">
+    <!-- Semestre vigente (R1) -->
+    <section class="rounded-xl border border-gray-200 bg-white p-5">
+      <header class="mb-4 flex items-center gap-2">
+        <iconify-icon icon="material-symbols:calendar-month-outline" width="20" class="text-(--fareas-primary)"></iconify-icon>
+        <h2 class="text-sm font-semibold text-gray-900">Semestre vigente</h2>
+        <span class="ml-auto text-xs text-gray-400">{{ changed().length }} cambio(s) sin guardar</span>
+      </header>
+      <div class="grid gap-4 sm:grid-cols-3">
+        <app-ui-input label="Etiqueta del semestre" placeholder="2026-II" icon="material-symbols:badge"
+          hint="Formato AAAA-I / AAAA-II" [ngModel]="form().semester_label"
+          (ngModelChange)="patch({ semester_label: $event })" />
+        <label class="block space-y-1">
+          <span class="text-sm font-medium text-gray-700">Inicio del semestre</span>
+          <input type="date" [ngModel]="form().semester_start"
+            (ngModelChange)="patch({ semester_start: $event })"
+            class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+          <span class="block text-[13px] text-gray-400">Antes de esta fecha el scheduler no abre sesiones.</span>
+        </label>
+        <label class="block space-y-1">
+          <span class="text-sm font-medium text-gray-700">Fin del semestre</span>
+          <input type="date" [ngModel]="form().semester_end"
+            (ngModelChange)="patch({ semester_end: $event })"
+            class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+          <span class="block text-[13px] text-gray-400">Déjalo vacío para no limitar el semestre.</span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Horario y ventana de marca (R2/R3) -->
+    <section class="rounded-xl border border-gray-200 bg-white p-5">
+      <header class="mb-4 flex items-center gap-2">
+        <iconify-icon icon="material-symbols:schedule" width="20" class="text-(--fareas-primary)"></iconify-icon>
+        <h2 class="text-sm font-semibold text-gray-900">Bloques y ventana de marca</h2>
+      </header>
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <label class="block space-y-1">
+          <span class="text-sm font-medium text-gray-700">Duración de bloque</span>
+          <p-select class="w-full" appendTo="body" [options]="blockMinutesOptions" optionLabel="label"
+            optionValue="value" [ngModel]="form().block_minutes"
+            (ngModelChange)="patch({ block_minutes: $event })" />
+          <span class="block text-[13px] text-gray-400">Sugerencia usada al crear bloques (1 h o 2 h).</span>
+        </label>
+        <label class="block space-y-1">
+          <span class="text-sm font-medium text-gray-700">Tolerancia de tardanza</span>
+          <p-select class="w-full" appendTo="body" [options]="toleranceOptions" optionLabel="label"
+            optionValue="value" [ngModel]="form().late_tolerance_minutes"
+            (ngModelChange)="patch({ late_tolerance_minutes: $event })" />
+          <span class="block text-[13px] text-gray-400">Pasado este tiempo, la marca es tardanza.</span>
+        </label>
+        <label class="block space-y-1">
+          <span class="text-sm font-medium text-gray-700">Apertura anticipada</span>
+          <p-select class="w-full" appendTo="body" [options]="earlyOpenOptions" optionLabel="label"
+            optionValue="value" [ngModel]="form().early_open_minutes"
+            (ngModelChange)="patch({ early_open_minutes: $event })" />
+          <span class="block text-[13px] text-gray-400">Cuánto antes del bloque se aceptan marcas (R2/R3).</span>
+        </label>
+      </div>
+      <div class="mt-4 grid gap-4 sm:grid-cols-2">
+        <label class="block space-y-1">
+          <span class="text-sm font-medium text-gray-700">Ventana de marca: inicio</span>
+          <input type="time" [ngModel]="form().attendance_hour_start"
+            (ngModelChange)="patch({ attendance_hour_start: $event })"
+            class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm tabular-nums focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+        </label>
+        <label class="block space-y-1">
+          <span class="text-sm font-medium text-gray-700">Ventana de marca: fin</span>
+          <input type="time" [ngModel]="form().attendance_hour_end"
+            (ngModelChange)="patch({ attendance_hour_end: $event })"
+            class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm tabular-nums focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+          <span class="block text-[13px] text-gray-400">Fuera de esta ventana las cámaras no registran marcas.</span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Rectificación (R11) -->
+    <section class="rounded-xl border border-gray-200 bg-white p-5">
+      <header class="mb-4 flex items-center gap-2">
+        <iconify-icon icon="material-symbols:history" width="20" class="text-(--fareas-primary)"></iconify-icon>
+        <h2 class="text-sm font-semibold text-gray-900">Rectificación docente</h2>
+      </header>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <label class="block space-y-1">
+          <span class="text-sm font-medium text-gray-700">Plazo de rectificación</span>
+          <p-select class="w-full" appendTo="body" [options]="rectifyOptions" optionLabel="label"
+            optionValue="value" [ngModel]="form().rectify_days"
+            (ngModelChange)="patch({ rectify_days: $event })" />
+          <span class="block text-[13px] text-gray-400">
+            El docente recibe 403 si rectifica más allá del plazo; el admin no tiene límite.
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <!-- DPI y reconocimiento facial (R7) -->
+    <section class="rounded-xl border border-gray-200 bg-white p-5">
+      <header class="mb-4 flex items-center gap-2">
+        <iconify-icon icon="material-symbols:notification-important-outline" width="20" class="text-(--fareas-primary)"></iconify-icon>
+        <h2 class="text-sm font-semibold text-gray-900">Alertas DPI y reconocimiento facial</h2>
+      </header>
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <label class="block space-y-1">
+          <span class="text-sm font-medium text-gray-700">Mínimo de sesiones</span>
+          <p-select class="w-full" appendTo="body" [options]="minSessionsOptions" optionLabel="label"
+            optionValue="value" [ngModel]="form().dpi_min_sessions"
+            (ngModelChange)="patch({ dpi_min_sessions: $event })" />
+          <span class="block text-[13px] text-gray-400">Antes de enviar correos de alerta (R7).</span>
+        </label>
+        <app-ui-input label="Umbral facial" type="number" hint="0.30 – 1.00 (recomendado 0.55)"
+          [ngModel]="form().face_match_threshold"
+          (ngModelChange)="patch({ face_match_threshold: +$event })" />
+        <app-ui-input label="Alerta DPI (%)" type="number" hint="Aviso preventivo (ej. 20)"
+          [ngModel]="form().dpi_alert_percent"
+          (ngModelChange)="patch({ dpi_alert_percent: +$event })" />
+        <app-ui-input label="Límite DPI (%)" type="number" hint="Inhabilitación por inasistencia (ej. 30)"
+          [ngModel]="form().dpi_limit_percent"
+          (ngModelChange)="patch({ dpi_limit_percent: +$event })" />
+      </div>
+      @if (form().dpi_alert_percent >= form().dpi_limit_percent) {
+        <p class="mt-3 text-[13px] text-amber-700">
+          La alerta preventiva debe ser menor que el límite: si el límite es {{ form().dpi_limit_percent }} %,
+          la alerta debe ser menor a ese valor.
+        </p>
+      }
+    </section>
+  </div>
+
+  <div class="mt-4 flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
+    <p class="text-xs text-gray-500">
+      Última actualización: {{ updatedAt() ?? 'sin registro' }}
+    </p>
+    <div class="flex items-center gap-2">
+      @if (changed().length > 0) {
+        <app-ui-button variant="ghost" [disabled]="saving()" (click)="restore()">Descartar</app-ui-button>
+      }
+      <app-ui-button icon="material-symbols:save" [loading]="saving()" [disabled]="!canSave()"
+        (click)="save()">
+        Guardar cambios
+      </app-ui-button>
+    </div>
+  </div>
+}

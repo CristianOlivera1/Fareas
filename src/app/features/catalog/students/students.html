@@ -7,8 +7,7 @@
 </app-page-header>
 
 <div class="mb-4 flex flex-wrap items-center gap-3">
-  <iconify-icon icon="material-symbols:search" class="text-gray-400" width="20"></iconify-icon>
-  <input pInputText class="w-64" placeholder="Nombre, correo o código…"
+  <app-ui-input class="w-full sm:w-64" icon="material-symbols:search" placeholder="Nombre, correo o código…"
     [ngModel]="q()" (ngModelChange)="onSearch($event)" />
   <p-select class="w-44" appendTo="body" [options]="ciclos" placeholder="Todos los ciclos"
     showClear [ngModel]="semester()" (ngModelChange)="onSemester($event)" />
