@@ -7,7 +7,7 @@ Facultad de Informática, UNAMBA (Abancay, Apurímac).
 - Plan de implementación: `../PLAN-BACKEND.md`
 
 ## Stack (todo nativo en Windows, sin Docker)
-
+- **Python 13.13.14 o 13.13.15** 
 - **FastAPI + Uvicorn** (Python 3.13, entrypoint con `fastapi` CLI)
 - **PostgreSQL 17** (instalador oficial EDB) + **asyncpg** + **SQLModel**
 - **ONNX Runtime (CPU)**: SCRFD `det_10g.onnx` (detección) + ArcFace `w600k_r50.onnx` (embeddings 512-d, pack buffalo_l)
@@ -85,6 +85,8 @@ python -m venv .venv
 .venv\Scripts\activate
 
 pip install -r requirements.txt
+
+pip install "fastapi[standard]"
 
 copy .env.example .env 
 

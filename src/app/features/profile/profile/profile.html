@@ -1,0 +1,98 @@
+<app-page-header title="Mi perfil" subtitle="Información de tu cuenta y seguridad">
+  <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" [loading]="loading()" (click)="refresh()">
+    Actualizar
+  </app-ui-button>
+</app-page-header>
+
+<div class="grid gap-4 xl:grid-cols-2">
+  <section class="min-w-0 rounded-2xl border border-gray-100 bg-white p-5">
+    <h2 class="text-sm font-semibold text-gray-900">Datos personales</h2>
+    <p class="mt-0.5 text-xs text-gray-500">Tu información de cuenta registrada en el sistema.</p>
+
+    @if (loadError()) {
+      <app-ui-alert variant="danger" title="No se pudo cargar tu cuenta" class="mt-4 block">
+        {{ loadError() }}
+      </app-ui-alert>
+    }
+
+    @if (user(); as u) {
+      <div class="mt-4 flex items-center gap-3">
+        <div class="w-12 h-12 rounded-full bg-(--fareas-primary) text-white text-base font-bold flex items-center justify-center shrink-0">
+          {{ auth.userInitials() }}
+        </div>
+        <div class="min-w-0">
+          <p class="truncate text-base font-semibold text-gray-900">{{ u.full_name }}</p>
+          <p class="truncate text-sm text-gray-500">{{ u.email }}</p>
+        </div>
+        <span
+          class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-(--fareas-canvas) px-2.5 py-1 text-xs font-medium text-(--fareas-primary)">
+          {{ roleLabel() }}
+        </span>
+      </div>
+
+      @if (u.must_change_password) {
+        <app-ui-alert variant="warning" title="Contraseña temporal" class="mt-4 block">
+          Tu contraseña es temporal, te recomendamos actualizarla cuanto antes.
+        </app-ui-alert>
+      }
+
+      <dl class="mt-5 divide-y divide-gray-100 border-t border-gray-100">
+        <div class="flex items-center justify-between gap-4 py-3">
+          <dt class="text-sm text-gray-500">Nombre completo</dt>
+          <dd class="truncate text-sm font-medium text-gray-900">{{ u.full_name }}</dd>
+        </div>
+        <div class="flex items-center justify-between gap-4 py-3">
+          <dt class="text-sm text-gray-500">Correo institucional</dt>
+          <dd class="truncate text-sm font-medium text-gray-900">{{ u.email }}</dd>
+        </div>
+        <div class="flex items-center justify-between gap-4 py-3">
+          <dt class="text-sm text-gray-500">Rol</dt>
+          <dd class="truncate text-sm font-medium text-gray-900">{{ roleLabel() }}</dd>
+        </div>
+        <div class="flex items-center justify-between gap-4 py-3">
+          <dt class="text-sm text-gray-500">ID de cuenta</dt>
+          <dd class="text-sm font-medium text-gray-900 tabular-nums">{{ u.id }}</dd>
+        </div>
+      </dl>
+    }
+  </section>
+
+  <section class="min-w-0 rounded-2xl border border-gray-100 bg-white p-5">
+    <h2 class="text-sm font-semibold text-gray-900">Cambiar contraseña</h2>
+    <p class="mt-0.5 text-xs text-gray-500">Usa al menos 8 caracteres con letras y números.</p>
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" class="mt-4 space-y-4">
+      @if (errorMessage()) {
+        <app-ui-alert variant="danger" title="No se pudo actualizar" class="block">
+          {{ errorMessage() }}
+        </app-ui-alert>
+      }
+      @if (successMessage()) {
+        <app-ui-alert variant="success" title="Contraseña actualizada" class="block">
+          {{ successMessage() }}
+        </app-ui-alert>
+      }
+
+      <app-ui-input formControlName="current_password" label="Contraseña actual" type="password"
+        icon="material-symbols:lock-outline" placeholder="••••••••" autocomplete="current-password"
+        [showPasswordToggle]="true" [error]="fieldError('current_password')" />
+
+      <app-ui-input formControlName="new_password" label="Nueva contraseña" type="password"
+        icon="material-symbols:lock-reset" placeholder="Mínimo 8 caracteres" autocomplete="new-password"
+        [showPasswordToggle]="true" [error]="fieldError('new_password')" />
+
+      <app-ui-input formControlName="confirm_password" label="Confirmar nueva contraseña" type="password"
+        icon="material-symbols:lock-check-outline" placeholder="Repite la nueva contraseña" autocomplete="new-password"
+        [showPasswordToggle]="true" [error]="fieldError('confirm_password')" />
+
+      <app-ui-button type="submit" variant="primary" [fullWidth]="true" [loading]="isSubmitting()"
+        [disabled]="form.invalid || isSubmitting()">
+        @if (isSubmitting()) {
+          Actualizando...
+        } @else {
+          Actualizar contraseña
+        }
+      </app-ui-button>
+    </form>
+  </section>
+</div>
