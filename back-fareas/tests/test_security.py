@@ -4,10 +4,7 @@
 - is_active=FALSE: el token muere al instante (401).
 - rtsp_url: enmascarada en listados; completa solo en GET /devices/{id}.
 """
-import pytest
-from sqlmodel import delete, select
-
-from app.tables import AppUser, Device, Room
+from app.tables import Device, Room
 
 API = "/api/v1"
 
@@ -35,10 +32,14 @@ async def test_must_change_password_bloquea_todo_lo_demas(client, temp_student):
     assert r.status_code == 403
     assert r.json()["detail"]["code"] == "must_change_password"
 
-    # Cambiar la clave desbloquea sin volver a iniciar sesión
+    # Cambiar la clave desbloquea sin volver a iniciar sesión. El token viejo
+    # queda invalidado (token_version): hay que usar el que devuelve la API.
     r = await client.post(f"{API}/auth/change-password", headers=headers,
                           json={"current_password": CLAVE_TEMP, "new_password": CLAVE_NUEVA})
     assert r.status_code == 200, r.text
+    new_token = r.json()["access_token"]
+    assert new_token
+    headers = {"Authorization": f"Bearer {new_token}"}
     r = await client.get(f"{API}/attendance/me", headers=headers)
     assert r.status_code == 200, r.text
 

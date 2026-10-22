@@ -44,6 +44,12 @@ async def get_current_user(
     user = (await db.exec(select(AppUser).where(AppUser.id == payload.user_id))).first()
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario inexistente o inactivo")
+    if payload.token_version != user.token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sesión invalidada por un cambio de contraseña. Inicia sesión nuevamente.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     request.state.user = user
     return user
 

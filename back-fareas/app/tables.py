@@ -114,6 +114,7 @@ class AppUser(SQLModel, table=True):
     must_change_password: bool = True  # RF-11: clave temporal obliga a cambiar
     semester: int | None = None  # ciclo del estudiante
     is_active: bool = True
+    token_version: int = 0  # invalida JWT viejos tras cambiar la contraseña
     face_consent_at: datetime | None = None  # R13 (Ley 29733): consentimiento biométrico
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
     updated_at: datetime | None = Field(default=None, **server_now_kwargs())

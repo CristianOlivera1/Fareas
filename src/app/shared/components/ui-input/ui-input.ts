@@ -37,6 +37,9 @@ export class UiInput implements ControlValueAccessor {
   readonly showPasswordToggle = input(false);
   readonly required = input(false);
   readonly mono = input(false);
+  readonly maxlength = input<number | null>(null);
+  readonly inputmode = input<string | null>(null);
+  readonly ariaLabel = input<string | null>(null);
 
   readonly value = signal('');
   readonly disabled = signal(false);

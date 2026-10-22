@@ -18,6 +18,7 @@
 | Búsqueda vectorial validada | Benchmark NumPy: **0.23 ms** por búsqueda contra 5000 alumnos (la opción sin pgvector sobra para la facultad) |
 | Configuración | `.env` con `postgresql+asyncpg://postgres:***@localhost:5432/fareas`, JWT, SMTP, umbral facial 0.75, `DEVICE_TOKEN_SECRET` |
 | **Bloque 1 completado** | `app/main.py` + `pyproject.toml` (entrypoint `fastapi dev`), `database.py` (SQLModel async), `core/deps.py`, `tables.py` (14 entidades SQLModel con enums nativos), scripts `test_rtsp.py` y `simulate_esp32.py`. Verificado con servidor uvicorn real: `GET /api/v1/health` → `{"database":"ok","users":9}`. Ruff limpio |
+| **Cambio de contraseña con OTP (2026-10-22)** | Flujo de 3 pasos (`/auth/change-password/otp` → `/otp/verify` → `/change-password`), servicio `services/otp.py` con propósito + cooldown/TTL/intentos, `token_version` para invalidar JWT y migración `db/003_password_otp.sql`. Suite: **92 passed** (sin `test_vision.py`) |
 
 ### Decisiones definitivas
 
@@ -140,17 +141,53 @@ back-fareas/
 - Nota: la contraseña demo de todos es `12345678` (argon2id). El login del frontend seguirá aceptando `admin/docente/estudiante + 123456` hasta conectar el backend (Bloque 3); después se usan los usuarios de la BD.
 
 ### Bloque 3 - Autenticación (1 día) - RF-01, RF-11, RF-12 - **✅ COMPLETADO Y VERIFICADO**
-- [x] `core/security.py`: argon2 (pwdlib, formato PHC igual al seed) + JWT HS256 (`sub`, `role`, 120 min).
-- [x] `routers/auth.py`: `POST /auth/login` (por email **o** código de matrícula), `GET /auth/me`, `POST /auth/change-password` (apaga `must_change_password`, RF-11), `POST /auth/recover` + `/verify` + `/reset` (OTP 6 dígitos, TTL 10 min, máx. 5 intentos, respuesta uniforme que no revela si el correo existe - RF-12).
-- [x] `core/deps.py`: `CurrentUser` (Bearer) y `RequireRole(...)` para los routers del Bloque 4 (RF-01).
-- [x] `services/emailer.py`: aiosmtplib con `MAIL_ENABLED=false` en desarrollo (registra el contenido sin enviar; ⚠️ rota la clave del Gmail, §6).
-- [x] `tests/test_auth.py`: **7/7 tests** contra la BD `fareas` real (login, /me, cambio de clave, OTP completo, reset sin verificar OTP rechazado), con usuario temporal creado y limpiado por fixtures.
+- [x] `core/security.py`: argon2 (pwdlib, formato PHC igual al seed) + JWT HS256 (`sub`, `role`, `ver`, 120 min).
+- [x] `routers/auth.py`: `POST /auth/login` (por email **o** código de matrícula), `GET /auth/me`, `POST /auth/change-password` (apaga `must_change_password`, RF-11), `POST /auth/recover` + `/verify` + `/reset` (OTP 6 dígitos, TTL 10 min, máx. 5 intentos, respuesta uniforme que no revela si el correo existe - RF-12). **2026-10-22:** cambio voluntario con OTP (`/change-password/otp` + `/otp/verify`) y `token_version`.
+- [x] `core/deps.py`: `CurrentUser` (Bearer), `CurrentUserPending` (R14) y `RequireRole(...)` para los routers del Bloque 4 (RF-01). Verifica `ver` contra `app_user.token_version`.
+- [x] `services/emailer.py`: aiosmtplib con `MAIL_ENABLED=false` en desarrollo (registra el contenido sin enviar; ⚠️ rota la clave del Gmail, §6). OTP con propósito (`recover`/`change_password`) y aviso de contraseña actualizada.
+- [x] `tests/test_auth.py`: **12/12 tests** contra la BD `fareas` real (login, /me, cambio forzado, cambio voluntario con OTP, cooldown, expiración, máximo de intentos, invalidación de token, recuperación completa, reset sin verificar OTP rechazado), con usuario temporal creado y limpiado por fixtures.
 
 **Lecciones del bloque (documentadas para los siguientes):**
 1. Las columnas `DEFAULT NOW()` deben declararse con `server_default=text("now()")` en `tables.py`, o el ORM envía NULL explícito y viola el NOT NULL (pisaría el default de la BD).
 2. En pruebas, TODO en un solo event loop: `httpx.AsyncClient` + `ASGITransport`. Mezclar `TestClient` con sesiones del pool en otro loop corrompe asyncpg (`Event loop is closed`); el engine se hace `dispose()` tras cada test (fixture autouse).
 
 - **Entregable:** login de los 3 roles contra la BD verificado con servidor uvicorn real (token JWT emitido y `/auth/me` respondiendo) ✔
+
+### Bloque 3b - Cambio de contraseña con OTP (2026-10-22) - **✅ COMPLETADO Y VERIFICADO**
+> Objetivo: cambiar la clave desde "Mi perfil" sin depender de un enlace, usando
+> el correo institucional como segundo factor. Todos los roles usan el mismo flujo.
+
+**Flujo (RF-11 + RF-12):**
+1. `POST /auth/change-password/otp` `{current_password}` — valida la clave actual,
+   aplica cooldown de 60 s y envía un OTP de 6 dígitos. Devuelve el correo
+   enmascarado (`ju*****ez@unamba.edu.pe`), `expires_in=600` y `resend_in=60`.
+2. `POST /auth/change-password/otp/verify` `{code}` — valida el código y lo marca
+   `verified`. Un código incorrecto consume un intento (máx. 5).
+3. `POST /auth/change-password` `{current_password, new_password}` — exige el OTP
+   verificado, lo **consume** (un solo uso) y actualiza la contraseña.
+
+**Decisiones clave:**
+- El OTP **no reemplaza** la contraseña actual: la petición final vuelve a exigirla.
+- La clave temporal (`must_change_password=true`) se cambia **sin OTP** en el
+  primer login (el usuario acaba de recibirla y el guard lo obliga a cambiarla).
+- `services/otp.py` centraliza TTL (10 min), cooldown (60 s), máximo de intentos
+  (5), hash argon2id del código y binding por `(user_id, purpose)`; el store es
+  en memoria (mismo trade-off académico que el resto del proyecto, sin Redis).
+- `app_user.token_version` (`INTEGER NOT NULL DEFAULT 0`) viaja como claim `ver`.
+  Al cambiar/restablecer se incrementa: los JWT viejos responden 401 y la
+  respuesta entrega un `access_token` nuevo; el frontend lo persiste para no
+  perder la sesión actual.
+- Se audita `password_change_otp`, `password_changed` y `password_reset` (RF-32)
+  y se envía `send_password_changed_notice` al correo institucional.
+
+**BD:** `db/001_schema.sql` actualizado (columna `token_version`) + ALTER
+re-ejecutable `db/003_password_otp.sql` aplicado a la BD local `fareas`.
+
+**Tests:** `tests/test_auth.py` (12/12) cubre el flujo voluntario completo,
+cooldown, expiración, máximo de intentos, OTP incorrecto, consumo único, token
+viejo inválido, token nuevo válido, cambio forzado sin OTP y recuperación
+completa; `tests/test_security.py` usa el token nuevo tras el cambio. Suite
+completa sin `test_vision.py`: **92 passed**.
 
 ### Bloque 4 - Catálogo académico (1–2 días) - RF-02…RF-06, RF-09, RF-10, RF-32, RF-34, RF-35 - **✅ COMPLETADO Y VERIFICADO**
 - [x] CRUDs de aulas (`/rooms`), dispositivos (`/devices`, `/devices/status` público RF-35), docentes (`/teachers`) y estudiantes (`/students`), con paginación (`?page=&page_size=&q=`).
