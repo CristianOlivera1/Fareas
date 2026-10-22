@@ -48,6 +48,26 @@ async def _reset_login_rate_limit():
     _login_attempts.clear()
 
 
+@pytest.fixture(autouse=True)
+async def _reset_otp_store():
+    """El store de OTP vive en memoria: cada test arranca sin códigos previos."""
+    from app.services import otp
+
+    otp.clear()
+    yield
+    otp.clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_smtp(monkeypatch: pytest.MonkeyPatch):
+    """Los tests no deben depender de un SMTP real ni esperar timeouts."""
+    async def _noop(*_args, **_kwargs) -> bool:
+        return False
+
+    monkeypatch.setattr("app.routers.auth.send_otp", _noop)
+    monkeypatch.setattr("app.routers.auth.send_password_changed_notice", _noop)
+
+
 @pytest.fixture
 def app_instance() -> FastAPI:
     return create_app()
@@ -72,7 +92,11 @@ async def db_session() -> AsyncGenerator[SQLModelAsyncSession]:
 
 
 async def _cleanup(db: SQLModelAsyncSession) -> None:
-    await db.exec(delete(AppUser).where(AppUser.email == TEMP_EMAIL))  # type: ignore[arg-type]
+    """Borra el usuario temporal y su auditoría (FK actor_id sin CASCADE)."""
+    user = (await db.exec(select(AppUser).where(AppUser.email == TEMP_EMAIL))).first()
+    if user is not None:
+        await db.exec(delete(AuditLog).where(AuditLog.actor_id == user.id))  # type: ignore[arg-type]
+        await db.delete(user)
     await db.commit()
 
 
@@ -95,7 +119,11 @@ async def temp_user(db_session: SQLModelAsyncSession) -> AsyncGenerator[AppUser]
 
 
 async def _cleanup_student(db: SQLModelAsyncSession) -> None:
-    await db.exec(delete(AppUser).where(AppUser.email == TEMP_STUDENT_EMAIL))  # type: ignore[arg-type]
+    """Borra el estudiante temporal y su auditoría (FK actor_id sin CASCADE)."""
+    user = (await db.exec(select(AppUser).where(AppUser.email == TEMP_STUDENT_EMAIL))).first()
+    if user is not None:
+        await db.exec(delete(AuditLog).where(AuditLog.actor_id == user.id))  # type: ignore[arg-type]
+        await db.delete(user)
     await db.commit()
 
 

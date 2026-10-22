@@ -156,25 +156,75 @@ async def send_temporary_credentials(to: str, full_name: str, username: str, tem
     return await send_email(to, subject, plain, html_body)
 
 
-async def send_otp(to: str, code: str) -> bool:
-    """RF-12: código de 6 dígitos para restaurar contraseña."""
-    subject = "Fareas UNAMBA - Código de recuperación"
-    safe_code = html.escape(code)
+async def send_otp(to: str, code: str, purpose: str = "recover") -> bool:
+    """Código de 6 dígitos con propósito explícito.
 
+    ``recover``: restaurar una contraseña olvidada (RF-12).
+    ``change_password``: confirmar un cambio desde "Mi perfil" (segundo factor).
+    """
+    safe_code = html.escape(code)
+    if purpose == "change_password":
+        subject = "Fareas UNAMBA - Código para cambiar tu contraseña"
+        plain = (
+            "Tu código para confirmar el cambio de contraseña es:\n\n"
+            f"    {code}\n\n"
+            "Caduca en 10 minutos. Si no solicitaste el cambio, ignora este mensaje "
+            "y tu contraseña actual seguirá vigente.\n\n"
+            "- Sistema Fareas, Facultad de Informática UNAMBA"
+        )
+        content_html = (
+            "<p style=\"margin:0;\">Usá este código para confirmar el cambio de "
+            "contraseña de tu cuenta:</p>"
+            f"{_code_box(safe_code)}"
+            "<p style=\"margin:0;\">Caduca en <strong>10 minutos</strong>. Si no "
+            "solicitaste el cambio, ignora este mensaje.</p>"
+        )
+        title = "Código para cambiar tu contraseña"
+    else:
+        subject = "Fareas UNAMBA - Código de recuperación"
+        plain = (
+            "Tu código de recuperación de contraseña es:\n\n"
+            f"    {code}\n\n"
+            "Caduca en 10 minutos. Si no solicitaste el código, ignora este mensaje.\n\n"
+            "- Sistema Fareas, Facultad de Informática UNAMBA"
+        )
+        content_html = (
+            "<p style=\"margin:0;\">Usá este código para restaurar tu contraseña:</p>"
+            f"{_code_box(safe_code)}"
+            "<p style=\"margin:0;\">Caduca en <strong>10 minutos</strong>.</p>"
+        )
+        title = "Código de recuperación"
+
+    html_body = _wrap(
+        preheader=f"Tu código es {safe_code}",
+        title=title,
+        content_html=content_html,
+    )
+    return await send_email(to, subject, plain, html_body)
+
+
+async def send_password_changed_notice(to: str, full_name: str) -> bool:
+    """Aviso de seguridad posterior a un cambio/restablecimiento de contraseña."""
+    subject = "Fareas UNAMBA - Tu contraseña fue actualizada"
+    safe_name = html.escape(full_name)
     plain = (
-        "Tu código de recuperación de contraseña es:\n\n"
-        f"    {code}\n\n"
-        "Caduca en 10 minutos. Si no solicitaste el código, ignora este mensaje.\n\n"
+        f"Hola {full_name},\n\n"
+        "La contraseña de tu cuenta Fareas se actualizó correctamente.\n\n"
+        "Si no fuiste tú, restablece tu contraseña de inmediato con la opción "
+        "'Olvidé mi contraseña' e informa al administrador.\n\n"
         "- Sistema Fareas, Facultad de Informática UNAMBA"
     )
     content_html = (
-        "<p style=\"margin:0;\">Usá este código para restaurar tu contraseña:</p>"
-        f"{_code_box(safe_code)}"
-        "<p style=\"margin:0;\">Caduca en <strong>10 minutos</strong>.</p>"
+        f"<p style=\"margin:0;\">Hola <strong>{safe_name}</strong>,</p>"
+        "<p style=\"margin:12px 0 0;\">La contraseña de tu cuenta Fareas se "
+        "actualizó correctamente.</p>"
+        "<p style=\"margin:16px 0 0;\">Si no fuiste tú, restablece tu contraseña "
+        "de inmediato con la opción <strong>Olvidé mi contraseña</strong> e "
+        "informa al administrador.</p>"
     )
     html_body = _wrap(
-        preheader=f"Tu código es {safe_code}",
-        title="Código de recuperación",
+        preheader="Tu contraseña fue actualizada",
+        title="Contraseña actualizada",
         content_html=content_html,
     )
     return await send_email(to, subject, plain, html_body)

@@ -33,7 +33,7 @@ back-fareas/
 │   ├── services/             # lógica de negocio (routers delgados)
 │   │   ├── accounts.py       # alta docente/estudiante + clave temporal (RF-02/03/08)
 │   │   ├── audit.py          # bitácora RF-32 dentro de la transacción
-│   │   ├── emailer.py        # credenciales (RF-08) y OTP (RF-12) vía SMTP
+│   │   ├── emailer.py        # credenciales (RF-08), OTP de recuperación/cambio (RF-12) y aviso de clave actualizada
 │   │   ├── notifications.py  # alertas DPI al cierre de sesión (RF-24)
 │   │   ├── errors.py         # DomainError/ConflictError/NotFoundError → handlers HTTP
 │   │   ├── attendance_engine.py  # resolver sesión, marca única, cierre RF-26, DPI RF-24
@@ -43,7 +43,7 @@ back-fareas/
 │   │   ├── ocr_schedule.py   # PDF de matrícula → bloques horarios (RF-07, Bloque 9)
 │   │   └── exports.py        # reportes Excel/PDF con encabezado institucional (RF-16)
 │   └── routers/
-│       ├── auth.py           # login JWT (campo email), /me, cambio de clave, OTP (RF-11/RF-12)
+│       ├── auth.py           # login JWT (campo email), /me, cambio de clave con OTP (RF-11/RF-12)
 │       ├── audit.py          # GET /audit-log (RF-32, solo admin, paginado)
 │       ├── calendar_admin.py # feriados RF-09, justificaciones RF-10, settings RF-34
 │       ├── catalog.py        # aulas, dispositivos, docentes, estudiantes (RF-02…RF-05, RF-35)
@@ -116,6 +116,10 @@ esquema se mantiene a mano, pero con estas reglas.
    Debe ser **re-ejecutable** (`ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT
    EXISTS`, bloques `DO $$ … EXCEPTION WHEN duplicate_object THEN NULL; END $$`)
    y nunca recrea ni borra datos.
+   > **ALTER vigente (2026-10-22):** `db/003_password_otp.sql` agrega
+   > `app_user.token_version INTEGER NOT NULL DEFAULT 0` (invalida JWT al
+   > cambiar/restablecer la contraseña). Se borra cuando todo el equipo lo haya
+   > aplicado; su contenido ya está en `001_schema.sql`.
 4. **Cuando todo el equipo ya aplicó el ALTER, SE BORRA** (su contenido ya vive
    en `001`) y se menciona en el commit. Así: un dev nuevo instala con 2
    scripts, y una BD vieja se pone al día con el ALTER pendiente + esos 2.
@@ -163,6 +167,29 @@ El campo `email` acepta también el código de matrícula (p. ej. `"email": "221
 Endpoints de auth: `POST /auth/login` · `GET /auth/me` · `POST /auth/change-password`
 · `POST /auth/recover` → `/verify` → `/reset` (OTP 6 dígitos, RF-12).
 
+**Cambio de contraseña con OTP (2026-10-22, RF-11/RF-12):**
+
+1. `POST /auth/change-password/otp` `{current_password}` — valida la clave actual
+   y envía un código de 6 dígitos al correo institucional. Responde el correo
+   **enmascarado**, `expires_in` (600 s) y `resend_in` (60 s). Cooldown de 60 s.
+2. `POST /auth/change-password/otp/verify` `{code}` — valida el código; el OTP
+   queda marcado como verificado (`verified`).
+3. `POST /auth/change-password` `{current_password, new_password}` — exige y
+   **consume** el OTP verificado, actualiza la clave y devuelve `access_token`.
+
+Reglas del flujo:
+
+- El OTP es un **segundo factor**: no reemplaza la contraseña actual.
+- TTL 10 min, máximo 5 intentos, un solo uso y binding por `(user_id, purpose)`:
+  un código de recuperación no sirve para el cambio voluntario (ni al revés).
+- La clave temporal (`must_change_password=true`) se cambia **sin OTP** en el
+  primer login: el usuario acaba de recibirla y el guard lo obliga a cambiarla.
+- Al cambiar/restablecer se incrementa `app_user.token_version` (`ver` en el JWT):
+  los tokens viejos quedan inválidos y la respuesta entrega uno nuevo para no
+  cerrar la sesión actual. El frontend lo persiste en `AuthService.changePassword`.
+- Se audita `password_change_otp`, `password_changed` y `password_reset`
+  (RF-32) y se envía un aviso de seguridad por correo.
+
 ### Endpoints del Bloque 4 - catálogo académico (RF-02…RF-10, RF-22, RF-32, RF-34, RF-35)
 
 - **Aulas:** `GET/POST /rooms` · `PATCH /rooms/{id}` - paginado con `?page=&page_size=&q=`
@@ -206,8 +233,12 @@ cd back-fareas
 .venv/Scripts/python -m pytest tests/ -v
 ```
 
-7 tests de autenticación corren contra la BD `fareas` real usando un usuario
-temporal que se crea y elimina solo (no toca los datos del seed).
+12 tests de autenticación corren contra la BD `fareas` real usando un usuario
+temporal que se crea y elimina solo (no toca los datos del seed). Cubren login
+con clave temporal, rate limit, `/me`, cambio forzado sin OTP, cambio voluntario
+con OTP (cooldown, expiración, máximo de intentos e invalidación del token
+viejo), recuperación completa y reset sin verificar. La suite completa (sin
+`test_vision.py`, que requiere el MP4 demo) queda en **92 passed**.
 
 ### Bloque 6 — motor de asistencia (RF-21…RF-26)
 
@@ -308,7 +339,9 @@ el admin con `PATCH /settings`).
 - **Rectificación (R11):** el docente solo los últimos 7 días; el admin sin plazo.
 - **Seguridad (R14):** con clave temporal todo responde 403 `must_change_password`
   salvo `/auth/me` y `/auth/change-password`; usuario inactivo → 401 al instante;
-  `rtsp_url` enmascarada en listados (completa en `GET /devices/{id}`).
+  `rtsp_url` enmascarada en listados (completa en `GET /devices/{id}`). Al
+  cambiar/restablecer la contraseña, `token_version` invalida los JWT viejos
+  (401) y la respuesta entrega uno nuevo.
 - **Biometría (R13, Ley 29733):** `POST /students/{id}/faces` exige `consent: true`;
   `DELETE /students/{id}/faces` borra embeddings y foto.
 - **Feriados (R12):** `POST /holidays/range` (rango, omite fines de semana) y

@@ -4,7 +4,10 @@ import { Router } from '@angular/router';
 import { Observable, catchError, map, of, tap, throwError } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import type {
+  ChangePasswordOtpRequest,
+  ChangePasswordOtpResponse,
   ChangePasswordRequest,
+  ChangePasswordResponse,
   LoginRequest,
   LoginResponse,
   MessageResponse,
@@ -12,6 +15,7 @@ import type {
   ResetPasswordRequest,
   SessionUser,
   UserOut,
+  VerifyChangePasswordOtpRequest,
   VerifyOtpRequest,
 } from '../../models/user';
 import type { RateLimitState } from '../../models/rate-limit-state';
@@ -92,17 +96,43 @@ export class AuthService {
     );
   }
 
-  changePassword(request: ChangePasswordRequest): Observable<MessageResponse> {
-    return this.http.post<MessageResponse>(`${this.api}/auth/change-password`, request).pipe(
-      tap(() => {
-        const current = this.session();
-        if (current) {
-          const updated = { ...current, must_change_password: false };
-          this.session.set(updated);
-          localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
-        }
-      }),
+  requestChangePasswordOtp(
+    request: ChangePasswordOtpRequest,
+  ): Observable<ChangePasswordOtpResponse> {
+    return this.http.post<ChangePasswordOtpResponse>(
+      `${this.api}/auth/change-password/otp`,
+      request,
     );
+  }
+
+  verifyChangePasswordOtp(
+    request: VerifyChangePasswordOtpRequest,
+  ): Observable<MessageResponse> {
+    return this.http.post<MessageResponse>(
+      `${this.api}/auth/change-password/otp/verify`,
+      request,
+    );
+  }
+
+  changePassword(request: ChangePasswordRequest): Observable<ChangePasswordResponse> {
+    return this.http
+      .post<ChangePasswordResponse>(`${this.api}/auth/change-password`, request)
+      .pipe(
+        tap((response) => {
+          // token_version cambió en el backend: sin este token nuevo, todas las
+          // peticiones posteriores responderían 401.
+          if (response.access_token) {
+            this.token.set(response.access_token);
+            localStorage.setItem(ACCESS_TOKEN_KEY, response.access_token);
+          }
+          const current = this.session();
+          if (current) {
+            const updated = { ...current, must_change_password: false };
+            this.session.set(updated);
+            localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
+          }
+        }),
+      );
   }
 
   recoverRequest(request: RecoverRequest): Observable<MessageResponse> {

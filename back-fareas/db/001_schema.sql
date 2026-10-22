@@ -76,7 +76,8 @@ CREATE TABLE app_user (
     is_active            BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at           TIMESTAMP    NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMP    NOT NULL DEFAULT NOW(),
-    face_consent_at      TIMESTAMP                        -- R13 (Ley 29733): consentimiento biométrico
+    face_consent_at      TIMESTAMP,                       -- R13 (Ley 29733): consentimiento biométrico
+    token_version        INTEGER      NOT NULL DEFAULT 0  -- invalida JWT al cambiar contraseña
 );
 -- R15: formatos de Perú. NOT VALID a propósito: no revalida los datos que ya
 -- existían (solo controla altas y ediciones nuevas).

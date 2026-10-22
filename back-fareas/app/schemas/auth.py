@@ -39,6 +39,36 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class ChangePasswordOtpRequest(BaseModel):
+    """Paso 1 del cambio voluntario: confirma la contraseña actual."""
+
+    current_password: str = Field(min_length=6, max_length=128)
+
+
+class ChangePasswordOtpResponse(BaseModel):
+    """Respuesta del paso 1: correo enmascarado + tiempos del OTP."""
+
+    message: str
+    email: str
+    expires_in: int
+    resend_in: int
+
+
+class VerifyChangePasswordOtpRequest(BaseModel):
+    """Paso 2: código de 6 dígitos enviado al correo institucional."""
+
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class ChangePasswordResponse(BaseModel):
+    """Respuesta del cambio. Incluye un token nuevo: ``token_version`` cambió
+    y el token usado para la petición queda invalidado (las demás sesiones
+    también), pero la sesión actual sigue viva."""
+
+    message: str
+    access_token: str | None = None
+
+
 class RecoverRequest(BaseModel):
     email: EmailStr
 
