@@ -9,11 +9,9 @@ import {
 
 export interface ScheduleEntry {
   readonly id: number | string;
-  /** 1=Lunes … 5=Viernes (isoweekday). */
   readonly weekday: number;
   readonly start_time: string;
   readonly end_time: string;
-  /** Define el COLOR de la celda: un curso = un color en toda la tabla. */
   readonly course_code: string;
   readonly course_name?: string | null;
   readonly group_code?: string | null;
@@ -24,9 +22,7 @@ export interface ScheduleEntry {
 interface Cell {
   readonly weekday: number;
   readonly entries: ScheduleEntry[];
-  /** Filas que ocupa la celda (1 = una hora). */
   readonly rowspan: number;
-  /** Ya está cubierta por el rowspan del bloque de arriba: no se pinta. */
   readonly covered: boolean;
 }
 
@@ -52,12 +48,8 @@ const TONOS = 8;
 export class ScheduleTable {
   readonly entries = input<readonly ScheduleEntry[]>([]);
   readonly days = input<readonly number[]>([1, 2, 3, 4, 5]);
-  /** Rango visible: la franja de clases de la facultad es 07:00–20:00 (RF-01).
-   * Se amplía solo si algún bloque cae fuera de ella. */
   readonly hourFrom = input(7);
   readonly hourTo = input(20);
-  /** Alto de UNA hora de la rejilla, en rem: lo comparten la fila y el alto de
-   * cada celda, para que un bloque de N horas ocupe N filas EXACTAS. */
   protected readonly horaRem = 4;
   readonly canEdit = input(false);
   readonly blockAdd = output<{ weekday: number; hour: number }>();
@@ -73,8 +65,6 @@ export class ScheduleTable {
     return DIAS[weekday - 1] ?? `Día ${weekday}`;
   }
 
-  /** Alto de la celda: sus N horas. Se aplica al `<td>` (no al contenido) para
-   * que el `h-full` de dentro resuelva de verdad contra la celda fusionada. */
   protected altoCelda(rowspan: number): number {
     return rowspan * this.horaRem;
   }
@@ -124,14 +114,6 @@ export class ScheduleTable {
     return rows;
   }
 
-  /**
-   * Celdas de un día: una por hora desde `inicio` hasta `fin`.
-   *
-   * Un bloque que dura N horas se pinta en su hora de inicio con `rowspan = N`
-   * y las N-1 horas siguientes salen `covered` (no se emiten). Si hay clases
-   * solapadas en el mismo día, todas se pintan apiladas en celdas de una hora:
-   * la tabla sigue siendo legible aunque el dato venga mal.
-   */
   private cellsDelDia(
     bloques: { e: ScheduleEntry; desde: number; hasta: number }[],
     inicio: number,

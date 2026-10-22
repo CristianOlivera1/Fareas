@@ -1,17 +1,3 @@
-"""Detector de rostros SCRFD (models/det_10g.onnx, pack buffalo_l).
-
-Implementación directa sobre onnxruntime de la decodificación del paper
-``Sample and Computation Redistribution for Efficient Face Detection``
-(SCRFD): 3 niveles FPN (strides 8/16/32), 2 anclas por celda; la red predice
-DISTANCIAS (l,t,r,b) desde el centro de cada ancla, ya multiplicadas por el
-stride hay que decodificarlas a cajas xyxy. Los 5 landmarks salen igual
-(distancia desde el centro) y son los que usa el embedder para alinear.
-
-Pre-procesado estilo insightface: RGB, 640x640, (pixel - mean) / std.
-Los dos detalles que hay que calibrar empíricamente (la exportación oficial
-no lo documenta): la normalización y si la salida de score ya trae sigmoide.
-Ambos se validaron contra el video real de prueba; ver notas en README.
-"""
 from dataclasses import dataclass
 
 import cv2
@@ -20,35 +6,29 @@ import onnxruntime as ort
 
 from app.ai.boxes import nms
 
-# Normalización del detector det_10g (misma familia que ArcFace: centrado en 127.5).
 DET_MEAN = 127.5
 DET_STD = 128.0
 
 STRIDES = (8, 16, 32)
-NUM_ANCHORS = 2  # anclas por celda en los modelos 10G
+NUM_ANCHORS = 2
 
 
 @dataclass(frozen=True)
 class Face:
-    """Rostro detectado en coordenadas del frame ORIGINAL."""
-
-    box: np.ndarray  # (4,) x1,y1,x2,y2
-    score: float  # confianza 0..1
-    kps: np.ndarray  # (5,2) ojos, nariz, comisuras - para alinear
-
+    box: np.ndarray
+    score: float
+    kps: np.ndarray
 
 class ScrfdDetector:
-    """Detector SCRFD sobre CPU. Un solo `detect()` por frame (2 fps basta)."""
-
     def __init__(self, model_path: str, input_size: tuple[int, int] = (640, 640), det_thresh: float = 0.5):
         opts = ort.SessionOptions()
-        opts.log_severity_level = 3  # silencia el banner de onnxruntime
+        opts.log_severity_level = 3
         self.session = ort.InferenceSession(model_path, opts, providers=["CPUExecutionProvider"])
         self.input_name = self.session.get_inputs()[0].name
         self.output_names = [o.name for o in self.session.get_outputs()]
         self.input_size = input_size
         self.det_thresh = det_thresh
-        self._score_is_logit: bool | None = None  # autodetectado en el primer forward
+        self._score_is_logit: bool | None = None
         infos = [(o.name, o.shape) for o in self.session.get_outputs()]
         scores_n = [n for n, sh in infos if self._last_dim(sh) == 1]
         bboxes_n = [n for n, sh in infos if self._last_dim(sh) == 4]
@@ -63,27 +43,24 @@ class ScrfdDetector:
             (g, s) for g, s in zip(groups, STRIDES[:n_levels], strict=True)
         ]
 
-
     def _preprocess(self, frame: np.ndarray) -> np.ndarray:
         img = cv2.resize(frame, self.input_size, interpolation=cv2.INTER_LINEAR)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32)
         img = (img - DET_MEAN) / DET_STD
-        return np.transpose(img, (2, 0, 1))[None]  # (1,3,H,W)
+        return np.transpose(img, (2, 0, 1))[None]
 
     def _sigmoid(self, x: np.ndarray) -> np.ndarray:
         return 1.0 / (1.0 + np.exp(-x))
 
     @staticmethod
     def _last_dim(shape: object) -> int:
-        """Última dimensión declarada del output (-1 si es dinámica)."""
         try:
-            last = list(shape)[-1]  # type: ignore[arg-type]
+            last = list(shape)[-1]
             return int(last)
         except (TypeError, ValueError, IndexError):
             return -1
 
     def _decode_stride(self, raw: dict[str, np.ndarray], names: tuple[str, ...], stride: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Devuelve (scores, boxes_xyxy, kps(N,10)) decodificados para un nivel FPN."""
         score_n, bbox_n, kps_n = names
         scores = raw[score_n].reshape(-1)
         bbox_d = raw[bbox_n].reshape(-1, 4) * stride
@@ -109,9 +86,7 @@ class ScrfdDetector:
         kps[:, 1::2] = centers[:, 1:2] - kps_d[:, 1::2]
         return scores, boxes, kps
 
-
     def detect(self, frame: np.ndarray, det_thresh: float | None = None, max_faces: int = 0) -> list[Face]:
-        """Detecta rostros. `max_faces>0` limita a los N de mayor score."""
         thresh = self.det_thresh if det_thresh is None else det_thresh
         h0, w0 = frame.shape[:2]
         inp = self._preprocess(frame)
@@ -151,6 +126,5 @@ class ScrfdDetector:
         return faces[:max_faces] if max_faces > 0 else faces
 
     def largest(self, frame: np.ndarray, det_thresh: float | None = None) -> Face | None:
-        """El rostro de mayor confianza (el que está 'pidiendo paso')."""
         faces = self.detect(frame, det_thresh=det_thresh)
         return faces[0] if faces else None

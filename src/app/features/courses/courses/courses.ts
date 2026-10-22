@@ -104,9 +104,6 @@ export class CoursesPage {
     this.dialogVisible = true;
   }
 
-  /** Navega al detalle pasando código y nombre (la API de grupos no
-   * devuelve el curso cuando todavía no tiene grupos). La ruta es RELATIVA:
-   * el panel vive bajo /admin. */
   verGrupos(course: Course): void {
     void this.router.navigate([course.id], {
       relativeTo: this.route,

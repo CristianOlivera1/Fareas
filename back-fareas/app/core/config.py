@@ -1,7 +1,3 @@
-"""Configuración central del backend (12-factor: todo por variables de entorno).
-
-Ver back-fareas/.env.example para el catálogo completo de variables.
-"""
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -11,7 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     APP_NAME: str = "Fareas API"
-    ENVIRONMENT: str = "development"  # development | production
+    ENVIRONMENT: str = "development"
     API_V1_PREFIX: str = "/api/v1"
     CORS_ORIGINS: str = "http://localhost:4200"
 
@@ -35,8 +31,6 @@ class Settings(BaseSettings):
 
     DEVICE_TOKEN_SECRET: str = "token-de-dispositivos"
 
-    # R15: dominio obligatorio del correo de docentes/estudiantes. Vacío =
-    # sin validar (los tests lo dejan vacío); el admin está exento.
     ALLOWED_EMAIL_DOMAIN: str = "unamba.edu.pe"
 
     @property
@@ -46,7 +40,6 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
-
 
 @lru_cache
 def get_settings() -> Settings:

@@ -1,15 +1,3 @@
-"""Justificaciones con EFECTO sobre las faltas (R6, RF-10).
-
-- Crear: marca is_justified=TRUE + justification_id en las faltas EXISTENTES
-  dentro del rango (y curso si acota); las futuras nacen justificadas porque
-  el motor de cierre consulta justificacion_vigente().
-- Eliminar: revierte primero (is_justified=FALSE, justification_id=NULL) y
-  luego borra — el ON DELETE SET NULL de la BD no basta.
-- Permisos: docente SOLO alumnos matriculados en SUS grupos y con course_id
-  obligatorio (sus cursos); admin cualquiera, course_id opcional (NULL =
-  todos los cursos). Sin plazo para justificar (el descanso médico llega
-  tarde), siempre con motivo y auditoría.
-"""
 from datetime import date
 
 from sqlmodel import select
@@ -31,18 +19,15 @@ from app.tables import (
 
 
 async def _grupos_del_docente(db, teacher_id: int, curso_id: int | None) -> set[int]:
-    """IDs de grupos ACTIVOS del docente (todos, o solo los de un curso)."""
     stmt = select(CourseGroup).where(
-        CourseGroup.teacher_id == teacher_id,  # type: ignore[arg-type]
-        CourseGroup.is_active,  # type: ignore[arg-type]
+        CourseGroup.teacher_id == teacher_id,
+        CourseGroup.is_active,
     )
     if curso_id is not None:
-        stmt = stmt.where(CourseGroup.course_id == curso_id)  # type: ignore[arg-type]
+        stmt = stmt.where(CourseGroup.course_id == curso_id)
     return {g.id for g in (await db.exec(stmt)).all()}
 
-
 async def _validar_permisos(db, actor, student_id: int, course_id: int | None) -> None:
-    """R6: docente → course_id obligatorio y alumno matriculado en SUS grupos."""
     if actor.role is UserRole.ADMIN:
         return
     if actor.role is not UserRole.DOCENTE:
@@ -59,8 +44,8 @@ async def _validar_permisos(db, actor, student_id: int, course_id: int | None) -
         for r in (
             await db.exec(
                 select(Enrollment.group_id).where(
-                    Enrollment.student_id == student_id,  # type: ignore[arg-type]
-                    Enrollment.withdrawn_at.is_(None),  # type: ignore[union-attr]
+                    Enrollment.student_id == student_id,
+                    Enrollment.withdrawn_at.is_(None),
                 )
             )
         ).all()
@@ -68,32 +53,26 @@ async def _validar_permisos(db, actor, student_id: int, course_id: int | None) -
     if not (matriculas & grupos_docente):
         raise errors.DomainError("El alumno no está matriculado en ninguno de tus grupos")
 
-
 async def _faltas_del_rango(
     db, student_id: int, course_id: int | None, desde: date, hasta: date
 ) -> list[AttendanceRecord]:
-    """Faltas del alumno en el rango de fechas (del curso si se acota).
-
-    Excluye sesiones CANCELADAS (R5: no cuentan para nada) y las ya
-    justificadas (idempotencia: no se re-marcian dos veces)."""
     stmt = (
         select(AttendanceRecord)
-        .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id)  # type: ignore[arg-type]
-        .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)  # type: ignore[arg-type]
-        .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)  # type: ignore[arg-type]
+        .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id)
+        .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)
+        .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)
         .where(
-            AttendanceRecord.student_id == student_id,  # type: ignore[arg-type]
-            AttendanceRecord.status == AttendanceStatus.FALTA,  # type: ignore[arg-type]
-            AttendanceRecord.is_justified.is_(False),  # type: ignore[union-attr]
-            AttendanceSession.session_date >= desde,  # type: ignore[arg-type]
-            AttendanceSession.session_date <= hasta,  # type: ignore[arg-type]
-            AttendanceSession.status != "cancelada",  # R5
+            AttendanceRecord.student_id == student_id,
+            AttendanceRecord.status == AttendanceStatus.FALTA,
+            AttendanceRecord.is_justified.is_(False),
+            AttendanceSession.session_date >= desde,
+            AttendanceSession.session_date <= hasta,
+            AttendanceSession.status != "cancelada",
         )
     )
     if course_id is not None:
-        stmt = stmt.where(CourseGroup.course_id == course_id)  # type: ignore[arg-type]
+        stmt = stmt.where(CourseGroup.course_id == course_id)
     return list((await db.exec(stmt)).all())
-
 
 async def crear(
     db: SQLModelAsyncSession,
@@ -107,8 +86,6 @@ async def crear(
     document_url: str | None = None,
     ip: str | None = None,
 ) -> tuple[Justification, int]:
-    """R6: registra la justificación y APLICA el efecto sobre las faltas
-    existentes del rango. Devuelve (justificación, faltas_afectadas)."""
     if end_date < start_date:
         raise errors.DomainError("La fecha fin no puede ser anterior a la inicio")
     student = await db.get(AppUser, student_id)
@@ -119,15 +96,15 @@ async def crear(
     just = Justification(
         student_id=student_id, course_id=course_id, start_date=start_date,
         end_date=end_date, reason=reason.strip(), document_url=document_url,
-        created_by=actor.id,  # type: ignore[arg-type]
+        created_by=actor.id,
     )
     db.add(just)
-    await db.flush()  # obtiene just.id antes de ligar las faltas
+    await db.flush()
 
     afectadas = 0
     for falta in await _faltas_del_rango(db, student_id, course_id, start_date, end_date):
         falta.is_justified = True
-        falta.justification_id = just.id  # type: ignore[arg-type]
+        falta.justification_id = just.id
         db.add(falta)
         afectadas += 1
 
@@ -142,12 +119,9 @@ async def crear(
     await db.commit()
     return just, afectadas
 
-
 async def eliminar(
     db: SQLModelAsyncSession, actor, justification_id: int, ip: str | None = None
 ) -> int:
-    """R6: elimina la justificación REVERTIENDO primero el efecto (solo
-    admin elimina cualquiera; docente solo las que él creó y de sus cursos)."""
     just = await db.get(Justification, justification_id)
     if just is None:
         raise errors.NotFoundError("Justificación no encontrada")
@@ -158,7 +132,7 @@ async def eliminar(
     faltas = (
         await db.exec(
             select(AttendanceRecord).where(
-                AttendanceRecord.justification_id == justification_id,  # type: ignore[arg-type]
+                AttendanceRecord.justification_id == justification_id,
             )
         )
     ).all()

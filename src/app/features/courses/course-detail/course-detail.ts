@@ -53,7 +53,6 @@ interface BlockForm {
   weekday: number;
   start_time: string;
   end_time: string;
-  /** R9: aula del bloque; arranca con el aula del último bloque del grupo. */
   room_id: number | null;
 }
 
@@ -102,8 +101,6 @@ export class CourseDetailPage {
   readonly teacherOptions = signal<Option<number>[]>([]);
   readonly roomOptions = signal<Option<number>[]>([]);
 
-  /** RF-01: franja de clases del sistema (Parámetros, 07:00–20:00 por defecto).
-   * La tabla la dibuja completa y el alta de bloques no deja salirse de ella. */
   readonly horaInicio = signal('07:00');
   readonly horaFin = signal('20:00');
   readonly franja = computed(() => ({
@@ -362,9 +359,6 @@ export class CourseDetailPage {
       weekday: weekday ?? 1,
       start_time: inicio,
       end_time: this.addHours(inicio, 2),
-      // R9: el grupo no tiene aula. Se prellena con la del último bloque de ese
-      // día y, si es el primero, con la del último bloque del grupo: el horario
-      // suele repetir laboratorio y evita re-elegirla en cada alta.
       room_id: ultimo?.room_id ?? this.blocks().at(-1)?.room_id ?? null,
     });
     if (!group) {
@@ -423,7 +417,6 @@ export class CourseDetailPage {
       this.blockDialogVisible = false;
       await this.loadBlocks(group.id);
     } catch (err) {
-      // RF-06: choque de aula o de docente (409) con el detalle del backend.
       this.toast.add({
         severity: 'error',
         summary: 'No se pudo añadir el bloque',
@@ -474,8 +467,6 @@ export class CourseDetailPage {
     this.deleteVisible = false;
   }
 
-  /** La baja del grupo es lógica (bloques e historial intactos): se puede
-   * deshacer y el grupo vuelve a abrir sesiones. */
   async reactivateGroup(group: Group): Promise<void> {
     this.saving.set(true);
     try {
@@ -543,8 +534,6 @@ export class CourseDetailPage {
     return h * 60 + (m || 0);
   }
 
-  /** Fin propuesto al abrir el dialog: nunca se pasa del cierre de la franja
-   * (a las 19:00 propone 19:00–20:00, no 19:00–21:00). */
   private addHours(time: string, hours: number): string {
     const total = Math.min(this.minutos(this.horaFin()), this.minutos(time) + hours * 60);
     const hh = String(Math.floor(total / 60)).padStart(2, '0');

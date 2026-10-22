@@ -24,8 +24,6 @@
   box-shadow: 7px 0 30px -10px rgb(21 93 252 / 0.3);
 }
 
-/* Zona scrolleable del nav: el scroll vive acá (hijo con min-h-0),
-   no en .nav-pill, para no recortar los adornos sq/ci absolutos. */
 .sidebar-scroll {
   scrollbar-width: thin;
   scrollbar-color: rgb(255 255 255 / 0.35) transparent;

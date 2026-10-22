@@ -76,8 +76,6 @@ export class ProfilePage {
   constructor() {
     this.refresh();
 
-    // El input del OTP solo acepta dígitos y nunca supera 6 caracteres, incluso
-    // si el usuario pega texto desde el portapapeles.
     this.form.controls.otp_code.valueChanges
       .pipe(takeUntilDestroyed())
       .subscribe((value) => {
@@ -168,7 +166,6 @@ export class ProfilePage {
         this.isVerifyingOtp.set(false);
         this.errorMessage.set(extractDetail(err));
         if (err.status === 429) {
-          // El backend invalidó el código tras agotar los intentos.
           this.restart();
           this.errorMessage.set(extractDetail(err));
         }
@@ -177,8 +174,6 @@ export class ProfilePage {
   }
 
   onSubmit(): void {
-    // Enter en cualquier paso avanza el flujo (los botones visibles también
-    // llaman a estos métodos; el guard de cada uno evita dobles envíos).
     if (this.step() === 1) {
       this.sendOtp();
       return;

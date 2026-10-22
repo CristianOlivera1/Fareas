@@ -24,8 +24,6 @@ import { DataTableCellDirective } from '../../../shared/components/data-table/da
 import { TableColumn } from '../../../core/models/table-column';
 import { Room } from '../../../core/models/catalog';
 
-// Se re-exporta desde el helper compartido para no romper los imports
-// existentes (students, teachers, devices) que lo toman de este módulo.
 export { extractDetail };
 
 interface RoomForm {

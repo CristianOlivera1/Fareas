@@ -161,7 +161,7 @@
   [style]="{ width: '460px' }">
   <div class="space-y-4 pt-2">
     <div class="grid grid-cols-2 gap-3">
-      <app-ui-input label="Código del grupo" [required]="true" [mono]="true" placeholder="B"
+      <app-ui-input label="Código del grupo" [required]="true" placeholder="B"
         hint="Una letra o número (A, B, C…)"
         [ngModel]="groupForm().group_code" (ngModelChange)="patch({ group_code: $event })" />
       <app-ui-input label="Cupo" [required]="true" type="number"

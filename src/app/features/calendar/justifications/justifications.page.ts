@@ -104,7 +104,6 @@ export class JustificationsPage {
       f.end_date !== '' &&
       f.end_date >= f.start_date &&
       f.reason.trim().length >= 5 &&
-      // R6: el docente está obligado a elegir curso; el admin puede dejarlo vacío
       (this.auth.isAdmin() || f.course_id !== null)
     );
   });

@@ -1,8 +1,3 @@
-"""Enrolamiento de rostros - RF-04 (solo admin escribe; docente consulta estado).
-
-``POST /students/{id}/faces`` recibe 3-5 fotos en base64 (JSON). La lógica
-(detección, consistencia, promedio, auditoría) vive en ``services/faces.py``.
-"""
 from fastapi import APIRouter, Request, status
 from pydantic import BaseModel, Field
 from sqlmodel import select
@@ -26,7 +21,6 @@ class EnrollmentIn(BaseModel):
         description="R13 (Ley 29733): consentimiento expreso del estudiante. Obligatorio en true.",
     )
 
-
 @router.post("/students/{student_id}/faces", status_code=status.HTTP_201_CREATED)
 async def enroll_student_faces(
     student_id: int,
@@ -35,9 +29,7 @@ async def enroll_student_faces(
     db: DbSession,
     admin: RequireRole(UserRole.ADMIN),
 ) -> dict:
-    """RF-04: registra el rostro del alumno (3-5 fotos → embedding promedio)."""
     return await enrolar(db, admin, student_id, body.photos, consent=body.consent, ip=_client_ip(request))
-
 
 @router.delete("/students/{student_id}/faces")
 async def delete_student_faces(
@@ -46,9 +38,7 @@ async def delete_student_faces(
     db: DbSession,
     admin: RequireRole(UserRole.ADMIN),
 ) -> dict:
-    """R13 (derecho de cancelación): borra embeddings y foto del alumno."""
     return await eliminar_rostro(db, admin, student_id, ip=_client_ip(request))
-
 
 @router.get("/students/{student_id}/faces")
 async def enrollment_status(
@@ -56,7 +46,6 @@ async def enrollment_status(
     db: DbSession,
     _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
 ) -> dict:
-    """Estado de enrolamiento del alumno (para el directorio del admin)."""
     student = await db.get(AppUser, student_id)
     if student is None:
         from fastapi import HTTPException
@@ -65,7 +54,7 @@ async def enrollment_status(
     row = (
         await db.exec(
             select(FaceEmbedding)
-            .where(FaceEmbedding.student_id == student_id, FaceEmbedding.is_current)  # type: ignore[arg-type]
+            .where(FaceEmbedding.student_id == student_id, FaceEmbedding.is_current)
         )
     ).first()
     return {

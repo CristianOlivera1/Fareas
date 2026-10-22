@@ -1,9 +1,3 @@
-"""Ensamblado de la aplicación Fareas (entrypoint del fastapi CLI).
-
-Desarrollo:   cd back-fareas && fastapi dev
-Producción:   cd back-fareas && fastapi run
-Swagger:      http://localhost:8000/docs
-"""
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
@@ -46,7 +40,6 @@ async def lifespan(app: FastAPI):
     await detener_bucle_camaras()
     detener_scheduler()
     print("[Fareas] Cerrando conexiones (pool de BD, sockets de dispositivos)...")
-
 
 def create_app() -> FastAPI:
     settings = get_settings()
@@ -96,6 +89,5 @@ def create_app() -> FastAPI:
     app.include_router(reports.router, prefix=settings.API_V1_PREFIX)
 
     return app
-
 
 app = create_app()

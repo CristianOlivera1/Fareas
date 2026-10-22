@@ -1,9 +1,3 @@
-"""Reportes de asistencia — RF-16: Excel (openpyxl) y PDF (reportlab).
-
-Funciones PURAS: reciben los datos ya consultados y devuelven los bytes del
-archivo; los routers solo hacen la consulta y arman la respuesta HTTP con el
-Content-Disposition. Sin dependencia del request ni de la sesión de BD.
-"""
 import io
 from datetime import date, datetime
 
@@ -19,7 +13,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 TITULO = "FACULTAD DE INFORMÁTICA - UNAMBA"
 SUBTITULO = "Reporte de Asistencia - Sistema Fareas"
 
-AZUL = "155DFC"          # --fareas-primary
+AZUL = "155DFC"
 AZUL_CLARO = "E8F0FE"
 
 HEADERS = ["Estudiante", "Código", "Curso", "Grupo", "Aula", "Estado", "Fecha", "Hora", "Método"]
@@ -29,18 +23,16 @@ COLORES_ESTADO = {
     "asistio": ("22C55E", "Asistió"),
     "tardanza": ("F59E0B", "Tardanza"),
     "falta": ("EF4444", "Falta"),
-    "falta_justificada": ("0EA5E9", "Falta justificada"),  # R6
+    "falta_justificada": ("0EA5E9", "Falta justificada"),
     "sin_registro": ("9CA3AF", "Sin registro"),
 }
 
 
 def _estado_de(r: dict) -> str:
-    """Clave de color/etiqueta: R6 distingue la falta JUSTIFICADA (no cuenta DPI)."""
     estado = str(r.get("status", ""))
     if estado == "falta" and r.get("is_justified"):
         return "falta_justificada"
     return estado
-
 
 def _fila(r: dict) -> list[str]:
     hora = (r.get("marked_at") or "")[11:16] if r.get("marked_at") else "-"
@@ -56,22 +48,17 @@ def _fila(r: dict) -> list[str]:
         str(r.get("method", "")),
     ]
 
-
 def _nombre_archivo(ext: str, desde: date | None, hasta: date | None, now: datetime) -> str:
     rango = f"_{desde.isoformat()}_{hasta.isoformat()}" if desde or hasta else ""
     return f"asistencia{rango}_{now:%Y%m%d_%H%M}.{ext}"
 
-
 def nombre_excel(desde: date | None, hasta: date | None, now: datetime | None = None) -> str:
     return _nombre_archivo("xlsx", desde, hasta, now or datetime.now())
-
 
 def nombre_pdf(desde: date | None, hasta: date | None, now: datetime | None = None) -> str:
     return _nombre_archivo("pdf", desde, hasta, now or datetime.now())
 
-
 def excel_asistencia(filas: list[dict], titulo_periodo: str | None = None) -> bytes:
-    """Libro de una hoja: encabezado institucional + tabla con estilos."""
     wb = Workbook()
     ws = wb.active
     ws.title = "Asistencia"
@@ -108,7 +95,7 @@ def excel_asistencia(filas: list[dict], titulo_periodo: str | None = None) -> by
         for col, valor in enumerate(valores, start=1):
             c = ws.cell(row=fila_hdr + 1 + i, column=col, value=valor)
             c.border = borde
-            if col == 6:  # Estado
+            if col == 6:
                 estado = _estado_de(r)
                 c.font = Font(bold=True, color=COLORES_ESTADO.get(estado, ("111827",))[0])
                 fill = fills_estado.get(estado)
@@ -125,9 +112,7 @@ def excel_asistencia(filas: list[dict], titulo_periodo: str | None = None) -> by
     wb.save(buf)
     return buf.getvalue()
 
-
 def pdf_asistencia(filas: list[dict], titulo_periodo: str | None = None) -> bytes:
-    """PDF horizontal con encabezado institucional y tabla paginada."""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=landscape(A4),
@@ -178,8 +163,6 @@ def pdf_asistencia(filas: list[dict], titulo_periodo: str | None = None) -> byte
     doc.build(story)
     return buf.getvalue()
 
-
-# Matriz de asistencia por grupo (R7/11.8): alumnos × fechas con A/T/F/FJ/—
 LEYENDA_MATRIZ = {
     "A": "Asistió",
     "T": "Tardanza",
@@ -193,12 +176,6 @@ COLOR_MATRIZ = {"A": "22C55E", "T": "F59E0B", "F": "EF4444", "FJ": "0EA5E9", "�
 def excel_matriz_grupo(
     filas: list[dict], fechas: list[str], titulo_periodo: str | None = None
 ) -> bytes:
-    """Registro de asistencia del docente (RF-16/11.8): una columna por fecha.
-
-    ``filas``: [{student_name, student_code, celdas: {fecha: 'A'|'T'|'F'|'FJ'|'—'}}].
-    Totales y % de asistencia se calculan aquí. Las sesiones canceladas y
-    needs_review ya vienen EXCLUIDAS por el router (R4/R5).
-    """
     wb = Workbook()
     ws = wb.active
     ws.title = "Matriz"
@@ -261,12 +238,10 @@ def excel_matriz_grupo(
     wb.save(buf)
     return buf.getvalue()
 
-
 COLOR_NIVEL = {"alerta": "B45309", "limite": "B91C1C"}
 
 
 def excel_riesgo_dpi(filas: list[dict], titulo_periodo: str | None = None) -> bytes:
-    """Alumnos en riesgo (R7): % de inasistencia, nivel y faltas restantes."""
     wb = Workbook()
     ws = wb.active
     ws.title = "Riesgo DPI"
@@ -327,10 +302,8 @@ def excel_riesgo_dpi(filas: list[dict], titulo_periodo: str | None = None) -> by
     wb.save(buf)
     return buf.getvalue()
 
-
 def nombre_matriz(group_code: str, course_code: str, now: datetime | None = None) -> str:
     return f"asistencia_{course_code}-{group_code}_{(now or datetime.now()):%Y%m%d_%H%M}.xlsx"
-
 
 def nombre_riesgo(now: datetime | None = None) -> str:
     return f"riesgo_dpi_{(now or datetime.now()):%Y%m%d_%H%M}.xlsx"

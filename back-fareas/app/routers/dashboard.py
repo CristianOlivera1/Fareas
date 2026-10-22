@@ -1,17 +1,3 @@
-"""Dashboard — RF-13 (panel en vivo) y mapeo PLAN §5: summary, feed SSE y
-estadísticas para los widgets Angular.
-
-- ``GET /dashboard/summary``   → tarjetas (asistencias, ausencias, cámaras, DPI).
-- ``GET /dashboard/live``      → SSE con los veredictos del bucle de cámaras
-  (``camera_loop``). EventSource NO puede enviar cabeceras: el JWT llega por
-  query ``?access_token=`` (patrón estándar para SSE autenticado).
-- ``GET /dashboard/live-room/{room_id}`` → ídem, filtrado a un aula.
-- ``GET /stats/hourly``        → marcas por hora de inicio de bloque (07–20).
-- ``GET /stats/distribution``  → dona Asistió/Tardanza/Falta/Sin registro.
-
-La fuente de verdad es la BD (tablas del esquema 001); los veredictos en vivo
-vienen de memoria (``camera_loop._ultimo``), sin Redis ni Celery (PLAN §7).
-"""
 import asyncio
 import json
 import logging
@@ -41,18 +27,12 @@ class Summary(BaseModel):
     camaras_total: int
     camaras_activas: int
     streams_caidos: int
-    alertas_dpi: int  # R7: nivel 'limite' (superó dpi_limit_percent)
-    en_riesgo: int  # R7: nivel 'alerta' (≥ dpi_alert_percent, aún recuperable)
-    sessions_to_review: int  # R4: sesiones cerradas con cero marcas
+    alertas_dpi: int
+    en_riesgo: int
+    sessions_to_review: int
     at: str
 
-
 async def _contar_marcas_hoy(db, teacher_id: int | None = None) -> dict:
-    """Tarjetas 1-2: marcas de HOY (sesiones abiertas y cerradas no canceladas).
-
-    Ausencias = registros 'falta' de hoy (cierres o manuales); los matriculados
-    de sesiones aún ABIERTAS sin marca no cuentan: todavía pueden llegar.
-    """
     sql = (
         "SELECT ar.status::text AS status, COUNT(*) "
         "FROM attendance_record ar "
@@ -83,17 +63,12 @@ async def _contar_marcas_hoy(db, teacher_id: int | None = None) -> dict:
         "pct": round(falta * 100.0 / total, 1) if total else 0.0,
     }
 
-
 async def _contar_camaras(db) -> dict:
-    """Tarjeta 3: cámaras registradas y activas en el catálogo (RF-05)."""
     sql = "SELECT COUNT(*) FROM device WHERE is_active AND device_type = 'camara'"
     total = (await db.exec(sql_text(sql))).scalar_one()
     return {"total": total, "activas": total}
 
-
 async def _contar_alertas_dpi(db, docente_id: int | None = None) -> dict:
-    """Tarjeta 4 (R7): 'limite' = superó dpi_limit_percent (inhabilitación al
-    superar, decisión 2026-10-11); 'en_riesgo' = entre alerta y límite."""
     cfg = await db.get(AppSettings, 1)
     alerta, limite = 20.0, 30.0
     if cfg is not None:
@@ -113,9 +88,7 @@ async def _contar_alertas_dpi(db, docente_id: int | None = None) -> dict:
     en_riesgo = (await db.exec(sql_text(sql_riesgo).bindparams(**params2))).scalar_one()
     return {"limite": limite_n, "en_riesgo": en_riesgo}
 
-
 async def _contar_por_revisar(db, teacher_id: int | None = None) -> int:
-    """R4: sesiones cerradas con needs_review (cero marcas) pendientes."""
     sql = (
         "SELECT COUNT(*) FROM attendance_session s "
         "JOIN schedule_block sb ON sb.id = s.block_id "
@@ -127,11 +100,8 @@ async def _contar_por_revisar(db, teacher_id: int | None = None) -> int:
         return (await db.exec(sql_text(sql).bindparams(docente=teacher_id))).scalar_one()
     return (await db.exec(sql_text(sql))).scalar_one()
 
-
 @router.get("/dashboard/summary", response_model=Summary)
 async def summary(db: DbSession, user: CurrentUser) -> Summary:
-    """Tarjetas superiores del dashboard (RF-13, PLAN §5). Docente: filtrado
-    por sus grupos (R7/R9: mismo guard que /attendance/today)."""
     docente_id = user.id if user.role is UserRole.DOCENTE else None
     marcas = await _contar_marcas_hoy(db, docente_id)
     camaras = await _contar_camaras(db)
@@ -152,9 +122,7 @@ async def summary(db: DbSession, user: CurrentUser) -> Summary:
         at=datetime.now().isoformat(timespec="seconds"),
     )
 
-
 async def _usuario_de_token(access_token: str) -> AppUser:
-    """Auth para SSE: EventSource no manda headers → token por query."""
     try:
         payload = decode_access_token(access_token)
     except Exception as exc:
@@ -165,7 +133,7 @@ async def _usuario_de_token(access_token: str) -> AppUser:
         raise HTTPException(status_code=401, detail="Usuario inexistente o inactivo")
     if payload.token_version != user.token_version:
         raise HTTPException(status_code=401, detail="Sesión invalidada. Inicia sesión nuevamente.")
-    if user.must_change_password:  # R14: mismo bloqueo que el resto de la API
+    if user.must_change_password:
         raise HTTPException(status_code=403, detail={
             "code": "must_change_password",
             "message": "Cambia tu clave temporal antes de usar el sistema",
@@ -173,7 +141,6 @@ async def _usuario_de_token(access_token: str) -> AppUser:
     if user.role not in (UserRole.ADMIN, UserRole.DOCENTE):
         raise HTTPException(status_code=403, detail="No tienes permisos para esta operación")
     return user
-
 
 @router.get("/dashboard/live")
 async def dashboard_live(
@@ -199,20 +166,16 @@ async def dashboard_live(
         finally:
             logger.info("Cliente SSE desconectado (room_id=%s)", room_id)
 
-    # ping=15: comentario SSE cada 15 s para no perder la conexión por proxies
     return EventSourceResponse(generador(), ping=15)
-
 
 @router.get("/dashboard/live-room/{room_id}")
 async def dashboard_live_room(
     room_id: int,
     access_token: str = Query(..., min_length=10),
 ) -> EventSourceResponse:
-    """SSE de UN aula (cámara/ESP32 del aula en el panel de monitoreo)."""
     return await dashboard_live(access_token=access_token, room_id=room_id)
 
-
-HORA_INICIO, HORA_FIN = 7, 20  # franja institucional (app_settings 07:00–20:00)
+HORA_INICIO, HORA_FIN = 7, 20
 
 
 @router.get("/stats/hourly")
@@ -221,12 +184,6 @@ async def stats_hourly(
     user: CurrentUser,
     day: date | None = Query(None, description="Día a consultar (default: hoy)"),
 ) -> list[dict]:
-    """Marcas por hora de inicio de bloque (widget app-hourly-chart).
-
-    La 'hora' es la del BLOQUE, no marked_at: así la curva muestra la carga
-    de la franja 07–20 aunque la marca facial llegue minutos después.
-    R7: con rol docente todo va filtrado por sus grupos.
-    """
     dia = day or date.today()
     sql = (
         "SELECT EXTRACT(HOUR FROM sb.start_time)::int AS hora, ar.status::text AS status, COUNT(*) "
@@ -258,7 +215,6 @@ async def stats_hourly(
         })
     return serie
 
-
 @router.get("/stats/distribution")
 async def stats_distribution(
     db: DbSession,
@@ -266,12 +222,6 @@ async def stats_distribution(
     desde: date | None = Query(None),
     hasta: date | None = Query(None),
 ) -> dict:
-    """Dona Asistió/Tardanza/Falta/Sin registro (widget app-distribution-chart).
-
-    ``sin_registro`` = matriculados de sesiones CERRADAS del rango sin marca
-    (los 'faltados por cierre' ya son falta; esto cubre huecos históricos).
-    R7: con rol docente todo va filtrado por sus grupos.
-    """
     hoy = date.today()
     d1, d2 = desde or hoy, hasta or hoy
     if d1 > d2:

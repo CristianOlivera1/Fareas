@@ -92,14 +92,13 @@ export class Attendance {
   readonly estado = signal<StatusLabelApi | 'Todas'>('Todas');
   readonly estadoOptions = ESTADO_OPTIONS;
 
-  /** Sesión o registro en curso (bloquea los botones de esa fila/tarjeta). */
   readonly busy = signal<string | null>(null);
 
   readonly modalVisible = signal(false);
   readonly modalSession = signal<SessionToday | null>(null);
   readonly matriculados = signal<EnrolledStudent[]>([]);
   readonly matLoading = signal(false);
-  readonly marcando = signal<number | null>(null); // student_id en curso
+  readonly marcando = signal<number | null>(null);
   readonly modalError = signal<string | null>(null);
 
   readonly rectifyTarget = signal<AttendanceToday | null>(null);
@@ -154,7 +153,7 @@ export class Attendance {
   });
 
   readonly filtered = computed(() => {
-    void this.estado; // estado interno no persiste; el ?status manda
+    void this.estado;
     const estado = this.estadoSeleccionado();
     const texto = this.query()?.trim().toLowerCase() ?? '';
     return this.records().filter((r) => {
@@ -189,7 +188,6 @@ export class Attendance {
     return (label) => STATUS_SEVERITY[label];
   }
 
-  /** R6: una falta justificada (FJ) no cuenta para el 30 %: se muestra aparte. */
   label(r: AttendanceStatusApi | AttendanceToday): StatusLabelApi {
     if (typeof r === 'string') return STATUS_LABEL[r];
     return r.is_justified && r.status === 'falta' ? 'Falta justificada' : STATUS_LABEL[r.status];

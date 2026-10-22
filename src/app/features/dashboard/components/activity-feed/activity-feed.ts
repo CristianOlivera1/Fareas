@@ -14,7 +14,6 @@ interface IdentifiedPerson {
   course: string;
   room: string;
   camera: string;
-  /** Similitud del embedding en % (RF-20: umbral mínimo 75%). */
   similarity: number;
   verdict: 'Asistió' | 'Tardanza';
   message: string;

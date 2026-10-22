@@ -1,20 +1,3 @@
-"""Autenticación y cuenta personal - RF-01, RF-08 (envío), RF-11, RF-12.
-
-Decisión de diseño (PLAN §7): JWT de acceso simple con expiración de 120 min
-SIN refresh tokens — no hay tabla de sesiones ni rotación; el logout es
-cliente (descartar el token). El claim ``ver`` (token_version) permite
-invalidar los tokens emitidos antes de un cambio de contraseña.
-
-Flujo de cambio de contraseña (2026-10-22):
-1. ``POST /auth/change-password/otp``: valida la contraseña actual y envía un
-   OTP al correo institucional.
-2. ``POST /auth/change-password/otp/verify``: valida el código (marca verified).
-3. ``POST /auth/change-password``: consume el OTP verificado, actualiza la
-   contraseña, incrementa ``token_version`` y devuelve un token nuevo.
-
-La clave temporal (``must_change_password=True``) sigue cambiándose sin OTP:
-el usuario acaba de recibirla por correo y el guard lo obliga a cambiarla.
-"""
 import logging
 import time
 
@@ -45,23 +28,18 @@ from app.tables import AppUser
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger("fareas.auth")
 
-# Compatibilidad con imports/tests antiguos: el store real vive en services.otp.
 _OTP_TTL_SECONDS = otp.OTP_TTL_SECONDS
 _OTP_MAX_ATTEMPTS = otp.OTP_MAX_ATTEMPTS
 _otp_store = otp._store
 
-# Rate limit de login en memoria (5 intentos fallidos por IP cada 60 s).
-# Alcance académico: un solo proceso, sin Redis — mismo patrón que el OTP.
-# La ventana es deslizante simple: se guarda la hora del último bloqueo y el
-# contador se limpia tras LOGIN_WINDOW_SECONDS sin fallos.
+
 _LOGIN_MAX_ATTEMPTS = 5
 _LOGIN_WINDOW_SECONDS = 60.0
-_login_attempts: dict[str, dict] = {}  # ip -> {"count", "first"}
+_login_attempts: dict[str, dict] = {}
 
 
 def _login_rate_ip(request: Request) -> str:
     return request.client.host if request.client else "desconocida"
-
 
 def _login_rate_ok(request: Request) -> bool:
     ip = _login_rate_ip(request)
@@ -73,7 +51,6 @@ def _login_rate_ok(request: Request) -> bool:
         return True
     return entry["count"] < _LOGIN_MAX_ATTEMPTS
 
-
 def _login_rate_register_failure(request: Request) -> None:
     ip = _login_rate_ip(request)
     entry = _login_attempts.get(ip)
@@ -82,27 +59,19 @@ def _login_rate_register_failure(request: Request) -> None:
     else:
         entry["count"] += 1
 
-
 def _login_rate_reset(request: Request) -> None:
-    """Login correcto: limpia la cuenta de fallos de esa IP."""
     _login_attempts.pop(_login_rate_ip(request), None)
-
 
 def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
-
 async def _notify_password_changed(user: AppUser) -> None:
-    """Aviso de seguridad best-effort: la contraseña YA se guardó y no debe
-    devolverse un 500 si el SMTP falla. El fallo queda en el log."""
     try:
         await send_password_changed_notice(user.email, user.full_name)
-    except Exception:  # noqa: BLE001 - el cambio de clave no depende del correo
+    except Exception:
         logger.exception("No se pudo enviar el aviso de clave actualizada a %s", user.email)
 
-
 def _otp_http_error(exc: otp.OtpError) -> HTTPException:
-    """Traduce errores del servicio OTP a respuestas HTTP coherentes."""
     if isinstance(exc, otp.OtpCooldownError):
         return HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -125,24 +94,17 @@ def _otp_http_error(exc: otp.OtpError) -> HTTPException:
         detail="El código expiró o no existe. Solicita uno nuevo.",
     )
 
-
 def _build_user_out(user: AppUser) -> UserOut:
     return UserOut(
-        id=user.id,  # type: ignore[arg-type]
+        id=user.id,
         role=user.role.value,
         full_name=user.full_name,
         email=user.email,
         must_change_password=user.must_change_password,
     )
 
-
 @router.post("/login", response_model=LoginResponse)
 async def login(body: LoginRequest, request: Request, db: DbSession) -> LoginResponse:
-    """RF-11. ``body.email`` acepta correo institucional O código de matrícula.
-
-    Rate limit: 5 intentos fallidos por minuto y por IP (401 no cuenta el
-    acierto); al acreditarse se limpia la ventana.
-    """
     if not _login_rate_ok(request):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -150,7 +112,7 @@ async def login(body: LoginRequest, request: Request, db: DbSession) -> LoginRes
         )
     lookup = body.email.strip().lower()
     query = select(AppUser).where(
-        (AppUser.email == lookup) | (AppUser.code == lookup)  # type: ignore[operator]
+        (AppUser.email == lookup) | (AppUser.code == lookup)
     )
     user = (await db.exec(query)).first()
     if user is None or not user.is_active or not verify_password(body.password, user.password_hash):
@@ -163,15 +125,9 @@ async def login(body: LoginRequest, request: Request, db: DbSession) -> LoginRes
     access = create_access_token(user.id, user.role.value, user.token_version)
     return LoginResponse(access_token=access, user=_build_user_out(user))
 
-
 @router.get("/me", response_model=UserOut)
 async def me(user: CurrentUserPending) -> UserOut:
-    """Datos del usuario autenticado (usa el JWT Bearer).
-
-    CurrentUserPending: accesible incluso con clave temporal pendiente —
-    el frontend necesita saber QUIÉN es para ofrecer el cambio (R14)."""
     return _build_user_out(user)
-
 
 @router.post("/change-password/otp", response_model=ChangePasswordOtpResponse)
 async def request_change_password_otp(
@@ -180,11 +136,6 @@ async def request_change_password_otp(
     user: CurrentUserPending,
     db: DbSession,
 ) -> ChangePasswordOtpResponse:
-    """Paso 1: confirma la contraseña actual y envía un OTP al correo.
-
-    El OTP es un segundo factor: no reemplaza la contraseña actual. La clave
-    temporal (primer login) no usa este endpoint; se cambia directo.
-    """
     if user.must_change_password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -197,7 +148,7 @@ async def request_change_password_otp(
         )
 
     try:
-        code = otp.issue(user.id, otp.OtpPurpose.CHANGE_PASSWORD)  # type: ignore[arg-type]
+        code = otp.issue(user.id, otp.OtpPurpose.CHANGE_PASSWORD)
     except otp.OtpError as exc:
         raise _otp_http_error(exc) from exc
 
@@ -219,19 +170,16 @@ async def request_change_password_otp(
         resend_in=otp.OTP_RESEND_SECONDS,
     )
 
-
 @router.post("/change-password/otp/verify", response_model=MessageResponse)
 async def verify_change_password_otp(
     body: VerifyChangePasswordOtpRequest,
     user: CurrentUserPending,
 ) -> MessageResponse:
-    """Paso 2: valida el código y lo deja listo para el cambio final."""
     try:
-        otp.verify(user.id, otp.OtpPurpose.CHANGE_PASSWORD, body.code)  # type: ignore[arg-type]
+        otp.verify(user.id, otp.OtpPurpose.CHANGE_PASSWORD, body.code)
     except otp.OtpError as exc:
         raise _otp_http_error(exc) from exc
     return MessageResponse(message="Código validado. Define tu nueva contraseña")
-
 
 @router.post("/change-password", response_model=ChangePasswordResponse)
 async def change_password(
@@ -240,15 +188,6 @@ async def change_password(
     user: CurrentUserPending,
     db: DbSession,
 ) -> ChangePasswordResponse:
-    """RF-11: cambio de clave.
-
-    - Cuenta normal: exige un OTP verificado (paso 2) y lo consume.
-    - Clave temporal (``must_change_password=True``): sin OTP (RF-11).
-
-    En ambos casos se incrementa ``token_version``: los tokens anteriores
-    quedan inválidos (todas las sesiones). El token nuevo de la respuesta
-    mantiene viva la sesión que hizo el cambio.
-    """
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -263,7 +202,7 @@ async def change_password(
     used_otp = not user.must_change_password
     if used_otp:
         try:
-            otp.consume(user.id, otp.OtpPurpose.CHANGE_PASSWORD)  # type: ignore[arg-type]
+            otp.consume(user.id, otp.OtpPurpose.CHANGE_PASSWORD)
         except otp.OtpError as exc:
             raise _otp_http_error(exc) from exc
 
@@ -289,26 +228,20 @@ async def change_password(
         access_token=access,
     )
 
-
 @router.post("/recover", response_model=MessageResponse)
 async def recover(body: RecoverRequest, db: DbSession) -> MessageResponse:
-    """RF-12 paso 1: envía un OTP de 6 dígitos al correo institucional."""
     user = (await db.exec(select(AppUser).where(AppUser.email == body.email.lower()))).first()
-    # Respuesta uniforme: no revelar si el correo existe o no.
     if user is not None:
         try:
-            code = otp.issue(user.id, otp.OtpPurpose.RECOVER)  # type: ignore[arg-type]
+            code = otp.issue(user.id, otp.OtpPurpose.RECOVER)
         except otp.OtpCooldownError:
-            # Reenvío dentro del cooldown: no se envía otro correo.
             pass
         else:
             await send_otp(user.email, code, purpose=otp.OtpPurpose.RECOVER)
     return MessageResponse(message="Si el correo existe, se envió un código de recuperación")
 
-
 @router.post("/recover/verify", response_model=MessageResponse)
 async def verify_otp(body: VerifyOtpRequest, db: DbSession) -> MessageResponse:
-    """RF-12 paso 2: valida el código (habilita el reseteo)."""
     user = (await db.exec(select(AppUser).where(AppUser.email == body.email.lower()))).first()
     if user is None:
         raise HTTPException(
@@ -316,20 +249,18 @@ async def verify_otp(body: VerifyOtpRequest, db: DbSession) -> MessageResponse:
             detail="Código expirado o inexistente",
         )
     try:
-        otp.verify(user.id, otp.OtpPurpose.RECOVER, body.code)  # type: ignore[arg-type]
+        otp.verify(user.id, otp.OtpPurpose.RECOVER, body.code)
     except otp.OtpError as exc:
         raise _otp_http_error(exc) from exc
     return MessageResponse(message="Código validado. Ahora define tu nueva contraseña")
 
-
 @router.post("/recover/reset", response_model=MessageResponse)
 async def reset_password(body: ResetPasswordRequest, db: DbSession) -> MessageResponse:
-    """RF-12 paso 3: establece la nueva contraseña (requiere OTP verificado)."""
     user = (await db.exec(select(AppUser).where(AppUser.email == body.email.lower()))).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cuenta no encontrada")
     try:
-        otp.consume(user.id, otp.OtpPurpose.RECOVER)  # type: ignore[arg-type]
+        otp.consume(user.id, otp.OtpPurpose.RECOVER)
     except otp.OtpError as exc:
         raise _otp_http_error(exc) from exc
 

@@ -1,25 +1,3 @@
--- ============================================================================
--- FAREAS - 001_schema.sql  |  ESQUEMA COMPLETO Y VIGENTE
--- Sistema de control de asistencia con reconocimiento facial (RF-01 … RF-35)
---
--- ESTE ARCHIVO ES LA ÚNICA FUENTE DE VERDAD DE LA ESTRUCTURA. Siempre refleja
--- la BD de desarrollo tal cual está. Puesta en marcha desde cero:
---
---     psql -U postgres -d fareas -f db/001_schema.sql
---     psql -U postgres -d fareas -f db/002_seed.sql
---
--- Reglas de mantenimiento de la BD (detalle en README.md >> "Actualizaciones
--- de la base de datos"): si un cambio toca el esquema o los datos demo, se deja
--- este archivo (y 002_seed.sql si aplica) actualizado EN EL MISMO COMMIT que el
--- ALTER nuevo, y se BORRA el ALTER ya aplicado por todo el equipo. Resultado:
--- un desarrollador nuevo -o una BD vieja- se pone al día con estos 2 scripts.
---
--- Origen del DDL: `pg_dump --schema-only --no-owner --no-acl fareas`, que se
--- regenera tras aplicar cualquier cambio en la BD de desarrollo.
--- ============================================================================
-
--- Zona horaria de la BD: las vistas usan CURRENT_DATE y las sesiones se abren
--- por fecha local de Abancay (America/Lima, sin DST).
 DO $$
 BEGIN
     EXECUTE format('ALTER DATABASE %I SET timezone TO ''America/Lima''', current_database());
@@ -27,33 +5,27 @@ EXCEPTION WHEN insufficient_privilege THEN
     RAISE NOTICE 'Sin permisos para fijar la zona horaria: fija America/Lima en el servidor.';
 END $$;
 
--- TIPOS ENUMERADOS -----------------------------------------------------------
-CREATE TYPE user_role         AS ENUM ('admin', 'docente', 'estudiante');          -- RF-01
-CREATE TYPE attendance_status AS ENUM ('asistio', 'tardanza', 'falta');            -- RF-23
-CREATE TYPE session_status    AS ENUM ('abierta', 'cerrada', 'cancelada');          -- RF-26, R5
-CREATE TYPE device_type       AS ENUM ('camara', 'esp32');                         -- RF-05
+CREATE TYPE user_role         AS ENUM ('admin', 'docente', 'estudiante');
+CREATE TYPE attendance_status AS ENUM ('asistio', 'tardanza', 'falta');
+CREATE TYPE session_status    AS ENUM ('abierta', 'cerrada', 'cancelada');
+CREATE TYPE device_type       AS ENUM ('camara', 'esp32');
 
--- TABLAS ---------------------------------------------------------------------
-
--- app_settings - parámetros globales del semestre (RF-34, fila única id=1).
--- Los valores vigentes (semestre, niveles DPI, umbral facial) los fija
--- 002_seed.sql: el admin los edita luego con PATCH /settings.
 CREATE TABLE app_settings (
     id                     INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-    semester_label         VARCHAR(40)  NOT NULL,          -- p. ej. '2026-II'
+    semester_label         VARCHAR(40)  NOT NULL,
     block_minutes          INTEGER      NOT NULL DEFAULT 120 CHECK (block_minutes > 0),
-    late_tolerance_minutes INTEGER      NOT NULL DEFAULT 10 CHECK (late_tolerance_minutes >= 0),  -- RF-23
-    face_match_threshold   NUMERIC(4,3) NOT NULL DEFAULT 0.750 CHECK (face_match_threshold BETWEEN 0 AND 1),  -- RF-20
-    dpi_alert_percent      NUMERIC(5,2) NOT NULL DEFAULT 30.00 CHECK (dpi_alert_percent > 0),     -- RF-24
+    late_tolerance_minutes INTEGER      NOT NULL DEFAULT 10 CHECK (late_tolerance_minutes >= 0),
+    face_match_threshold   NUMERIC(4,3) NOT NULL DEFAULT 0.750 CHECK (face_match_threshold BETWEEN 0 AND 1),
+    dpi_alert_percent      NUMERIC(5,2) NOT NULL DEFAULT 30.00 CHECK (dpi_alert_percent > 0),
     dpi_limit_percent      NUMERIC(5,2) NOT NULL DEFAULT 33.33,
     attendance_hour_start  TIME         NOT NULL DEFAULT '07:00',
     attendance_hour_end    TIME         NOT NULL DEFAULT '20:00',
     updated_at             TIMESTAMP    NOT NULL DEFAULT NOW(),
-    semester_start         DATE,                            -- R1: fechas del semestre vigente
+    semester_start         DATE,
     semester_end           DATE,
-    early_open_minutes     INTEGER      NOT NULL DEFAULT 15,   -- R3: apertura anticipada de la sesión
-    rectify_days           INTEGER      NOT NULL DEFAULT 7,    -- R11: plazo del docente para rectificar
-    dpi_min_sessions       INTEGER      NOT NULL DEFAULT 4,    -- R7: correo DPI solo con historial suficiente
+    early_open_minutes     INTEGER      NOT NULL DEFAULT 15,
+    rectify_days           INTEGER      NOT NULL DEFAULT 7,
+    dpi_min_sessions       INTEGER      NOT NULL DEFAULT 4,
     CONSTRAINT chk_dpi_levels     CHECK (dpi_alert_percent < dpi_limit_percent),
     CONSTRAINT chk_semester_dates CHECK (semester_start IS NULL OR semester_end IS NULL
                                          OR semester_start < semester_end),
@@ -61,26 +33,23 @@ CREATE TABLE app_settings (
     CHECK (attendance_hour_start < attendance_hour_end)
 );
 
--- app_user - admin / docentes / estudiantes (RF-01, RF-02, RF-03)
 CREATE TABLE app_user (
     id                   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     role                 user_role    NOT NULL,
-    dni                  VARCHAR(12)  UNIQUE,             -- RF-02/RF-03
-    code                 VARCHAR(20)  UNIQUE,             -- código de matrícula (estudiante)
-    email                VARCHAR(160) NOT NULL UNIQUE,    -- correo institucional @unamba.edu.pe (RF-08/RF-12)
+    dni                  VARCHAR(12)  UNIQUE,
+    code                 VARCHAR(20)  UNIQUE,
+    email                VARCHAR(160) NOT NULL UNIQUE,
     full_name            VARCHAR(160) NOT NULL,
-    whatsapp             VARCHAR(20),                     -- RF-02/RF-03
-    password_hash        VARCHAR(128) NOT NULL,           -- argon2id (97 chars)
-    must_change_password BOOLEAN      NOT NULL DEFAULT TRUE,   -- RF-11: clave temporal
-    semester             SMALLINT,                        -- ciclo del estudiante
+    whatsapp             VARCHAR(20),
+    password_hash        VARCHAR(128) NOT NULL,
+    must_change_password BOOLEAN      NOT NULL DEFAULT TRUE,
+    semester             SMALLINT,
     is_active            BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at           TIMESTAMP    NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMP    NOT NULL DEFAULT NOW(),
-    face_consent_at      TIMESTAMP,                       -- R13 (Ley 29733): consentimiento biométrico
-    token_version        INTEGER      NOT NULL DEFAULT 0  -- invalida JWT al cambiar contraseña
+    face_consent_at      TIMESTAMP,
+    token_version        INTEGER      NOT NULL DEFAULT 0
 );
--- R15: formatos de Perú. NOT VALID a propósito: no revalida los datos que ya
--- existían (solo controla altas y ediciones nuevas).
 ALTER TABLE app_user ADD CONSTRAINT chk_user_dni_8
     CHECK (dni IS NULL OR dni ~ '^[0-9]{8}$') NOT VALID;
 ALTER TABLE app_user ADD CONSTRAINT chk_user_whatsapp_pe
@@ -89,57 +58,51 @@ CREATE INDEX idx_app_user_role     ON app_user (role);
 CREATE INDEX idx_app_user_semester ON app_user (semester) WHERE semester IS NOT NULL;
 CREATE INDEX idx_app_user_email_lower ON app_user (LOWER(email));
 
--- room - aulas de la facultad (RF-05)
 CREATE TABLE room (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    code       VARCHAR(20) NOT NULL UNIQUE,   -- p. ej. 'LAB 304'
+    code       VARCHAR(20) NOT NULL UNIQUE,
     name       VARCHAR(120),
     building   VARCHAR(80),
     is_active  BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    capacity   INTEGER,                       -- R9: aforo informativo (NULL = no declarado)
+    capacity   INTEGER,
     CONSTRAINT chk_room_capacity CHECK (capacity IS NULL OR capacity > 0)
 );
 
--- device - cámara Hikvision o ESP32 por aula (RF-05, RF-35)
--- NOTA: el backend identifica el aula por la identidad del dispositivo
--- conectado (device_key), no por su IP dinámica.
 CREATE TABLE device (
     id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     room_id       BIGINT      NOT NULL REFERENCES room(id),
     device_type   device_type NOT NULL,
-    device_key    VARCHAR(64) NOT NULL UNIQUE,   -- identificador lógico: 'esp32-lab305' / 'cam-lab305'
+    device_key    VARCHAR(64) NOT NULL UNIQUE,
     name          VARCHAR(80),
-    ip_address    VARCHAR(45),                   -- informativo (DHCP)
-    mac_address   VARCHAR(17),                   -- RF-05
-    rtsp_url      VARCHAR(255),                  -- solo cámaras: rtsp://user:pass@ip:554/...
-    is_online     BOOLEAN     NOT NULL DEFAULT FALSE,  -- RF-35
-    last_heartbeat TIMESTAMP,                         -- RF-33
+    ip_address    VARCHAR(45),
+    mac_address   VARCHAR(17),
+    rtsp_url      VARCHAR(255),
+    is_online     BOOLEAN     NOT NULL DEFAULT FALSE,
+    last_heartbeat TIMESTAMP,
     is_active     BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at    TIMESTAMP   NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_device_room ON device (room_id);
 
--- course / course_group / schedule_block - carga académica (RF-06)
 CREATE TABLE course (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    code       VARCHAR(20) NOT NULL UNIQUE,   -- p. ej. 'ISA903'
-    name       VARCHAR(160) NOT NULL,         -- 'Inteligencia Artificial I'
+    code       VARCHAR(20) NOT NULL UNIQUE,
+    name       VARCHAR(160) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE course_group (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     course_id  BIGINT      NOT NULL REFERENCES course(id) ON DELETE CASCADE,
-    group_code VARCHAR(5)  NOT NULL,          -- 'A' | 'B' | 'C' ...
+    group_code VARCHAR(5)  NOT NULL,
     teacher_id BIGINT      NOT NULL REFERENCES app_user(id),
     is_active  BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP   NOT NULL DEFAULT NOW(),
-    semester_label VARCHAR(40) NOT NULL,      -- R1: cada grupo vive en UN semestre
+    semester_label VARCHAR(40) NOT NULL,
     capacity       INTEGER NOT NULL DEFAULT 40,
     CONSTRAINT chk_group_capacity CHECK (capacity > 0)
 );
--- El grupo se repite por semestre: 'ISA903-A' puede existir en 2026-I y 2026-II.
 CREATE UNIQUE INDEX uq_group_course_code_sem ON course_group (course_id, group_code, semester_label);
 CREATE INDEX idx_group_semester ON course_group (semester_label);
 CREATE INDEX idx_group_teacher  ON course_group (teacher_id);
@@ -147,61 +110,42 @@ CREATE INDEX idx_group_teacher  ON course_group (teacher_id);
 CREATE TABLE schedule_block (
     id         BIGINT   GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     group_id   BIGINT   NOT NULL REFERENCES course_group(id) ON DELETE CASCADE,
-    weekday    SMALLINT NOT NULL,                       -- 1=Lunes … 5=Viernes
+    weekday    SMALLINT NOT NULL,
     start_time TIME     NOT NULL,
     end_time   TIME     NOT NULL,
-    -- R9/RF-06: el AULA va en el bloque (un grupo puede dictar en labs
-    -- distintos según el día). Va al final, que es donde la deja el ALTER de
-    -- db/003_aula_por_bloque.sql: pg_dump respeta el orden físico y así la BD
-    -- migrada y la recién instalada dan el MISMO dump.
     room_id    BIGINT   NOT NULL REFERENCES room(id),
     CHECK (start_time < end_time)
 );
--- Semana lectiva Lunes-Viernes. NOT VALID a propósito, igual que
--- chk_user_dni_8: controla altas y ediciones nuevas sin revalidar los bloques
--- que ya existían antes de db/003_aula_por_bloque.sql.
 ALTER TABLE schedule_block ADD CONSTRAINT schedule_block_weekday_check
     CHECK (weekday BETWEEN 1 AND 5) NOT VALID;
--- El AULA va en el bloque (un grupo puede dictar en labs distintos según el día;
--- course_group no guarda aula: la única fuente de verdad es schedule_block).
--- Evita duplicar el mismo bloque de un grupo; la validación de SOLAPAMIENTO
--- (misma aula o mismo docente en horarios que se cruzan, RF-06) la aplica la
--- API al crear bloques, porque sí son válidos los bloques simultáneos en
--- aulas y docentes distintos (grupos paralelos, Tabla 2 del documento).
 CREATE UNIQUE INDEX uq_block_group_time ON schedule_block (group_id, weekday, start_time);
 CREATE INDEX idx_block_lookup ON schedule_block (weekday, start_time);
 CREATE INDEX idx_block_room   ON schedule_block (room_id);
 
--- enrollment - matrícula estudiante ↔ grupo (RF-03, RF-22)
 CREATE TABLE enrollment (
     id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     student_id   BIGINT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
     group_id     BIGINT NOT NULL REFERENCES course_group(id) ON DELETE CASCADE,
     enrolled_at  TIMESTAMP NOT NULL DEFAULT NOW(),
-    withdrawn_at TIMESTAMP,                        -- R8: retiro (NULL = activo)
-    UNIQUE (student_id, group_id)                  -- un alumno no se matricula 2 veces en el mismo grupo
+    withdrawn_at TIMESTAMP,
+    UNIQUE (student_id, group_id)
 );
--- R8: volver al MISMO grupo = reactivar (withdrawn_at = NULL), no insertar otra fila.
 CREATE INDEX idx_enrollment_active  ON enrollment (student_id) WHERE withdrawn_at IS NULL;
 CREATE INDEX idx_enrollment_group   ON enrollment (group_id);
 CREATE INDEX idx_enrollment_student ON enrollment (student_id);
 
--- face_embedding - enrolamiento biométrico (RF-04, RF-19)
--- vector: embedding promedio de 3-5 fotos, 512 dimensiones (ArcFace).
 CREATE TABLE face_embedding (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     student_id  BIGINT      NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
-    vector      REAL[512]   NOT NULL,           -- búsqueda de coseno en Python (sin pgvector)
-    photo_url   VARCHAR(500),                   -- storage/ en dev, Cloudflare R2 en prod
+    vector      REAL[512]   NOT NULL,
+    photo_url   VARCHAR(500),
     source      VARCHAR(20) NOT NULL DEFAULT 'upload' CHECK (source IN ('upload', 'promedio')),
     is_current  BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMP   NOT NULL DEFAULT NOW()
 );
--- Solo el embedding vigente participa de la búsqueda.
 CREATE INDEX idx_face_current ON face_embedding (student_id) WHERE is_current;
 CREATE INDEX idx_face_student ON face_embedding (student_id);
 
--- holiday - feriados y paros (RF-09, R12): no se abren sesiones esos días
 CREATE TABLE holiday (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     holiday_date DATE   NOT NULL UNIQUE,
@@ -209,31 +153,29 @@ CREATE TABLE holiday (
     created_at  TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
--- justification - descansos médicos / faltas justificadas (RF-10, R6)
 CREATE TABLE justification (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     student_id  BIGINT      NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
-    course_id   BIGINT      REFERENCES course(id),      -- NULL = aplica a todos los cursos
+    course_id   BIGINT      REFERENCES course(id),
     start_date  DATE        NOT NULL,
     end_date    DATE        NOT NULL,
     reason      VARCHAR(400) NOT NULL,
-    document_url VARCHAR(500),                          -- escaneo del descanso médico
+    document_url VARCHAR(500),
     created_by  BIGINT      NOT NULL REFERENCES app_user(id),
     created_at  TIMESTAMP   NOT NULL DEFAULT NOW(),
     CHECK (start_date <= end_date)
 );
 CREATE INDEX idx_justification_student ON justification (student_id, start_date, end_date);
 
--- attendance_session - apertura de un bloque en una fecha (RF-26, R3/R4/R5)
 CREATE TABLE attendance_session (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     block_id    BIGINT        NOT NULL REFERENCES schedule_block(id),
     session_date DATE         NOT NULL,
-    status      session_status NOT NULL DEFAULT 'abierta',   -- RF-26: cierre automático
+    status      session_status NOT NULL DEFAULT 'abierta',
     opened_at   TIMESTAMP     NOT NULL DEFAULT NOW(),
-    closed_at   TIMESTAMP,                          -- hora real de cierre (puede ser diferida)
-    needs_review  BOOLEAN     NOT NULL DEFAULT FALSE,   -- R4: cerrada sin marcas (¿cámara caída?)
-    cancel_reason VARCHAR(200),                         -- R5: feriado olvidado / paro
+    closed_at   TIMESTAMP,
+    needs_review  BOOLEAN     NOT NULL DEFAULT FALSE,
+    cancel_reason VARCHAR(200),
     cancelled_by  BIGINT REFERENCES app_user(id),
     cancelled_at  TIMESTAMP,
     UNIQUE (block_id, session_date)
@@ -241,39 +183,35 @@ CREATE TABLE attendance_session (
 CREATE INDEX idx_session_lookup ON attendance_session (session_date, status);
 CREATE INDEX idx_session_review ON attendance_session (session_date) WHERE needs_review;
 
--- attendance_record - la marca de asistencia (RF-21, RF-22, RF-23, R6)
 CREATE TABLE attendance_record (
     id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     session_id       BIGINT      NOT NULL REFERENCES attendance_session(id) ON DELETE CASCADE,
     student_id       BIGINT      NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
-    status           attendance_status NOT NULL,               -- RF-23
-    marked_at        TIMESTAMP,                              -- RF-21: hora de la marca (NULL = falta por cierre RF-26)
+    status           attendance_status NOT NULL,
+    marked_at        TIMESTAMP,
     method           VARCHAR(10) NOT NULL DEFAULT 'facial' CHECK (method IN ('facial', 'manual')),
-    similarity       NUMERIC(5,4),                           -- similitud coseno de la identificación (RF-20)
-    corrected_by     BIGINT REFERENCES app_user(id),         -- RF-15: rectificación docente
+    similarity       NUMERIC(5,4),
+    corrected_by     BIGINT REFERENCES app_user(id),
     corrected_at     TIMESTAMP,
-    correct_reason   VARCHAR(400),                           -- justificación presencial obligatoria
+    correct_reason   VARCHAR(400),
     created_at       TIMESTAMP   NOT NULL DEFAULT NOW(),
-    is_justified     BOOLEAN NOT NULL DEFAULT FALSE,          -- R6: falta justificada (FJ)
+    is_justified     BOOLEAN NOT NULL DEFAULT FALSE,
     justification_id BIGINT REFERENCES justification(id) ON DELETE SET NULL,
-    UNIQUE (session_id, student_id),                          -- marca única / cooldown (Tabla 2)
+    UNIQUE (session_id, student_id),
     CONSTRAINT chk_justified_only_falta CHECK (is_justified = FALSE OR status = 'falta')
 );
--- OJO: ON DELETE SET NULL solo limpia justification_id. El SERVICIO debe poner
--- is_justified = FALSE ANTES de borrar la justificación (services/justifications.py).
 CREATE INDEX idx_record_student ON attendance_record (student_id);
 CREATE INDEX idx_record_session ON attendance_record (session_id);
 CREATE INDEX idx_record_justification ON attendance_record (justification_id)
     WHERE justification_id IS NOT NULL;
 
--- audit_log - bitácora de acciones sensibles (RF-32, solo lectura)
 CREATE TABLE audit_log (
     id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    actor_id     BIGINT       REFERENCES app_user(id),      -- NULL = proceso del sistema (scheduler)
-    action       VARCHAR(40)  NOT NULL,       -- 'rectificacion' | 'credenciales_reenviadas' | 'justificacion' | 'sistema' ...
-    entity       VARCHAR(40)  NOT NULL,       -- 'attendance_record' | 'app_user' | ...
+    actor_id     BIGINT       REFERENCES app_user(id),
+    action       VARCHAR(40)  NOT NULL,
+    entity       VARCHAR(40)  NOT NULL,
     entity_id    BIGINT,
-    old_value    JSONB,                       -- estado anterior (RF-32)
+    old_value    JSONB,
     new_value    JSONB,
     ip_address   VARCHAR(45),
     created_at   TIMESTAMP    NOT NULL DEFAULT NOW()
@@ -282,9 +220,6 @@ CREATE INDEX idx_audit_entity ON audit_log (entity, entity_id);
 CREATE INDEX idx_audit_actor  ON audit_log (actor_id);
 CREATE INDEX idx_audit_time   ON audit_log (created_at);
 
--- dpi_alert_sent - control de alertas DPI (R7): UN correo por nivel
--- (alerta/limite) por alumno-curso-semestre. El servicio inserta primero
--- (ON CONFLICT DO NOTHING): si no insertó, ya se envió y no se repite.
 CREATE TABLE dpi_alert_sent (
     student_id     BIGINT      NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
     course_id      BIGINT      NOT NULL REFERENCES course(id)   ON DELETE CASCADE,
@@ -294,9 +229,6 @@ CREATE TABLE dpi_alert_sent (
     PRIMARY KEY (student_id, course_id, semester_label, level)
 );
 
--- TRIGGERS -------------------------------------------------------------------
-
--- Mantiene updated_at automáticamente en cada UPDATE.
 CREATE OR REPLACE FUNCTION fn_set_updated_at() RETURNS trigger AS $$
 BEGIN
     NEW.updated_at = NOW();
@@ -312,10 +244,6 @@ CREATE TRIGGER trg_settings_updated_at
     BEFORE UPDATE ON app_settings
     FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
 
--- VISTAS de apoyo (dashboard y consultas frecuentes) --------------------------
-
--- Asistencia de hoy por curso/grupo (alimenta app-student-list del dashboard).
--- Excluye las sesiones canceladas (R5) y expone la justificación (R6).
 CREATE VIEW v_today_attendance AS
 SELECT
     ar.id            AS record_id,
@@ -348,9 +276,6 @@ JOIN app_user        st ON st.id = ar.student_id
 WHERE s.session_date = CURRENT_DATE
   AND s.status <> 'cancelada';
 
--- DPI (R7): solo semestre vigente, sesiones VÁLIDAS (cerradas, no canceladas,
--- sin needs_review), rango de matrícula del alumno (alta → retiro) y las
--- justificadas contadas aparte (no suman al porcentaje de ausentismo).
 CREATE VIEW v_student_dpi AS
 WITH cfg AS (
     SELECT semester_label FROM app_settings WHERE id = 1

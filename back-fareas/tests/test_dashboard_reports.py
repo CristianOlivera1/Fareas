@@ -1,9 +1,3 @@
-"""Dashboard y reportes (Bloque 8): summary, stats, SSE en vivo y RF-16.
-
-Estrategia: el escenario B6 (helpers_b6) crea aula/curso/grupo; aquí se añade
-un bloque con el weekday DE HOY para que la sesión quede con session_date =
-CURRENT_DATE y los endpoints 'de hoy' tengan datos deterministas.
-"""
 import json
 from datetime import date, datetime, time
 from io import BytesIO
@@ -25,9 +19,7 @@ async def escenario(db_session):
     yield esc
     await limpiar(db_session)
 
-
 async def _sesion_hoy_con_marcas(db_session, client, admin_headers, esc) -> int:
-    """Bloque de HOY + sesión abierta + e1 asistio / e2 tardanza (API RF-21)."""
     hoy = date.today()
     db_session.add(ScheduleBlock(
         group_id=esc["grupo_id"], room_id=esc["aula_id"], weekday=weekday_hoy(),
@@ -47,10 +39,6 @@ async def _sesion_hoy_con_marcas(db_session, client, admin_headers, esc) -> int:
         assert r.status_code == 201, r.text
     return sesion.id
 
-
-# ---------------------------------------------------------------------------
-# Summary + stats (RF-13, PLAN §5)
-# ---------------------------------------------------------------------------
 async def test_summary_tarjetas(client, admin_headers, db_session, escenario):
     esc = escenario
     await _sesion_hoy_con_marcas(db_session, client, admin_headers, esc)
@@ -58,16 +46,14 @@ async def test_summary_tarjetas(client, admin_headers, db_session, escenario):
     r = await client.get(f"{API}/dashboard/summary", headers=admin_headers)
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["asistencias_hoy"] >= 1      # e1
-    assert data["tardanzas_hoy"] >= 1        # e2
+    assert data["asistencias_hoy"] >= 1
+    assert data["tardanzas_hoy"] >= 1
     assert data["camaras_total"] >= 0
     assert data["alertas_dpi"] >= 0
     assert "at" in data
 
-    # Sin token → 401
     r = await client.get(f"{API}/dashboard/summary")
     assert r.status_code == 401
-
 
 async def test_stats_hourly_y_distribution(client, admin_headers, db_session, escenario):
     esc = escenario
@@ -76,16 +62,15 @@ async def test_stats_hourly_y_distribution(client, admin_headers, db_session, es
     r = await client.get(f"{API}/stats/hourly", headers=admin_headers)
     assert r.status_code == 200, r.text
     serie = r.json()
-    assert [s["hour"] for s in serie][0] == "07:00"  # franja institucional 07-20
+    assert [s["hour"] for s in serie][0] == "07:00"
     assert len(serie) == 14
     h08 = next(s for s in serie if s["hour"] == "08:00")
     assert h08["total"] >= 2 and h08["asistio"] >= 1 and h08["tardanza"] >= 1
 
-    # Con day explícito (aunque la sesión sea de hoy)
     r = await client.get(
         f"{API}/stats/hourly", headers=admin_headers, params={"day": date.today().isoformat()}
     )
-    assert r.status_code == 200 and r.json()[1]["total"] >= 2  # índice 1 = 08:00
+    assert r.status_code == 200 and r.json()[1]["total"] >= 2
 
     r = await client.get(
         f"{API}/stats/distribution", headers=admin_headers,
@@ -95,38 +80,26 @@ async def test_stats_hourly_y_distribution(client, admin_headers, db_session, es
     dist = r.json()
     assert dist["asistio"] >= 1 and dist["tardanza"] >= 1 and dist["sin_registro"] >= 0
 
-
-# ---------------------------------------------------------------------------
-# SSE en vivo (RF-13)
-# ---------------------------------------------------------------------------
 async def test_sse_auth(client):
-    """SSE: sin token → 422; token basura → 401 (EventSource va por query)."""
     r = await client.get(f"{API}/dashboard/live")
-    assert r.status_code == 422  # falta access_token
+    assert r.status_code == 422
     r = await client.get(f"{API}/dashboard/live", params={"access_token": "no-es-un-jwt"})
     assert r.status_code == 401
-
 
 async def test_sse_estudiante_rechazado(client, temp_student):
     from app.core.security import create_access_token
 
-    token = create_access_token(temp_student.id, "estudiante")  # type: ignore[arg-type]
+    token = create_access_token(temp_student.id, "estudiante")
     r = await client.get(f"{API}/dashboard/live", params={"access_token": token})
     assert r.status_code == 403
 
-
 async def test_sse_envia_veredicto(client, admin_headers):
-    """Inyecta un veredicto en camera_loop._ultimo y lo recibe por SSE.
-
-    Consumimos el body_iterator del EventSourceResponse directamente (el
-    stream HTTP de httpx no se puede cerrar: la respuesta es infinita).
-    """
     import asyncio
 
     from app.routers.dashboard import dashboard_live
     from app.services import camera_loop
 
-    camera_loop._ultimo[999] = {  # aula falsa solo para el test
+    camera_loop._ultimo[999] = {
         "room_id": 999, "verdict": "asistio", "student_id": 4,
         "similarity": 0.9, "ts": "2026-09-27T08:00:00",
     }
@@ -137,14 +110,10 @@ async def test_sse_envia_veredicto(client, admin_headers):
         assert item["event"] == "verdict"
         data = json.loads(item["data"])
         assert data["room_id"] == 999 and data["verdict"] == "asistio"
-        await resp.body_iterator.aclose()  # corta el generador infinito
+        await resp.body_iterator.aclose()
     finally:
         camera_loop._ultimo.pop(999, None)
 
-
-# ---------------------------------------------------------------------------
-# Reportes Excel/PDF (RF-16)
-# ---------------------------------------------------------------------------
 async def test_reporte_excel_y_pdf(client, admin_headers, db_session, escenario):
     esc = escenario
     await _sesion_hoy_con_marcas(db_session, client, admin_headers, esc)
@@ -159,10 +128,10 @@ async def test_reporte_excel_y_pdf(client, admin_headers, db_session, escenario)
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     assert "attachment" in r.headers.get("content-disposition", "")
-    assert r.content[:2] == b"PK"  # zip magic del xlsx
+    assert r.content[:2] == b"PK"
     wb = load_workbook(BytesIO(r.content))
     ws = wb.active
-    assert ws.max_row >= 7  # encabezado (filas 1-5) + 2 registros
+    assert ws.max_row >= 7
 
     r = await client.get(
         f"{API}/reports/attendance.pdf", headers=admin_headers, params={"desde": hoy, "hasta": hoy}
@@ -171,10 +140,7 @@ async def test_reporte_excel_y_pdf(client, admin_headers, db_session, escenario)
     assert r.headers["content-type"] == "application/pdf"
     assert r.content[:5] == b"%PDF-"
 
-
 async def test_stats_y_summary_del_docente_van_filtrados(client, docente_headers):
-    """R7 (Bloque 11): con rol docente, dashboard Y stats van filtrados por
-    SUS grupos; el docente de prueba no tiene ninguno → todo en cero."""
     r = await client.get(f"{API}/stats/hourly", headers=docente_headers)
     assert r.status_code == 200, r.text
     assert all(fila["total"] == 0 for fila in r.json())
@@ -189,14 +155,12 @@ async def test_stats_y_summary_del_docente_van_filtrados(client, docente_headers
     assert data["asistencias_hoy"] == 0 and data["ausencias_hoy"] == 0
     assert "en_riesgo" in data and "sessions_to_review" in data
 
-    # Y su vista de asistencia de hoy tampoco muestra grupos ajenos
     r = await client.get(f"{API}/attendance/today", headers=docente_headers)
     assert r.status_code == 200 and r.json() == []
 
-
 async def test_reportes_matriz_grupo_y_riesgo_dpi(client, admin_headers, docente_headers,
                                                   db_session, escenario):
-    """Bloque 11 (11.8): matriz del grupo (A/T/F/FJ/—) y riesgo DPI."""
+
     import datetime as _dt
 
     from sqlmodel import select
@@ -209,9 +173,8 @@ async def test_reportes_matriz_grupo_y_riesgo_dpi(client, admin_headers, docente
     sesion = (
         await db_session.exec(select(AttendanceSession).where(AttendanceSession.id == sesion_id))
     ).first()
-    await cerrar_sesion(db_session, sesion)  # cerrada: entra en la matriz (R4)
+    await cerrar_sesion(db_session, sesion)
 
-    # --- Matriz del grupo: e1 asistio (A) y e2 tardanza (T) ---
     r = await client.get(f"{API}/reports/group-matrix.xlsx", headers=admin_headers,
                          params={"group_id": esc["grupo_id"]})
     assert r.status_code == 200, r.text
@@ -221,16 +184,14 @@ async def test_reportes_matriz_grupo_y_riesgo_dpi(client, admin_headers, docente
     headers = [c.value for c in ws[5]]
     assert headers[0] == "Estudiante" and headers[1] == "Código"
     assert {"A", "T", "F", "FJ", "% Asist."} <= set(headers)
-    assert ws.max_row == 7  # encabezado (1-5) + e1 y e2
+    assert ws.max_row == 7
     marcas = {ws.cell(row=f, column=3).value for f in (6, 7)}
     assert marcas == {"A", "T"}
 
-    # Docente ajeno → 403 (el backend ya valida pertenencia)
     r = await client.get(f"{API}/reports/group-matrix.xlsx", headers=docente_headers,
                          params={"group_id": esc["grupo_id"]})
     assert r.status_code == 403
 
-    # --- Riesgo DPI: segunda sesión en la que e2 no marca → falta (50 %) ---
     hoy = date.today()
     bloque2 = ScheduleBlock(group_id=esc["grupo_id"], room_id=esc["aula_id"],
                             weekday=weekday_hoy(),
@@ -254,35 +215,31 @@ async def test_reportes_matriz_grupo_y_riesgo_dpi(client, admin_headers, docente
     assert r.content[:2] == b"PK"
     ws = load_workbook(BytesIO(r.content)).active
     filas = [[c.value for c in row] for row in ws.iter_rows(min_row=6, max_row=ws.max_row)]
-    assert len(filas) == 1  # solo e2 supera el aviso del 20 %
+    assert len(filas) == 1
     fila = filas[0]
     assert fila[0] == "Estudiante Dos B6"
     assert fila[7] == 50.0 and "LÍMITE" in str(fila[8])
 
-    # Docente ajeno: la lista queda vacía (filtra por SUS cursos)
     r = await client.get(f"{API}/reports/dpi-risk.xlsx", headers=docente_headers)
     assert r.status_code == 200
     ws = load_workbook(BytesIO(r.content)).active
-    assert ws.max_row == 5  # solo encabezados
-
+    assert ws.max_row == 5
 
 async def test_docente_solo_sus_grupos_en_reportes(client, admin_headers, docente_headers,
                                                   db_session, escenario):
-    """RF-16 con RF-21: el docente ajeno al grupo obtiene un reporte VACÍO."""
+
     esc = escenario
     await _sesion_hoy_con_marcas(db_session, client, admin_headers, esc)
     hoy = date.today().isoformat()
 
-    # docente_headers = OTRO docente (temp.docente.login) → 0 filas
     r = await client.get(
         f"{API}/reports/attendance.xlsx", headers=docente_headers,
         params={"desde": hoy, "hasta": hoy, "course_id": esc["curso_id"]},
     )
     assert r.status_code == 200, r.text
     ws = load_workbook(BytesIO(r.content)).active
-    assert ws.max_row == 5  # solo encabezado, sin datos
+    assert ws.max_row == 5
 
-    # admin ve las 2 marcas del curso
     r = await client.get(
         f"{API}/reports/attendance.xlsx", headers=admin_headers,
         params={"desde": hoy, "hasta": hoy, "course_id": esc["curso_id"]},

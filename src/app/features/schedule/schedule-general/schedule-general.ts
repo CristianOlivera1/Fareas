@@ -88,7 +88,6 @@ export class ScheduleGeneralPage {
   readonly teacherId = signal(0);
   readonly roomId = signal(0);
 
-  /** RF-01: franja de clases del sistema (Parámetros, 07:00–20:00 por defecto). */
   readonly horaInicio = signal('07:00');
   readonly horaFin = signal('20:00');
   readonly franja = computed(() => ({
@@ -189,8 +188,6 @@ export class ScheduleGeneralPage {
     }
   }
 
-  /** Datos de la rejilla. Las horas se filtran en el SERVIDOR: si filtras por
-   * un aula, las celdas vacías son huecos reales de esa aula. */
   async load(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
@@ -264,9 +261,6 @@ export class ScheduleGeneralPage {
     this.blockDialogVisible = true;
   }
 
-  /** Al elegir grupo: se prellena el aula de su último bloque (ese día si lo
-   * hay, si no el último de la semana). Se consulta al servidor porque con
-   * filtros activos la rejilla puede no traer todos sus bloques. */
   async onGroup(value: number | null): Promise<void> {
     this.patchBlock({ group_id: value, room_id: value ? null : this.blockForm().room_id });
     if (!value) return;
@@ -278,7 +272,6 @@ export class ScheduleGeneralPage {
       const room = delDia?.room_id ?? ultimo?.room_id ?? null;
       this.patchBlock({ room_id: room });
     } catch {
-      // Sin bloques previos no hay aula que sugerir: el selector queda abierto.
     }
   }
 
@@ -324,7 +317,6 @@ export class ScheduleGeneralPage {
       this.blockDialogVisible = false;
       await this.load();
     } catch (err) {
-      // RF-06: choque de aula o de docente (409) con el detalle del backend.
       this.toast.add({
         severity: 'error',
         summary: 'No se pudo añadir el bloque',
@@ -391,7 +383,6 @@ export class ScheduleGeneralPage {
     return h * 60 + (m || 0);
   }
 
-  /** Fin propuesto: nunca se pasa del cierre de la franja. */
   private addHours(time: string, hours: number): string {
     const total = Math.min(this.minutos(this.horaFin()), this.minutos(time) + hours * 60);
     const hh = String(Math.floor(total / 60)).padStart(2, '0');

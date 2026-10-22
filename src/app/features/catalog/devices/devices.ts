@@ -30,7 +30,7 @@ import { TableColumn } from '../../../core/models/table-column';
 import { Device, DeviceType, Room } from '../../../core/models/catalog';
 import { extractDetail } from '../rooms/rooms';
 
-const REFRESH_MONITOREO_MS = 30_000; // RF-35: panel de monitoreo cada 30 s
+const REFRESH_MONITOREO_MS = 30_000;
 
 interface DeviceForm {
   id: number | null;
@@ -202,7 +202,6 @@ export class DevicesPage {
       const res = await this.api.rooms({ page_size: 100 }).toPromise();
       this.aulas.set((res?.items ?? []).map((r: Room) => ({ label: r.code, value: r.id })));
     } catch {
-      // el select queda vacío; no bloquea la pantalla
     }
   }
 

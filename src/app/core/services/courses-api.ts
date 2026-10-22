@@ -25,7 +25,6 @@ export class CoursesApi extends BaseApi {
       semester ? { semester } : undefined,
     );
   }
-  /** R9: el grupo NO lleva aula; el aula se indica en cada bloque. */
   createGroup(
     courseId: number,
     body: { group_code: string; teacher_id: number; capacity: number },
@@ -35,8 +34,6 @@ export class CoursesApi extends BaseApi {
   deactivateGroup(groupId: number) {
     return this.delete<{ message: string }>(`/groups/${groupId}`);
   }
-  /** La baja del grupo es LÓGICA (sus bloques y su historial quedan): esto lo
-   * devuelve a activo para que vuelva a abrir sesiones. */
   activateGroup(groupId: number) {
     return this.post<{ message: string }>(`/groups/${groupId}/activate`);
   }
@@ -54,7 +51,6 @@ export class CoursesApi extends BaseApi {
   blocks(groupId: number) {
     return this.get<Block[]>(`/groups/${groupId}/blocks`);
   }
-  /** R9: `room_id` es obligatorio (el aula es del bloque, no del grupo). */
   createBlock(
     groupId: number,
     body: { weekday: number; start_time: string; end_time: string; room_id: number },
@@ -82,12 +78,9 @@ export class CoursesApi extends BaseApi {
       student_id: studentId,
     });
   }
-  /** R8d: retiro — borra la matrícula si no hay registros; si los hay la
-   * marca con withdrawn_at (el historial del alumno en el curso se conserva). */
   unenroll(groupId: number, studentId: number) {
     return this.delete<{ message: string }>(`/groups/${groupId}/students/${studentId}`);
   }
-  /** R8e: transferencia entre grupos del MISMO curso. */
   transfer(groupId: number, studentId: number, destinoGroupId: number) {
     return this.post<{ message: string }>(
       `/groups/${groupId}/students/${studentId}/transfer`,

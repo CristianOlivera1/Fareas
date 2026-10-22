@@ -40,7 +40,6 @@ export class RecoverPassword {
 
   private recoveryEmail = '';
 
-
   emailFieldError(): string {
     const control = this.emailForm.get('email');
     if (!control || !control.touched || !control.errors) return '';
@@ -75,7 +74,6 @@ export class RecoverPassword {
       },
     });
   }
-
 
   otpFieldError(): string {
     const control = this.otpForm.get('code');
@@ -160,7 +158,6 @@ export class RecoverPassword {
         },
       });
   }
-
 
   resendCode(): void {
     this.errorMessage.set('');

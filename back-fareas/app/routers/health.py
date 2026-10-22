@@ -1,4 +1,3 @@
-"""Health check: monitorea la app y la conexión a PostgreSQL real (RF-35)."""
 from fastapi import APIRouter
 from sqlmodel import func, select
 
@@ -21,6 +20,6 @@ async def health(db: DbSession) -> dict:
         users = (await db.exec(select(func.count()).select_from(AppUser))).one()
         payload["database"] = "ok"
         payload["users"] = users
-    except Exception:  # noqa: BLE001 - el health nunca debe lanzar 500 por la BD
+    except Exception:
         payload["database"] = "unavailable"
     return payload

@@ -50,9 +50,7 @@ export interface Group {
   readonly group_code: string;
   readonly teacher_id: number;
   readonly teacher_name: string;
-  /** R1: semestre al que pertenece el grupo ('2026-II'). */
   readonly semester_label: string;
-  /** R8/R9: cupo del grupo (40 por defecto). */
   readonly capacity: number;
   readonly enrolled_count: number;
   readonly is_active: boolean;
@@ -78,12 +76,10 @@ export interface ScheduleRow {
 export interface Block {
   readonly id: number;
   readonly group_id: number;
-  /** R9: aula donde se dicta ESTE bloque (el grupo no tiene aula propia). */
   readonly room_id: number;
   readonly room_code: string;
-  /** 1=Lunes … 5=Viernes (isoweekday): la semana lectiva no tiene sábado ni domingo. */
   readonly weekday: number;
-  readonly start_time: string; // 'HH:MM:SS'
+  readonly start_time: string;
   readonly end_time: string;
 }
 
@@ -94,31 +90,26 @@ export interface EnrolledStudent {
   readonly email: string;
   readonly semester: number | null;
   readonly enrolled_at: string | null;
-  /** R8d: si tiene fecha, la matrícula fue retirada (soft). */
   readonly withdrawn_at: string | null;
-  /** RF-04: rostro vigente del alumno. */
   readonly has_face: boolean | null;
 }
 
 export interface Holiday {
   readonly id: number;
-  readonly holiday_date: string; // 'YYYY-MM-DD'
+  readonly holiday_date: string;
   readonly description: string;
 }
 
-/** Alta de feriado (R12): además de guardar la fecha CANCELA las sesiones de ese día. */
 export interface HolidayCreated extends Holiday {
   readonly sesiones_canceladas: number;
 }
 
-/** POST /holidays/range (R12): paro por rango, omite fines de semana por defecto. */
 export interface HolidayRangeResult {
   readonly creados: number;
   readonly omitidos: number;
   readonly sesiones_canceladas: number;
 }
 
-/** POST /holidays/national (R12): genera los feriados nacionales del año. */
 export interface HolidayNationalResult {
   readonly anio: number;
   readonly creados: number;
@@ -139,7 +130,6 @@ export interface Justification {
   readonly created_by_name: string;
 }
 
-/** POST /justifications (R6): informa cuántas faltas quedaron justificadas. */
 export interface JustificationCreated {
   readonly id: number;
   readonly student_id: number;
@@ -152,16 +142,12 @@ export interface JustificationCreated {
 
 export interface Settings {
   readonly semester_label: string;
-  /** R1: fechas del semestre vigente (null = sin restricción de fechas). */
   readonly semester_start: string | null;
   readonly semester_end: string | null;
   readonly block_minutes: number;
   readonly late_tolerance_minutes: number;
-  /** R2/R3: minutos de apertura anticipada de la ventana de marca. */
   readonly early_open_minutes: number;
-  /** R11: días que un docente puede rectificar hacia atrás. */
   readonly rectify_days: number;
-  /** R7: mínimo de sesiones para enviar correos de alerta DPI. */
   readonly dpi_min_sessions: number;
   readonly face_match_threshold: number;
   readonly dpi_alert_percent: number;
@@ -187,12 +173,10 @@ export interface AttendanceToday {
   readonly marked_at: string | null;
   readonly method: string;
   readonly similarity: number | null;
-  /** R6: la falta está justificada (no cuenta para el 30 % del DPI). */
   readonly is_justified: boolean;
   readonly session_id: number;
 }
 
-/** Sesión CERRADA marcada para revisión (R4: cero marcas al cierre). */
 export interface SessionReview {
   readonly session_id: number;
   readonly session_date: string;

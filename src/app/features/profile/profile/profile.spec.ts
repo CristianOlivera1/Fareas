@@ -42,7 +42,6 @@ describe('ProfilePage', () => {
   it('recorre identidad → código → nueva contraseña y actualiza', () => {
     component.form.controls.current_password.setValue('ClaveActual1');
 
-    // Enter en el paso 1 también debe enviar el código (onSubmit enruta).
     component.onSubmit();
     const otpRequest = httpMock.expectOne(`${API}/auth/change-password/otp`);
     expect(otpRequest.request.method).toBe('POST');
@@ -58,7 +57,6 @@ describe('ProfilePage', () => {
     expect(component.maskedEmail()).toBe('do*****e@unamba.edu.pe');
 
     component.form.controls.otp_code.setValue('123456');
-    // Enter en el paso 2 verifica el código.
     component.onSubmit();
     const verifyRequest = httpMock.expectOne(`${API}/auth/change-password/otp/verify`);
     expect(verifyRequest.request.body).toEqual({ code: '123456' });

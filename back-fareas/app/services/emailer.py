@@ -1,20 +1,3 @@
-"""Envío de correo institucional (RF-08, RF-12, RF-24) vía aiosmtplib.
-
-Diseño minimalista con la paleta del frontend (``src/styles.css``):
-primario #155DFC · claro #4D8BFF · oscuro #0D3B9F · fondo #F6F9FF.
-
-Notas técnicas:
-- Sin dependencias nuevas: ``email.message`` de la stdlib + ``aiosmtplib``
-  (``fastapi-mail`` sumaría jinja2 y su propia config sin aportar nada aquí).
-- Todo correo sale como ``multipart/alternative`` (texto plano + HTML):
-  el plano garantiza legibilidad y deliverability, el HTML el diseño.
-- El HTML usa tablas y estilos **inline**: los clientes (Gmail, Outlook)
-  eliminan ``<style>`` y no soportan gradientes - por eso barra sólida
-  y layout de 600px centrado.
-- Todo contenido con datos de usuario se escapa con ``html.escape``.
-- En desarrollo puede desactivarse con MAIL_ENABLED=false: no se envía
-  nada y solo se registra destinatario + asunto (nunca secretos).
-"""
 import html
 import logging
 from email.message import EmailMessage
@@ -26,7 +9,6 @@ from app.core.config import get_settings
 
 logger = logging.getLogger("fareas.emailer")
 
-# Paleta del frontend (src/styles.css -> @theme).
 _PRIMARY = "#155DFC"
 _CANVAS = "#F6F9FF"
 _TEXT = "#111827"
@@ -38,7 +20,6 @@ _FROM_FALLBACK = "no-reply@unamba.edu.pe"
 
 
 def _wrap(*, preheader: str, title: str, content_html: str) -> str:
-    """Esqueleto minimalist: barra primaria, marca, título, contenido y pie."""
     return f"""<!doctype html>
 <html lang="es">
 <body style="margin:0;padding:0;background-color:{_CANVAS};">
@@ -77,7 +58,6 @@ def _code_box(value: str) -> str:
         f'font-weight:700;letter-spacing:8px;color:{_TEXT};">{value}</p>'
     )
 
-
 def _field_row(label: str, value: str) -> str:
     return (
         f'<p style="margin:12px 0 0;font-family:{_FONT};font-size:12px;color:{_MUTED};">{label}</p>'
@@ -87,14 +67,7 @@ def _field_row(label: str, value: str) -> str:
         f'font-weight:700;color:{_TEXT};">{value}</p>'
     )
 
-
 async def send_email(to: str, subject: str, body: str, html_body: str | None = None) -> bool:
-    """Envía un correo multipart (texto plano + HTML opcional).
-
-    Firma compatible con la versión anterior: los llamados existentes
-    ``send_email(to, subject, body)`` siguen funcionando igual.
-    Devuelve True si salió; False si falló o si MAIL_ENABLED=false.
-    """
     settings = get_settings()
     if not settings.MAIL_ENABLED:
         logger.info("[MAIL deshabilitado] Para=%s | %s", to, subject)
@@ -122,9 +95,7 @@ async def send_email(to: str, subject: str, body: str, html_body: str | None = N
         logger.exception("Fallo el envío de correo a %s", to)
         return False
 
-
 async def send_temporary_credentials(to: str, full_name: str, username: str, temp_password: str) -> bool:
-    """RF-08: credenciales iniciales para primer acceso."""
     subject = "Fareas UNAMBA - Tu acceso al sistema"
     safe_name = html.escape(full_name)
     safe_user = html.escape(username)
@@ -155,13 +126,7 @@ async def send_temporary_credentials(to: str, full_name: str, username: str, tem
     )
     return await send_email(to, subject, plain, html_body)
 
-
 async def send_otp(to: str, code: str, purpose: str = "recover") -> bool:
-    """Código de 6 dígitos con propósito explícito.
-
-    ``recover``: restaurar una contraseña olvidada (RF-12).
-    ``change_password``: confirmar un cambio desde "Mi perfil" (segundo factor).
-    """
     safe_code = html.escape(code)
     if purpose == "change_password":
         subject = "Fareas UNAMBA - Código para cambiar tu contraseña"
@@ -202,9 +167,7 @@ async def send_otp(to: str, code: str, purpose: str = "recover") -> bool:
     )
     return await send_email(to, subject, plain, html_body)
 
-
 async def send_password_changed_notice(to: str, full_name: str) -> bool:
-    """Aviso de seguridad posterior a un cambio/restablecimiento de contraseña."""
     subject = "Fareas UNAMBA - Tu contraseña fue actualizada"
     safe_name = html.escape(full_name)
     plain = (

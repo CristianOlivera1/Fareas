@@ -27,8 +27,6 @@ export class DataTable {
   readonly data = input.required<unknown[]>();
   readonly trackBy = input<(index: number, row: unknown) => unknown>((_, row) => row);
 
-  /** 'client': pagina en memoria (default, retrocompatible).
-   * 'server': la página ya viene paginada por la API (Page<T>); usa los inputs server*. */
   readonly mode = input<'client' | 'server'>('client');
   readonly serverPage = input(1);
   readonly serverTotal = input(0);

@@ -1,7 +1,3 @@
-"""Escenario compartido del Bloque 6: aula+curso+grupo+bloque LUN 08:00-10:00.
-
-Crea todo temporal (TST-/temp.*.b6) y lo limpia por IDs explícitos.
-"""
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -34,45 +30,28 @@ FERIADO_DESC = "Feriado test B6"
 
 
 def proximo_lunes(base: date) -> date:
-    """El lunes SIGUIENTE al base (o el mismo día si base es lunes)."""
     return base if base.isoweekday() == 1 else base + timedelta(days=(8 - base.isoweekday()) % 7 or 7)
 
-
 def weekday_hoy() -> int:
-    """Weekday de HOY (1..5) para montar un escenario "de hoy" (sesiones con
-    session_date = CURRENT_DATE).
-
-    Los bloques existen solo de Lunes a Viernes (CHECK de 001_schema.sql), así
-    que en fin de semana NO hay forma de montar ese escenario: se salta el test
-    con el motivo explícito en vez de fallar por un dato imposible.
-    """
     wd = datetime.now(PERU_TZ).date().isoweekday()
     if wd > 5:
         pytest.skip("Fin de semana: no hay clases hoy (weekday 1..5) — escenario 'de hoy' imposible")
     return wd
 
-
 def h(lunes: date, hhmm: str) -> datetime:
-    """aware UTC-5 en el lunes del escenario a la hora dada."""
     hh, mm = map(int, hhmm.split(":"))
     return datetime(lunes.year, lunes.month, lunes.day, hh, mm, tzinfo=PERU_TZ)
 
-
 async def limpiar(db) -> None:
-    """Borra el escenario en orden inverso de dependencias (por IDs)."""
-    # R6: justificaciones creadas por los tests (referencian curso y alumnos)
     actores = [
         u.id
         for email in (DOCENTE, EST1, EST2)
         if (u := (await db.exec(select(AppUser).where(AppUser.email == email))).first()) is not None
     ]
     if actores:
-        await db.exec(delete(Justification).where(Justification.student_id.in_(actores)))  # type: ignore[attr-defined]
-        await db.exec(delete(Justification).where(Justification.created_by.in_(actores)))  # type: ignore[attr-defined]
+        await db.exec(delete(Justification).where(Justification.student_id.in_(actores)))
+        await db.exec(delete(Justification).where(Justification.created_by.in_(actores)))
         await db.commit()
-    # R9: el grupo ya no guarda aula. Se limpian los grupos del curso de prueba
-    # Y los que tengan algún bloque en el AULA de prueba (la importación por PDF
-    # crea grupos de OTROS cursos en esta misma aula).
     curso = (await db.exec(select(Course).where(Course.code == CURSO))).first()
     aula = (await db.exec(select(Room).where(Room.code == AULA))).first()
     grupo_ids: set[int] = set()
@@ -88,44 +67,41 @@ async def limpiar(db) -> None:
             gid
             for gid in (
                 await db.exec(
-                    select(ScheduleBlock.group_id).where(ScheduleBlock.room_id == aula.id)  # type: ignore[arg-type]
+                    select(ScheduleBlock.group_id).where(ScheduleBlock.room_id == aula.id)
                 )
             ).all()
         }
     ids = list(grupo_ids)
     if ids:
         bloque_ids = (
-            await db.exec(select(ScheduleBlock.id).where(ScheduleBlock.group_id.in_(ids)))  # type: ignore[attr-defined]
+            await db.exec(select(ScheduleBlock.id).where(ScheduleBlock.group_id.in_(ids)))
         ).all()
         if bloque_ids:
             ses_ids = (
                 await db.exec(
-                    select(AttendanceSession.id).where(AttendanceSession.block_id.in_(bloque_ids))  # type: ignore[attr-defined]
+                    select(AttendanceSession.id).where(AttendanceSession.block_id.in_(bloque_ids))
                 )
             ).all()
             if ses_ids:
-                await db.exec(delete(AttendanceRecord).where(AttendanceRecord.session_id.in_(ses_ids)))  # type: ignore[attr-defined]
-                await db.exec(delete(AttendanceSession).where(AttendanceSession.id.in_(ses_ids)))  # type: ignore[attr-defined]
-            await db.exec(delete(ScheduleBlock).where(ScheduleBlock.id.in_(bloque_ids)))  # type: ignore[attr-defined]
-        await db.exec(delete(Enrollment).where(Enrollment.group_id.in_(ids)))  # type: ignore[attr-defined]
-        await db.exec(delete(CourseGroup).where(CourseGroup.id.in_(ids)))  # type: ignore[attr-defined]
+                await db.exec(delete(AttendanceRecord).where(AttendanceRecord.session_id.in_(ses_ids)))
+                await db.exec(delete(AttendanceSession).where(AttendanceSession.id.in_(ses_ids)))
+            await db.exec(delete(ScheduleBlock).where(ScheduleBlock.id.in_(bloque_ids)))
+        await db.exec(delete(Enrollment).where(Enrollment.group_id.in_(ids)))
+        await db.exec(delete(CourseGroup).where(CourseGroup.id.in_(ids)))
     if aula is not None:
-        await db.exec(delete(Device).where(Device.room_id == aula.id))  # type: ignore[attr-defined]
+        await db.exec(delete(Device).where(Device.room_id == aula.id))
         await db.delete(aula)
     if curso is not None:
         await db.delete(curso)
     for email in (DOCENTE, EST1, EST2):
         user = (await db.exec(select(AppUser).where(AppUser.email == email))).first()
         if user is not None:
-            # Las acciones auditadas de los tests (R6/R11) referencian a los actores.
-            await db.exec(delete(AuditLog).where(AuditLog.actor_id == user.id))  # type: ignore[arg-type]
+            await db.exec(delete(AuditLog).where(AuditLog.actor_id == user.id))
             await db.delete(user)
-    await db.exec(delete(Holiday).where(Holiday.description == FERIADO_DESC))  # type: ignore[arg-type]
+    await db.exec(delete(Holiday).where(Holiday.description == FERIADO_DESC))
     await db.commit()
 
-
 async def crear(db) -> dict:
-    """Crea aula/curso/docente/2 estudiantes/grupo/bloque LUN 08:00-10:00."""
     aula = Room(code=AULA, name="Aula de pruebas B6")
     curso = Course(code=CURSO, name="Curso de pruebas B6")
     docente = AppUser(role=UserRole.DOCENTE, email=DOCENTE, full_name="Docente B6",
@@ -139,7 +115,6 @@ async def crear(db) -> dict:
     db.add_all([aula, curso, docente, e1, e2])
     await db.flush()
 
-    # R1: los grupos creados "a mano" (sin API) usan el semestre VIGENTE.
     cfg = await db.get(AppSettings, 1)
     semestre = cfg.semester_label if cfg is not None else "2026-I"
     grupo = CourseGroup(course_id=curso.id, group_code="A", teacher_id=docente.id,

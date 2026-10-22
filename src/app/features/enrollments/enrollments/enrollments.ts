@@ -55,7 +55,6 @@ export class EnrollmentsPage {
   readonly courseId = this.qp.filter('course');
   readonly groupId = this.qp.filter('group');
 
-  /** Los query params llegan como string; el panel trabaja con números. */
   readonly courseIdNumber = computed(() => {
     const raw = this.courseId();
     return raw ? Number(raw) : null;
@@ -151,7 +150,6 @@ export class EnrollmentsPage {
     if (this.groupId()) await this.loadStudents();
   }
 
-  /** courseOverride: la URL aún no refleja el curso recién elegido. */
   private async loadGroups(
     semesterOverride?: string | null,
     courseOverride?: number | null,
@@ -225,7 +223,6 @@ export class EnrollmentsPage {
     void this.searchStudents('');
   }
 
-  /** Búsqueda en el servidor de estudiantes para el selector (con retardo). */
   onStudentFilter(event: { filter: string }): void {
     const term = event.filter ?? '';
     if (this.searchTimer) clearTimeout(this.searchTimer);
@@ -275,7 +272,6 @@ export class EnrollmentsPage {
       this.enrollDialogVisible = false;
       await Promise.all([this.loadStudents(), this.loadGroups()]);
     } catch (err) {
-      // R8: cupo lleno, segundo grupo del mismo curso, cruce de horarios (409).
       this.toast.add({
         severity: 'error',
         summary: 'No se pudo matricular',
@@ -367,7 +363,6 @@ export class EnrollmentsPage {
     }
   }
 
-  /** Reactivar = volver a matricular en el MISMO grupo (limpia withdrawn_at). */
   async reactivar(student: EnrolledStudent): Promise<void> {
     const groupId = this.groupIdNumber();
     if (!groupId) return;

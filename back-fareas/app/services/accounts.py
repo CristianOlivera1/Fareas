@@ -1,8 +1,3 @@
-"""Alta y gestión de cuentas de docentes y estudiantes - RF-02, RF-03, RF-08.
-
-Los routers del catálogo se mantienen delgados: la lógica (validación por
-rol, clave temporal, correo, auditoría) vive aquí.
-"""
 import re
 import secrets
 
@@ -21,26 +16,23 @@ _CODE_RE = re.compile(r"^\d{6}$")
 
 
 def _temp_password() -> str:
-    """Clave temporal legible: 8 caracteres sin caracteres ambiguos."""
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
     return "".join(secrets.choice(alphabet) for _ in range(8))
 
-
 async def _ensure_unique(db: SQLModelAsyncSession, *, email: str, dni: str | None, code: str | None) -> None:
     clashes: list[str] = []
-    if (await db.exec(select(AppUser).where(AppUser.email == email.lower()))).first() is not None:  # type: ignore[arg-type]
+    if (await db.exec(select(AppUser).where(AppUser.email == email.lower()))).first() is not None:
         clashes.append(f"el correo {email}")
     if dni and (
-        await db.exec(select(AppUser).where(AppUser.dni == dni))  # type: ignore[arg-type]
+        await db.exec(select(AppUser).where(AppUser.dni == dni))
     ).first() is not None:
         clashes.append(f"el DNI {dni}")
     if code and (
-        await db.exec(select(AppUser).where(AppUser.code == code))  # type: ignore[arg-type]
+        await db.exec(select(AppUser).where(AppUser.code == code))
     ).first() is not None:
         clashes.append(f"el código {code}")
     if clashes:
         raise errors.ConflictError("Ya existe una cuenta con " + ", ".join(clashes))
-
 
 async def create_account(
     db: SQLModelAsyncSession,
@@ -55,18 +47,13 @@ async def create_account(
     semester: int | None = None,
     ip: str | None = None,
 ) -> AppUser:
-    """RF-02/RF-03: crea la cuenta con clave temporal y la envía por correo (RF-08).
-
-    Reglas: docente requiere DNI; estudiante requiere DNI + código de
-    matrícula de 6 dígitos + ciclo. ``must_change_password`` queda activo.
-    """
     if role is UserRole.ADMIN:
         raise errors.DomainError("El admin no se crea por este endpoint")
     if role is UserRole.DOCENTE:
-        validar_dni(dni)  # R15: 8 dígitos
+        validar_dni(dni)
         code = None
         semester = None
-    else:  # estudiante
+    else:
         validar_dni(dni)
         if not code or not _CODE_RE.match(code):
             raise errors.DomainError("El estudiante requiere un código de matrícula de 6 dígitos")
@@ -75,7 +62,7 @@ async def create_account(
     whatsapp = validar_whatsapp(whatsapp)
 
     try:
-        email = validar_dominio_email(email)  # R15: dominio configurable
+        email = validar_dominio_email(email)
     except ValueError as exc:
         raise errors.DomainError(str(exc)) from exc
     await _ensure_unique(db, email=email, dni=dni, code=code)
@@ -89,11 +76,11 @@ async def create_account(
         full_name=full_name.strip(),
         whatsapp=whatsapp,
         password_hash=hash_password(temp_password),
-        must_change_password=True,  # RF-11: obliga a cambiarla al primer login
+        must_change_password=True,
         semester=semester,
     )
     db.add(user)
-    await db.flush()  # obtiene user.id sin confirmar todavía
+    await db.flush()
 
     await audit(
         db,
@@ -105,15 +92,13 @@ async def create_account(
         ip_address=ip,
     )
     await db.commit()
-    await send_temporary_credentials(email, user.full_name, email, temp_password)  # RF-08
+    await send_temporary_credentials(email, user.full_name, email, temp_password)
     await db.refresh(user)
     return user
-
 
 async def resend_credentials(
     db: SQLModelAsyncSession, actor: AppUser, user_id: int, ip: str | None = None
 ) -> MessageResponse:
-    """RF-08: reenvía credenciales con una NUEVA clave temporal."""
     user = await db.get(AppUser, user_id)
     if user is None or user.role is UserRole.ADMIN:
         raise errors.NotFoundError("Cuenta no encontrada")

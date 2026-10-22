@@ -8,7 +8,6 @@ describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
-      // MessageService: el host global de <p-toast> vive en el componente raíz.
       providers: [MessageService, provideRouter(routes)],
     }).compileComponents();
   });

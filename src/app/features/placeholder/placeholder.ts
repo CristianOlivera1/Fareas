@@ -2,8 +2,6 @@ import { ChangeDetectionStrategy, Component, CUSTOM_ELEMENTS_SCHEMA, inject } fr
 import { ActivatedRoute } from '@angular/router';
 import { PageHeader } from '../../shared/components/page-header/page-header';
 
-/** iconify-icon es un Web Component: se declara via CUSTOM_ELEMENTS_SCHEMA. */
-
 @Component({
   selector: 'app-placeholder-page',
   imports: [PageHeader],

@@ -119,8 +119,6 @@ export class AuthService {
       .post<ChangePasswordResponse>(`${this.api}/auth/change-password`, request)
       .pipe(
         tap((response) => {
-          // token_version cambió en el backend: sin este token nuevo, todas las
-          // peticiones posteriores responderían 401.
           if (response.access_token) {
             this.token.set(response.access_token);
             localStorage.setItem(ACCESS_TOKEN_KEY, response.access_token);
@@ -148,7 +146,6 @@ export class AuthService {
   }
 
   logout(): void {
-    // Sin refresh tokens: el logout es cliente (descartar el token).
     this.clearAuth();
     void this.router.navigate(['/login']);
   }
