@@ -128,9 +128,7 @@ async def procesar_alertas_cierre(db, session) -> int:
     return enviadas
 
 
-# ---------------------------------------------------------------------------
 # Resumen por alumno (R7) — sesiones planificadas y faltas restantes
-# ---------------------------------------------------------------------------
 async def sesiones_planificadas(
     db: SQLModelAsyncSession, student_id: int, course_id: int, cfg: AppSettings
 ) -> int | None:

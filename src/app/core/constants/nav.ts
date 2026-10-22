@@ -28,6 +28,7 @@ export const NAV: readonly NavEntry[] = [
     roles: TODOS,
     children: [
       { label: 'Cursos y grupos', route: '/courses', icon: 'material-symbols:auto-stories-outline', roles: TODOS },
+      { label: 'Horario general', route: '/schedule', icon: 'material-symbols:calendar-view-week', roles: TODOS },
       { label: 'Matrículas', route: '/enrollments', icon: 'material-symbols:how-to-reg-outline', roles: TODOS },
     ],
   },

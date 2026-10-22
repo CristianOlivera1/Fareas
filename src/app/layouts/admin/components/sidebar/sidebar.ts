@@ -34,7 +34,6 @@ export class Sidebar implements OnInit {
   readonly userMenuOpen = signal(false);
   readonly currentUrl = signal('');
 
-  /** Grupo actualmente expandido (uno a la vez); null = todos cerrados. */
   readonly openGroups = signal<Set<string>>(new Set());
 
   @ViewChild('userMenuContainer') userMenuContainer?: ElementRef<HTMLElement>;
@@ -95,7 +94,6 @@ export class Sidebar implements OnInit {
     return url === target || url.startsWith(`${target}/`);
   }
 
-  /** true si el grupo contiene la ruta activa (para auto-expandir al navegar). */
   groupContains(group: NavEntry): boolean {
     if (!('children' in group) || !group.children) return false;
     return group.children.some((c) => this.isActive(c.route));

@@ -2,7 +2,6 @@ import { Injectable } from '@angular/core';
 import { BaseApi, ListParams } from '../api/api-url';
 import { AttendanceToday, AttendanceStatusApi, SessionReview } from '../models/catalog';
 
-/** Sesión abierta de HOY (GET /attendance/sessions-today). */
 export interface SessionToday {
   readonly session_id: number;
   readonly status: 'abierta' | 'cerrada';
@@ -22,11 +21,8 @@ export interface SessionToday {
   readonly teacher_name: string;
 }
 
-/** Asistencias (routers/attendance.py): consulta del día (PLAN §5),
- * marca manual RF-21, rectificación RF-15 y cierre RF-26. */
 @Injectable({ providedIn: 'root' })
 export class AttendanceApi extends BaseApi {
-  /** Registros de HOY (vista v_today_attendance). */
   today(params?: ListParams & {
     course_id?: number;
     room?: string;
@@ -35,12 +31,10 @@ export class AttendanceApi extends BaseApi {
     return this.get<AttendanceToday[]>('/attendance/today', params);
   }
 
-  /** Sesiones ABIERTAS de hoy (docente: solo sus grupos). */
   sessionsToday() {
     return this.get<SessionToday[]>('/attendance/sessions-today');
   }
 
-  /** RF-21: marca manual sobre una sesión abierta. */
   manualMark(sessionId: number, body: { student_id: number; status: AttendanceStatusApi }) {
     return this.post<{ record_id: number; student_id: number; status: string; session_id: number }>(
       `/sessions/${sessionId}/manual-mark`,
@@ -69,14 +63,12 @@ export class AttendanceApi extends BaseApi {
     );
   }
 
-  /** RF-26: cierre manual de la sesión (admin). */
   closeSession(sessionId: number) {
     return this.post<{ session_id: number; status: string; faltas: number; alertas: number }>(
       `/sessions/${sessionId}/close`,
     );
   }
 
-  /** R5: cancela UNA sesión con motivo (docente: abiertas o por revisar). */
   cancelSession(sessionId: number, body: { reason: string }) {
     return this.post<{ session_id: number; status: string; reason: string }>(
       `/sessions/${sessionId}/cancel`,
@@ -92,7 +84,6 @@ export class AttendanceApi extends BaseApi {
     );
   }
 
-  /** R6: justifica UNA falta creando la justificación del día. */
   justify(recordId: number, body: { reason: string }) {
     return this.patch<{ record_id: number; is_justified: boolean; justification_id: number }>(
       `/attendance/${recordId}/justify`,

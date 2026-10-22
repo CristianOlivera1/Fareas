@@ -24,7 +24,9 @@
 | Build OK | `ng build --configuration development` pasa; `dist/fareas` generado |
 
 **Stack fijo:** Angular 21 (standalone + signals + OnPush), PrimeNG 20, Tailwind 4,
-Chart.js 4, material-symbols/akar-icons ya en uso.## 1. Decisiones definitivas (respondidas por el usuario)
+Chart.js 4, material-symbols/akar-icons ya en uso.
+
+## 1. Decisiones definitivas (respondidas por el usuario)
 
 1. **~~El rol ESTUDIANTE no entra al panel~~ → REVISADO: el estudiante SÍ entra a la app**:
    el backend ya expone `GET /attendance/me` (historial personal, solo rol estudiante) y
@@ -46,6 +48,9 @@ Chart.js 4, material-symbols/akar-icons ya en uso.## 1. Decisiones definitivas (
    como primera capa UX.
 6. **`/attendance/me` (estudiante)**: endpoint YA IMPLEMENTADO en el backend (Bloque 6b);
    su pantalla en el frontend queda para F3b (ver §4).
+7. **No comentarios en el código**: no incluir comentarios salvo que sean estrictamente
+   necesarios para explicar una lógica compleja. El código debe ser autoexplicativo
+   (nombres claros, funciones pequeñas).
 
 ## 2. Estructura de rutas objetivo (Bloque F1 las crea; F2-F6 las llenan)
 
@@ -134,7 +139,7 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 - [ ] **Cursos y grupos** `/courses`: lista de cursos (`GET/POST /courses`) → detalle de curso con
   sus grupos (`GET /courses/{id}/groups?semester=` — **Bloque 11: cada grupo trae `semester_label`,
   `capacity` y `enrolled_count`**), crear grupo (docente+aula+**cupo, 40 por defecto**: selects de
-  `/teachers` y `/rooms`) → detalle de grupo con BLOQUES horarios (grid semanal LUN-DOM,
+  `/teachers` y `/rooms`) → detalle de grupo con BLOQUES horarios (tabla semanal **LUN-VIE**,
   crear/patch/delete con detección de choque RF-06 mostrando el 409 del backend como toast).
 - [ ] **Matrículas** `/enrollments`: selector curso→grupo (`GET /courses` + `GET /courses/{id}/groups`)
   + listar/alta/quitar alumnos (`GET/POST/DELETE /groups/{id}/students`, autocomplete de estudiantes).
@@ -152,12 +157,34 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   tomado de `GET /settings` y persistido en la URL), tarjetas de grupo con **cupo X/40**
   (barra con umbral verde/ámbar/rojo), docente, aula y semestre; alta de grupo (código, cupo
   con 40 por defecto, selects de docente y aula); baja lógica del grupo con `app-modal-delete`.
-- [x] **Grilla semanal de bloques** (LUN–DOM): chips `HH:MM–HH:MM`, alta por columna (día
-  preseleccionado + hora de inicio "inteligente" tras el último bloque del día, 1 h o 2 h) y
-  borrado por bloque. El **409 de choque (RF-06)** se muestra como toast con el mensaje del
-  backend y el diálogo permanece abierto para corregir la hora.
-- [x] **Matrículas** `/enrollments`: selector semestre → curso → grupo (con cupo y aula en la
-  etiqueta), tarjeta resumen del grupo (docente, aula, cupo con `activos()/capacity` y aviso
+- [x] **Tabla de horario semanal** `app-schedule-table` (componente reutilizable, `shared/components/`):
+  **Lun–Vie**, una FILA por hora con la etiqueta `HH:MM – HH:MM`, cada clase fusionada en tantas
+  filas como horas dura (`rowspan`) y **un color por curso** (hash estable del código); la celda
+  muestra código, nombre, grupo, **aula**, rango horario y docente. Dibuja la **franja completa
+  07:00–20:00** de `app_settings` (`[hourFrom]/[hourTo]`) y el alto de la celda se fija en el `<td>`
+  (`altoCelda`), no en su contenido: un `height:100%` dentro de una celda de tabla sin alto propio
+  se resuelve como `auto` en Chromium y el bloque de 2 h se pintaba solo con su alto de contenido
+  (56–75 px) dejando el resto de la celda en blanco. El admin ve `+` en las horas
+  libres (abre el alta con ese día y hora preseleccionados) y `×` en cada clase; el docente la ve
+  en modo lectura. El **409 de choque (RF-06/R9)** se muestra como toast con el mensaje del backend
+  y el diálogo permanece abierto para corregir el aula o la hora.
+- [x] **Aula por bloque (R9)**: el aula va SOLO en el bloque (`room_id` obligatorio) y el choque
+  se calcula con el aula DEL BLOQUE. El alta de grupo ya **no pide aula**: el diálogo de bloque la
+  prellena con la del último bloque de ese día y, si es el primero, con la del último del grupo.
+- [x] **Horario general** `/schedule` (menú Académico): la semana completa de un semestre con
+  selector de semestre (vigente por defecto) y filtros por curso, docente y aula (en la URL),
+  contador de clases y horas libres, y la misma `app-schedule-table`. Las horas libres son
+  **botones**: abren el alta de bloque con día/hora ya puestos y el aula prellenada tras elegir el
+  grupo; el `×` permite quitar un bloque con confirmación (hard delete). Lee `GET /schedule`
+  (una sola consulta) y reutiliza `GET /groups` para el selector de grupo.
+- [x] **Franja de clases (RF-01)**: el alta de bloque valida contra `GET /settings`
+  (`attendance_hour_start/end`) y avisa sin llamar a la API si el rango se sale; el fin propuesto
+  nunca pasa del cierre (a las 19:00 propone 19:00–20:00). El backend re-valida igual (422).
+- [x] **Reactivar grupo**: la baja es lógica, así que el grupo inactivo sale en la misma pantalla
+  con su chip «Inactivo» y un botón **Reactivar** (`POST /groups/{id}/activate`), en lugar del de
+  desactivar. Se audita como `grupo_reactivado`.
+- [x] **Matrículas** `/enrollments`: selector semestre → curso → grupo (con el cupo en la
+  etiqueta), tarjeta resumen del grupo (docente, cupo con `activos()/capacity` y aviso
   "grupo lleno"), tabla de alumnos con badge **Enrolado/Sin rostro** (`with_face=1`), estado
   Activo/Retirado y acciones: **matricular** (buscador de estudiantes contra el servidor con
   retardo de 250 ms), **retirar** (dialog con aviso de historial), **reactivar** y **transferir**
@@ -497,10 +524,3 @@ la UI solo oculta botones con `@if (auth.isAdmin())`.
 6. **Las vistas SQL (`v_today_attendance`) usan `CURRENT_DATE` del servidor**: asume la zona
    horaria de Perú en la PC servidor (la del dev ya lo está). No tocar.
 7. **`PersonOut` no expone `photo_url`**: la foto de portada se ve solo en `/faces`; suficiente.
-
-## 7. Fuera de alcance (coherente con PLAN-BACKEND §7)
-- Sin PWA/SSR/i18n; sin NgRx/NGXS (signals + services); sin tests e2e Cypress (los smokes
-  son manuales por bloque; si sobra tiempo: 2-3 specs de `ng test` para guards y auth).
-- El estudiante NO entra al PANEL ADMIN (el guard seguirá bloqueando `/admin`); su vista
-  propia "Mis asistencias" (`GET /attendance/me`) se construye en F3b (ver §4). Las
-  notificaciones por correo RF-24 se mantienen.

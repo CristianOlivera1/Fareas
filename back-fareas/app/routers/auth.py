@@ -30,12 +30,10 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 _pwd = PasswordHash.recommended()
 
-# ---------------------------------------------------------------------------
 # Rate limit de login en memoria (5 intentos fallidos por IP cada 60 s).
 # Alcance académico: un solo proceso, sin Redis — mismo patrón que el OTP.
 # La ventana es deslizante simple: se guarda la hora del último bloqueo y el
 # contador se limpia tras LOGIN_WINDOW_SECONDS sin fallos.
-# ---------------------------------------------------------------------------
 _LOGIN_MAX_ATTEMPTS = 5
 _LOGIN_WINDOW_SECONDS = 60.0
 _login_attempts: dict[str, dict] = {}  # ip -> {"count", "first"}
@@ -69,10 +67,8 @@ def _login_rate_reset(request: Request) -> None:
     """Login correcto: limpia la cuenta de fallos de esa IP."""
     _login_attempts.pop(_login_rate_ip(request), None)
 
-# ---------------------------------------------------------------------------
 # OTP en memoria (RF-12). Alcance académico: un solo proceso; sin Redis.
 # email -> {"hash", "expires_at", "attempts", "verified"}
-# ---------------------------------------------------------------------------
 _OTP_TTL_SECONDS = 10 * 60
 _OTP_MAX_ATTEMPTS = 5
 _otp_store: dict[str, dict] = {}
@@ -88,9 +84,6 @@ def _build_user_out(user: AppUser) -> UserOut:
     )
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
 @router.post("/login", response_model=LoginResponse)
 async def login(body: LoginRequest, request: Request, db: DbSession) -> LoginResponse:
     """RF-11. ``body.email`` acepta correo institucional O código de matrícula.

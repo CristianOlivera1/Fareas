@@ -23,9 +23,6 @@ from app.tables import AppSettings, AppUser, Course, Holiday, Justification, Use
 router = APIRouter(tags=["calendar"])
 
 
-# ---------------------------------------------------------------------------
-# Feriados - RF-09
-# ---------------------------------------------------------------------------
 class HolidayIn(BaseModel):
     holiday_date: date
     description: str = Field(min_length=3, max_length=160)
@@ -213,10 +210,8 @@ async def delete_holiday(
     return {"message": f"Feriado #{holiday_id} eliminado"}
 
 
-# ---------------------------------------------------------------------------
 # Justificaciones - RF-10 + R6 (docente crea sobre SUS alumnos/cursos;
 # el efecto sobre las faltas vive en services/justifications.py)
-# ---------------------------------------------------------------------------
 class JustificationIn(BaseModel):
     student_id: int
     course_id: int | None = Field(default=None, description="Docente: OBLIGATORIO (sus cursos). Admin: NULL = todos")
@@ -321,9 +316,6 @@ async def delete_justification(
     return {"message": f"Justificación eliminada; {revertidas} falta(s) volvieron a estado 'falta'"}
 
 
-# ---------------------------------------------------------------------------
-# Parámetros - RF-34 (fila única id=1, R1/R2/R7/R11)
-# ---------------------------------------------------------------------------
 def _settings_out(s: AppSettings) -> "SettingsOut":
     return SettingsOut(
         semester_label=s.semester_label,

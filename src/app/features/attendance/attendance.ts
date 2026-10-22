@@ -35,7 +35,7 @@ import {
   SessionReview,
 } from '../../core/models/catalog';
 
-const REFRESH_MS = 60_000; // panel usado en vivo: refresco suave cada minuto
+const REFRESH_MS = 60_000;
 
 type StatusLabelApi = 'Asistió' | 'Tardanza' | 'Falta' | 'Falta justificada';
 
@@ -60,9 +60,6 @@ const ESTADO_OPTIONS: Array<StatusLabelApi | 'Todas'> = [
   'Falta justificada',
 ];
 
-/** F3 · Asistencias del día: tabla en vivo, marca manual (RF-21), rectificación
- * (RF-15), justificación puntual (R6) y ciclo de sesiones (cierre RF-26,
- * cancelación R5 y sesiones por revisar R4). */
 @Component({
   selector: 'app-attendance',
   imports: [
@@ -98,7 +95,6 @@ export class Attendance {
   /** Sesión o registro en curso (bloquea los botones de esa fila/tarjeta). */
   readonly busy = signal<string | null>(null);
 
-  // --- Modal RF-21: marca manual sobre la sesión abierta ---
   readonly modalVisible = signal(false);
   readonly modalSession = signal<SessionToday | null>(null);
   readonly matriculados = signal<EnrolledStudent[]>([]);
@@ -106,27 +102,22 @@ export class Attendance {
   readonly marcando = signal<number | null>(null); // student_id en curso
   readonly modalError = signal<string | null>(null);
 
-  // --- Rectificación RF-15 ---
   readonly rectifyTarget = signal<AttendanceToday | null>(null);
   readonly rectifyStatus = signal<AttendanceStatusApi>('asistio');
   readonly rectifyReason = signal('');
   rectifyVisible = false;
 
-  // --- Justificación de UNA falta (R6) ---
   readonly justifyTarget = signal<AttendanceToday | null>(null);
   readonly justifyReason = signal('');
   justifyVisible = false;
 
-  // --- Cierre de sesión (RF-26, admin) ---
   readonly closeTarget = signal<SessionToday | null>(null);
   closeVisible = false;
 
-  // --- Cancelación R5 (sesión abierta) ---
   readonly cancelTarget = signal<SessionToday | null>(null);
   readonly cancelReason = signal('');
   cancelVisible = false;
 
-  // --- Sesiones por revisar R4 ---
   readonly reviewConfirmTarget = signal<SessionReview | null>(null);
   readonly reviewCancelTarget = signal<SessionReview | null>(null);
   readonly reviewReason = signal('');
@@ -155,7 +146,6 @@ export class Attendance {
   readonly haySesiones = computed(() => this.sesiones().length > 0);
   readonly hayRevisiones = computed(() => this.reviews().length > 0);
 
-  /** Valor del select de estado, derivado de ?status= (asistio/tardanza/falta). */
   readonly estadoSeleccionado = computed<StatusLabelApi | 'Todas'>(() => {
     const raw = this.estadoUrl();
     if (raw === 'asistio' || raw === 'tardanza' || raw === 'falta') return STATUS_LABEL[raw];
@@ -185,14 +175,11 @@ export class Attendance {
   }
 
   constructor() {
-    // Recarga cuando cambian los query params (search o estado)
     effect(() => {
       this.query(); this.estadoUrl();
       void this.load();
     });
 
-    // Auto-refresh suave del panel (usa el enlace de la app). RF-26: hay
-    // actividades en vivo que cambian sin navegador abierto.
     interval(REFRESH_MS)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => void this.load());
@@ -229,9 +216,6 @@ export class Attendance {
     void this.load();
   }
 
-  // ---------------------------------------------------------------------
-  // Modal RF-21 (marca manual)
-  // ---------------------------------------------------------------------
   openModal(s: SessionToday): void {
     this.modalSession.set(s);
     this.modalVisible.set(true);
@@ -254,7 +238,7 @@ export class Attendance {
     try {
       await this.api.manualMark(ses.session_id, { student_id: studentId, status }).toPromise();
       this.toast.add({ severity: 'success', summary: 'Asistencia registrada', life: 2200 });
-      await this.load(); // refresca los registros de hoy (la marca entra con method=manual)
+      await this.load();
     } catch (err) {
       this.modalError.set(extractDetail(err));
     } finally {
@@ -274,9 +258,6 @@ export class Attendance {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // Rectificación (RF-15)
-  // ---------------------------------------------------------------------
   openRectify(r: AttendanceToday): void {
     this.rectifyTarget.set(r);
     this.rectifyStatus.set(r.status);
@@ -321,9 +302,6 @@ export class Attendance {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // Justificar UNA falta (R6)
-  // ---------------------------------------------------------------------
   openJustify(r: AttendanceToday): void {
     this.justifyTarget.set(r);
     this.justifyReason.set('');
@@ -367,9 +345,6 @@ export class Attendance {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // Cierre de la sesión (RF-26, admin)
-  // ---------------------------------------------------------------------
   askClose(s: SessionToday): void {
     this.closeTarget.set(s);
     this.closeVisible = true;
@@ -402,9 +377,6 @@ export class Attendance {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // Cancelación R5 (sesión abierta: día sin clase, paro, falla del docente)
-  // ---------------------------------------------------------------------
   askCancel(s: SessionToday): void {
     this.cancelTarget.set(s);
     this.cancelReason.set('');
@@ -448,9 +420,6 @@ export class Attendance {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // Sesiones por revisar (R4): cerradas sin ninguna marca
-  // ---------------------------------------------------------------------
   askReviewConfirm(s: SessionReview): void {
     this.reviewConfirmTarget.set(s);
     this.reviewConfirmVisible = true;

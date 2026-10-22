@@ -45,9 +45,6 @@ from app.tables import (
 router = APIRouter(tags=["attendance"])
 
 
-# ---------------------------------------------------------------------------
-# Helpers de pertenencia de grupo (RF-21/RF-15/R5: docente solo SUS grupos)
-# ---------------------------------------------------------------------------
 async def _grupo_de_sesion(db, session: AttendanceSession) -> CourseGroup:
     bloque = await db.get(ScheduleBlock, session.block_id)
     if bloque is None:
@@ -63,9 +60,6 @@ def _exige_grupo_propio(user, grupo: CourseGroup) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No es tu grupo")
 
 
-# ---------------------------------------------------------------------------
-# Asistencias propias del ESTUDIANTE autenticado (RF-22/RF-24)
-# ---------------------------------------------------------------------------
 @router.get("/attendance/me")
 async def my_attendance(
     db: DbSession,
@@ -130,9 +124,6 @@ async def my_dpi(db: DbSession, user: CurrentUser) -> list[dict]:
     return await resumen_alumno(db, user.id)  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
-# Consulta del día (vista v_today_attendance) — PLAN §5
-# ---------------------------------------------------------------------------
 @router.get("/attendance/today")
 async def attendance_today(
     db: DbSession,
@@ -188,9 +179,6 @@ async def attendance_today(
     ]
 
 
-# ---------------------------------------------------------------------------
-# Sesiones abiertas de HOY (modal de marca manual RF-21)
-# ---------------------------------------------------------------------------
 @router.get("/attendance/sessions-today")
 async def sessions_today(
     db: DbSession,
@@ -200,13 +188,15 @@ async def sessions_today(
 
     Un docente solo ve las sesiones de SUS grupos; el admin las ve todas.
     Las cerradas se excluyen: las needs_review van por /sessions-review y
-    las cerradas normales se corrigen por rectificación (RF-15)."""
+    las cerradas normales se corrigen por rectificación (RF-15).
+    R9: el aula es la DEL BLOQUE de hoy (un grupo puede dictar en labs
+    distintos según el día)."""
     stmt = (
         select(AttendanceSession, ScheduleBlock, CourseGroup, Course, Room, AppUser)
         .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)  # type: ignore[arg-type]
         .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)  # type: ignore[arg-type]
         .join(Course, Course.id == CourseGroup.course_id)  # type: ignore[arg-type]
-        .join(Room, Room.id == CourseGroup.room_id)  # type: ignore[arg-type]
+        .join(Room, Room.id == ScheduleBlock.room_id)  # type: ignore[arg-type]
         .join(AppUser, AppUser.id == CourseGroup.teacher_id)  # type: ignore[arg-type]
         .where(
             AttendanceSession.session_date == _naive_peru(ahora_peru()).date(),
@@ -240,9 +230,6 @@ async def sessions_today(
     ]
 
 
-# ---------------------------------------------------------------------------
-# Sesiones por revisar (R4: cerradas con cero marcas)
-# ---------------------------------------------------------------------------
 @router.get("/attendance/sessions-review")
 async def sessions_review(
     db: DbSession,
@@ -255,7 +242,7 @@ async def sessions_review(
         .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)  # type: ignore[arg-type]
         .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)  # type: ignore[arg-type]
         .join(Course, Course.id == CourseGroup.course_id)  # type: ignore[arg-type]
-        .join(Room, Room.id == CourseGroup.room_id)  # type: ignore[arg-type]
+        .join(Room, Room.id == ScheduleBlock.room_id)  # type: ignore[arg-type]
         .join(AppUser, AppUser.id == CourseGroup.teacher_id)  # type: ignore[arg-type]
         .where(
             AttendanceSession.needs_review.is_(True),  # type: ignore[union-attr]
@@ -310,10 +297,8 @@ async def resolve_review(
     )
 
 
-# ---------------------------------------------------------------------------
 # Marca manual del docente (RF-21) — permitida en abierta y en
 # cerrada+needs_review (R4); prohibida en cancelada y a retirados (R8)
-# ---------------------------------------------------------------------------
 class MarcaManualIn(BaseModel):
     student_id: int
     status: AttendanceStatus = Field(description="asistio | tardanza | falta")
@@ -363,10 +348,8 @@ async def marca_manual(
     }
 
 
-# ---------------------------------------------------------------------------
 # Rectificación (RF-15): cambia el estado con motivo obligatorio.
 # R11: docente solo sesiones de los últimos rectify_days días; admin sin plazo.
-# ---------------------------------------------------------------------------
 class RectificarIn(BaseModel):
     new_status: AttendanceStatus
     reason: str = Field(min_length=5, max_length=400, description="Justificación presencial obligatoria")
@@ -424,10 +407,8 @@ async def rectificar(
     }
 
 
-# ---------------------------------------------------------------------------
 # Justificación puntual de UNA falta (R6): crea una justification de
 # un día/curso y liga el registro (todo justificado tiene justification_id)
-# ---------------------------------------------------------------------------
 class JustificarIn(BaseModel):
     reason: str = Field(min_length=5, max_length=400)
 
@@ -468,9 +449,6 @@ async def justificar_falta(
     return {"record_id": record.id, "is_justified": True, "justification_id": just.id}
 
 
-# ---------------------------------------------------------------------------
-# Cancelación (R5)
-# ---------------------------------------------------------------------------
 class CancelarIn(BaseModel):
     reason: str = Field(min_length=5, max_length=200)
 
@@ -509,9 +487,6 @@ async def cancelar_dia_endpoint(
     )
 
 
-# ---------------------------------------------------------------------------
-# Cierre manual de una sesión (admin) — RF-26 a demanda
-# ---------------------------------------------------------------------------
 @router.post("/sessions/{session_id}/close")
 async def cerrar_sesion_endpoint(
     session_id: int,

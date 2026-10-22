@@ -7,7 +7,8 @@
     (isOpen() ? 'w-60 translate-x-0' : 'w-0 -translate-x-full md:translate-x-0 md:w-17') +
     ' md:relative md:z-50'
   ">
-  <div class="relative flex items-center justify-between h-14 px-3 border-b border-gray-100 shrink-0 z-70">
+  <div class="relative flex items-center justify-between h-14 px-3 shrink-0 z-70">
+    <div class="absolute bottom-0 left-6 right-0 h-px bg-gray-100"></div>
     <a routerLink="/admin/dashboard" class="flex items-center min-w-0 z-80 ">
       @if (isOpen()) {
       <span class="text-lg font-semibold tracking-tight text-gray-900 truncate">
@@ -27,7 +28,7 @@
   </div>
 
   <nav class="nav-pill bg-admin-pill sidebar-transition" [class]="
-      'my-5 flex flex-col flex-1 min-h-0 ' +
+      'my-2 flex flex-col flex-1 min-h-0 ' +
       (isOpen() ? 'rounded-r-[40px] mr-4' : 'rounded-r-[48px] mr-2 items-center')
     ">
     <div class="sq-top" [class.is-closed]="!isOpen()"></div>
@@ -39,9 +40,9 @@
         (isOpen() ? 'gap-1' : 'gap-2 items-center')
       ">
 
-    @for (entry of entries(); track entry.label) {
-    @if ('children' in entry && entry.children) {
-    <button type="button" (click)="toggleGroup(entry.label)" [title]="!isOpen() ? entry.label : ''" [class]="
+      @for (entry of entries(); track entry.label) {
+      @if ('children' in entry && entry.children) {
+      <button type="button" (click)="toggleGroup(entry.label)" [title]="!isOpen() ? entry.label : ''" [class]="
           'sidebar-menu-item relative flex items-center transition-all duration-200 group ' +
           (isOpen()
             ? 'mx-2 px-3 py-2.5 rounded-xl gap-3 text-sm font-medium w-[calc(100%-1rem)]'
@@ -50,36 +51,36 @@
             ? ' bg-white/15 text-white'
             : ' text-white/90 hover:text-white hover:bg-white/15')
         ">
-      <span [class]="
+        <span [class]="
             'absolute -left-2 top-1/2 -translate-y-1/2 w-1 rounded-r-full bg-white transition-all duration-200 ' +
             (groupContains(entry) ? 'h-[55%] opacity-100' : 'h-0 opacity-0')
           "></span>
-      <iconify-icon [icon]="entry.icon" width="20" />
-      <span class="sidebar-text flex-1 text-left" [class.hidden]="!isOpen()">{{ entry.label }}</span>
-      @if (isOpen()) {
-      <iconify-icon icon="material-symbols:expand-more" width="18" class="transition-transform duration-200"
-        [class.rotate-180]="isGroupOpen(entry.label) || groupContains(entry)" />
-      }
-    </button>
+        <iconify-icon [icon]="entry.icon" width="20" />
+        <span class="sidebar-text flex-1 text-left" [class.hidden]="!isOpen()">{{ entry.label }}</span>
+        @if (isOpen()) {
+        <iconify-icon icon="material-symbols:expand-more" width="18" class="transition-transform duration-200"
+          [class.rotate-180]="isGroupOpen(entry.label) || groupContains(entry)" />
+        }
+      </button>
 
-    @if (isGroupOpen(entry.label) || groupContains(entry)) {
-    <div class="flex flex-col gap-0.5 w-full" [class.hidden]="!isOpen()">
-      @for (child of entry.children; track child.route) {
-      <a (click)="navigateTo(child.route)" [title]="!isOpen() ? child.label : ''" [class]="
+      @if (isGroupOpen(entry.label) || groupContains(entry)) {
+      <div class="flex flex-col gap-0.5 w-full" [class.hidden]="!isOpen()">
+        @for (child of entry.children; track child.route) {
+        <a (click)="navigateTo(child.route)" [title]="!isOpen() ? child.label : ''" [class]="
                 'sidebar-menu-item relative flex items-center transition-all duration-200 ' +
                 (isOpen() ? 'mx-2 pl-9 pr-3 py-2 rounded-xl gap-2.5 text-[13px] font-normal' : 'hidden') +
                 (isActive(child.route)
                   ? ' bg-white text-(--fareas-primary) font-semibold shadow-sm'
                   : ' text-white/80 hover:text-white hover:bg-white/15')
               ">
-        <iconify-icon [icon]="child.icon" width="17" />
-        <span class="sidebar-text truncate">{{ child.label }}</span>
-      </a>
+          <iconify-icon [icon]="child.icon" width="17" />
+          <span class="sidebar-text truncate">{{ child.label }}</span>
+        </a>
+        }
+      </div>
       }
-    </div>
-    }
-    } @else {
-    <a (click)="navigateTo(entry.route)" [title]="!isOpen() ? entry.label : ''" [class]="
+      } @else {
+      <a (click)="navigateTo(entry.route)" [title]="!isOpen() ? entry.label : ''" [class]="
           'sidebar-menu-item relative flex items-center transition-all duration-200 group ' +
           (isOpen()
             ? 'mx-2 px-3 py-2.5 rounded-xl gap-3 text-sm font-medium'
@@ -88,19 +89,20 @@
             ? ' bg-white text-(--fareas-primary) font-semibold shadow-sm'
             : ' text-white/90 hover:text-white hover:bg-white/15')
         ">
-      <span [class]="
+        <span [class]="
             'absolute -left-2 top-1/2 -translate-y-1/2 w-1 rounded-r-full bg-white transition-all duration-200 ' +
             (isActive(entry.route) ? 'h-[55%] opacity-100' : 'h-0 opacity-0')
           "></span>
-      <iconify-icon [icon]="entry.icon" width="20" [class]="isActive(entry.route) ? 'text-(--fareas-primary)' : ''" />
-      <span class="sidebar-text" [class.hidden]="!isOpen()">{{ entry.label }}</span>
-    </a>
-    }
-    }
+        <iconify-icon [icon]="entry.icon" width="20" [class]="isActive(entry.route) ? 'text-(--fareas-primary)' : ''" />
+        <span class="sidebar-text" [class.hidden]="!isOpen()">{{ entry.label }}</span>
+      </a>
+      }
+      }
     </div>
   </nav>
 
-  <div class="relative border-t border-gray-100 p-2 shrink-0 z-70 h-16" #userMenuContainer>
+  <div class="relative p-2 shrink-0 z-70 h-16" #userMenuContainer>
+    <div class="absolute top-0 left-6 right-0 h-px bg-gray-100"></div>
     @if (currentUser()) {
     <div
       [class]=" 'flex items-center rounded-2xl p-2 cursor-pointer hover:bg-gray-50 transition-colors ' + (isOpen() ? 'gap-2.5' : 'justify-center') "

@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, CUSTOM_ELEMENTS_SCHEMA, input } from '@angular/core';
 
-/** Encabezado estándar de las páginas del panel (título + acciones a la derecha). */
 @Component({
   selector: 'app-page-header',
   schemas: [CUSTOM_ELEMENTS_SCHEMA],

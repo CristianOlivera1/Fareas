@@ -41,8 +41,6 @@ interface JustificationForm {
   document_url: string;
 }
 
-/** F3 · Justificaciones (RF-10 + R6): el alta MARCA las faltas del rango/curso
- * y la baja las REVIERTE. El docente ve solo las suyas y debe elegir curso. */
 @Component({
   selector: 'app-justifications',
   imports: [
@@ -78,7 +76,6 @@ export class JustificationsPage {
   readonly saving = signal(false);
   readonly deleting = signal(false);
 
-  // Filtros
   readonly filterStudentId = signal<number | null>(null);
   readonly filterCourseId = signal<number | null>(null);
   readonly studentOptions = signal<Option<number>[]>([]);
@@ -86,7 +83,6 @@ export class JustificationsPage {
   readonly searchingStudents = signal(false);
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Alta
   readonly form = signal<JustificationForm>({
     student_id: null,
     course_id: null,
@@ -97,7 +93,6 @@ export class JustificationsPage {
   });
   createVisible = false;
 
-  // Baja (revierte faltas, R6)
   readonly deleteTarget = signal<Justification | null>(null);
   deleteVisible = false;
 
@@ -134,7 +129,6 @@ export class JustificationsPage {
     this.form.update((f) => ({ ...f, ...p }));
   }
 
-  /** Búsqueda en el servidor de estudiantes para el selector (con retardo). */
   onStudentFilter(event: { filter: string }): void {
     const term = event.filter ?? '';
     if (this.searchTimer) clearTimeout(this.searchTimer);

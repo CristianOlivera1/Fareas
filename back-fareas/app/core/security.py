@@ -27,9 +27,6 @@ def verify_password(plain: str, password_hash: str) -> bool:
         return False
 
 
-# ---------------------------------------------------------------------------
-# Access token (JWT)
-# ---------------------------------------------------------------------------
 def create_access_token(user_id: int, role: str) -> str:
     settings = get_settings()
     now = datetime.now(UTC)

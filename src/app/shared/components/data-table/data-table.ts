@@ -49,7 +49,6 @@ export class DataTable {
 
   readonly retry = output<void>();
   readonly clearFilters = output<void>();
-  /** Solo mode='server': el usuario pidió otra página/tamaño (la página recarga). */
   readonly pageChange = output<number>();
   readonly perPageChange = output<number>();
 

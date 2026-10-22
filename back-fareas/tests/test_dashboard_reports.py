@@ -13,7 +13,7 @@ from openpyxl import load_workbook
 
 from app.services.attendance_engine import PERU_TZ, resolver_sesion
 from app.tables import ScheduleBlock
-from tests.helpers_b6 import crear, limpiar
+from tests.helpers_b6 import crear, limpiar, weekday_hoy
 
 API = "/api/v1"
 
@@ -30,7 +30,7 @@ async def _sesion_hoy_con_marcas(db_session, client, admin_headers, esc) -> int:
     """Bloque de HOY + sesión abierta + e1 asistio / e2 tardanza (API RF-21)."""
     hoy = date.today()
     db_session.add(ScheduleBlock(
-        group_id=esc["grupo_id"], weekday=hoy.isoweekday(),
+        group_id=esc["grupo_id"], room_id=esc["aula_id"], weekday=weekday_hoy(),
         start_time=time(8, 0), end_time=time(10, 0),
     ))
     await db_session.commit()
@@ -232,7 +232,8 @@ async def test_reportes_matriz_grupo_y_riesgo_dpi(client, admin_headers, docente
 
     # --- Riesgo DPI: segunda sesión en la que e2 no marca → falta (50 %) ---
     hoy = date.today()
-    bloque2 = ScheduleBlock(group_id=esc["grupo_id"], weekday=hoy.isoweekday(),
+    bloque2 = ScheduleBlock(group_id=esc["grupo_id"], room_id=esc["aula_id"],
+                            weekday=weekday_hoy(),
                             start_time=time(11, 0), end_time=time(12, 0))
     db_session.add(bloque2)
     await db_session.flush()

@@ -1,7 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard, loginGuard, mustChangePasswordGuard, roleGuard } from './core/guards/auth-guard';
 
-/** Página placeholder (F1): cada bloque posterior reemplaza loadComponent. */
 const pendiente = (title: string, placeholder: string) => ({
   loadComponent: () => import('./features/placeholder/placeholder').then((m) => m.PlaceholderPage),
   data: { title, placeholder },
@@ -74,6 +73,15 @@ export const routes: Routes = [
         data: { title: 'Asistencias' },
       },
 
+      {
+        path: 'schedule',
+        canActivate: [roleGuard('admin', 'docente')],
+        loadComponent: () =>
+          import('./features/schedule/schedule-general/schedule-general').then(
+            (m) => m.ScheduleGeneralPage,
+          ),
+        data: { title: 'Horario general' },
+      },
       {
         path: 'courses',
         canActivate: [roleGuard('admin', 'docente')],

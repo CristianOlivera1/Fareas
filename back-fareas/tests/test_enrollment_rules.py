@@ -94,8 +94,7 @@ async def test_un_grupo_activo_por_curso_transferencia_y_retiro(
 
     # Grupo B del MISMO curso (sin bloques: no puede haber cruce)
     grupo_b = CourseGroup(course_id=esc["curso_id"], group_code="B",
-                          teacher_id=esc["docente_id"], room_id=esc["aula_id"],
-                          semester_label=semestre)
+                          teacher_id=esc["docente_id"], semester_label=semestre)
     db_session.add(grupo_b)
     await db_session.commit()
 
@@ -127,7 +126,7 @@ async def test_un_grupo_activo_por_curso_transferencia_y_retiro(
     db_session.add(otro)
     await db_session.flush()
     grupo_c = CourseGroup(course_id=otro.id, group_code="A", teacher_id=esc["docente_id"],
-                          room_id=esc["aula_id"], semester_label=semestre)
+                          semester_label=semestre)
     db_session.add(grupo_c)
     await db_session.commit()
     r = await client.post(
@@ -172,10 +171,10 @@ async def test_cruce_de_horario_del_alumno(client, admin_headers, db_session, es
     db_session.add(curso2)
     await db_session.flush()
     grupo2 = CourseGroup(course_id=curso2.id, group_code="A", teacher_id=esc["docente_id"],
-                         room_id=esc["aula_id"], semester_label=semestre)
+                         semester_label=semestre)
     db_session.add(grupo2)
     await db_session.flush()
-    db_session.add(ScheduleBlock(group_id=grupo2.id, weekday=1,
+    db_session.add(ScheduleBlock(group_id=grupo2.id, room_id=esc["aula_id"], weekday=1,
                                  start_time=time(9, 30), end_time=time(11, 30)))
     await db_session.commit()
 

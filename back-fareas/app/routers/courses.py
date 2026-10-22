@@ -25,9 +25,6 @@ from app.tables import AppUser, Course, CourseGroup, Enrollment, Room, ScheduleB
 router = APIRouter(tags=["courses"])
 
 
-# ---------------------------------------------------------------------------
-# Cursos
-# ---------------------------------------------------------------------------
 class CourseIn(BaseModel):
     code: str = Field(min_length=3, max_length=20, examples=["ISA903"])
     name: str = Field(min_length=3, max_length=160, examples=["Inteligencia Artificial I"])
@@ -73,13 +70,9 @@ async def create_course(body: CourseIn, db: DbSession, _admin: RequireRole(UserR
     return CourseOut(id=course.id, code=course.code, name=course.name)  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
-# Grupos
-# ---------------------------------------------------------------------------
 class GroupIn(BaseModel):
     group_code: str = Field(min_length=1, max_length=5, examples=["A"])
     teacher_id: int
-    room_id: int
     capacity: int = Field(default=40, gt=0, description="Cupo del grupo (40 por defecto, R8)")
 
 
@@ -91,15 +84,13 @@ class GroupOut(BaseModel):
     group_code: str
     teacher_id: int
     teacher_name: str
-    room_id: int
-    room_code: str
     semester_label: str
     capacity: int
     enrolled_count: int
     is_active: bool
 
 
-async def _group_out(db, g: CourseGroup, course: Course, teacher: AppUser, room: Room) -> GroupOut:
+async def _group_out(db, g: CourseGroup, course: Course, teacher: AppUser) -> GroupOut:
     activos = (
         await db.exec(
             select(func.count())
@@ -115,8 +106,6 @@ async def _group_out(db, g: CourseGroup, course: Course, teacher: AppUser, room:
         group_code=g.group_code,
         teacher_id=teacher.id,  # type: ignore[arg-type]
         teacher_name=teacher.full_name,
-        room_id=room.id,  # type: ignore[arg-type]
-        room_code=room.code,
         semester_label=g.semester_label,
         capacity=g.capacity,
         enrolled_count=activos,
@@ -128,10 +117,9 @@ async def _group_rows(db, *, group_id: int | None = None, course_id: int | None 
                       teacher_id: int | None = None, active_only: bool = False,
                       semester: str | None = None):
     stmt = (
-        select(CourseGroup, Course, AppUser, Room)
+        select(CourseGroup, Course, AppUser)
         .join(Course, Course.id == CourseGroup.course_id)
         .join(AppUser, AppUser.id == CourseGroup.teacher_id)
-        .join(Room, Room.id == CourseGroup.room_id)
     )
     if group_id is not None:
         stmt = stmt.where(CourseGroup.id == group_id)
@@ -157,7 +145,7 @@ async def list_groups(
 ) -> list[GroupOut]:
     rows = await _group_rows(db, course_id=course_id, teacher_id=teacher_id,
                              active_only=not include_inactive, semester=semester)
-    return [await _group_out(db, g, c, t, r) for g, c, t, r in rows]
+    return [await _group_out(db, g, c, t) for g, c, t in rows]
 
 
 @router.get("/courses/{course_id}/groups", response_model=list[GroupOut])
@@ -169,14 +157,18 @@ async def list_course_groups(
     if semester is None:
         semester = await semestre_vigente(db)
     rows = await _group_rows(db, course_id=course_id, semester=semester)
-    return [await _group_out(db, g, c, t, r) for g, c, t, r in rows]
+    return [await _group_out(db, g, c, t) for g, c, t in rows]
 
 
 @router.post("/courses/{course_id}/groups", response_model=GroupOut, status_code=status.HTTP_201_CREATED)
 async def create_group(
     course_id: int, body: GroupIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> GroupOut:
-    """R9: crea el grupo con semester_label del semestre VIGENTE y cupo."""
+    """R9: crea el grupo con semester_label del semestre VIGENTE y cupo.
+
+    El grupo NO lleva aula: cada bloque horario indica dónde se dicta, así el
+    mismo grupo puede usar laboratorios distintos según el día (R9).
+    """
     course = await _get_or_404(db, Course, course_id, "Curso")
     group_code = body.group_code.strip().upper()
     semester = await semestre_vigente(db)
@@ -195,21 +187,19 @@ async def create_group(
     if teacher.role is not UserRole.DOCENTE or not teacher.is_active:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                             detail="El usuario asignado debe ser un docente activo")
-    room = await _get_or_404(db, Room, body.room_id, "Aula")
 
     group = CourseGroup(course_id=course_id, group_code=group_code,
-                        teacher_id=body.teacher_id, room_id=body.room_id,
+                        teacher_id=body.teacher_id,
                         semester_label=semester, capacity=body.capacity)
     db.add(group)
     await db.flush()  # obtiene group.id para la bitácora
     await audit(db, admin, action="grupo_creado", entity="course_group", entity_id=group.id,
                 new_value={"course": course.code, "group": group_code, "semester": semester,
-                           "teacher_id": body.teacher_id, "room_id": body.room_id,
-                           "capacity": body.capacity},
+                           "teacher_id": body.teacher_id, "capacity": body.capacity},
                 ip_address=_client_ip(request))
     await db.commit()
     await db.refresh(group)
-    return await _group_out(db, group, course, teacher, room)
+    return await _group_out(db, group, course, teacher)
 
 
 @router.delete("/groups/{group_id}", response_model=dict)
@@ -228,32 +218,55 @@ async def deactivate_group(
     return {"message": f"Grupo #{group_id} desactivado"}
 
 
-# ---------------------------------------------------------------------------
-# Bloques horarios - RF-06 (choques)
-# ---------------------------------------------------------------------------
+@router.post("/groups/{group_id}/activate", response_model=dict)
+async def activate_group(
+    group_id: int, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
+) -> dict:
+    """Reactivación de la baja lógica: el grupo vuelve a abrir sesiones y a
+    participar en la validación de choques (sus bloques nunca se borraron)."""
+    group = await _get_or_404(db, CourseGroup, group_id, "Grupo")
+    if group.is_active:
+        raise errors.DomainError("El grupo ya está activo")
+    group.is_active = True
+    db.add(group)
+    await audit(db, admin, action="grupo_reactivado", entity="course_group", entity_id=group.id,
+                ip_address=_client_ip(request))
+    await db.commit()
+    return {"message": f"Grupo #{group_id} reactivado"}
+
+
 class BlockIn(BaseModel):
-    weekday: int = Field(ge=1, le=7, description="1=Lunes … 7=Domingo")
+    weekday: int = Field(ge=1, le=5, description="1=Lunes … 5=Viernes")
     start_time: time
     end_time: time
+    # Obligatoria, pero se declara opcional para que el 422 salga del servicio
+    # con el mensaje en español (no del validador en inglés).
+    room_id: int | None = Field(default=None, description="Aula donde se dicta ESTE bloque (R9)")
 
 
 class BlockUpdate(BaseModel):
-    weekday: int | None = Field(default=None, ge=1, le=7)
+    weekday: int | None = Field(default=None, ge=1, le=5)
     start_time: time | None = None
     end_time: time | None = None
+    room_id: int | None = None
 
 
 class BlockOut(BaseModel):
     id: int
     group_id: int
+    room_id: int
+    room_code: str
     weekday: int
     start_time: time
     end_time: time
 
 
-def _block_out(b: ScheduleBlock) -> BlockOut:
-    return BlockOut(id=b.id, group_id=b.group_id, weekday=b.weekday,  # type: ignore[arg-type]
-                    start_time=b.start_time, end_time=b.end_time)
+async def _block_out(db, b: ScheduleBlock) -> BlockOut:
+    """El aula del bloque resuelta a código (la usa la tabla de horario)."""
+    room = await db.get(Room, b.room_id)
+    return BlockOut(id=b.id, group_id=b.group_id, room_id=b.room_id,  # type: ignore[arg-type]
+                    room_code=room.code if room is not None else "",
+                    weekday=b.weekday, start_time=b.start_time, end_time=b.end_time)
 
 
 @router.get("/groups/{group_id}/blocks", response_model=list[BlockOut])
@@ -268,19 +281,23 @@ async def list_blocks(
             .order_by(ScheduleBlock.weekday, ScheduleBlock.start_time)
         )
     ).all()
-    return [_block_out(b) for b in blocks]
+    return [await _block_out(db, b) for b in blocks]
 
 
 @router.post("/groups/{group_id}/blocks", response_model=BlockOut, status_code=status.HTTP_201_CREATED)
 async def create_block(
     group_id: int, body: BlockIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> BlockOut:
-    """RF-06: valida solapamientos (misma aula o mismo docente) antes de crear."""
+    """RF-06: valida solapamientos (misma aula del bloque o mismo docente).
+
+    El aula es obligatoria y propia del bloque (R9): el grupo no tiene aula.
+    """
     block = await add_block(
         db, admin, group_id=group_id, weekday=body.weekday,
-        start_time=body.start_time, end_time=body.end_time, ip=_client_ip(request),
+        start_time=body.start_time, end_time=body.end_time, room_id=body.room_id,
+        ip=_client_ip(request),
     )
-    return _block_out(block)
+    return await _block_out(db, block)
 
 
 @router.patch("/blocks/{block_id}", response_model=BlockOut)
@@ -289,7 +306,7 @@ async def patch_block(
 ) -> BlockOut:
     block = await update_block(db, admin, block_id=block_id,
                                data=body.model_dump(exclude_unset=True), ip=_client_ip(request))
-    return _block_out(block)
+    return await _block_out(db, block)
 
 
 @router.delete("/blocks/{block_id}", response_model=dict)
@@ -297,7 +314,7 @@ async def delete_block(
     block_id: int, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> dict:
     block = await _get_or_404(db, ScheduleBlock, block_id, "Bloque horario")
-    old = {"group_id": block.group_id, "weekday": block.weekday,
+    old = {"group_id": block.group_id, "room_id": block.room_id, "weekday": block.weekday,
            "start_time": str(block.start_time), "end_time": str(block.end_time)}
     await db.delete(block)
     await audit(db, admin, action="bloque_eliminado", entity="schedule_block", entity_id=block_id,
@@ -306,9 +323,82 @@ async def delete_block(
     return {"message": f"Bloque #{block_id} eliminado"}
 
 
-# ---------------------------------------------------------------------------
-# Matrículas - RF-22
-# ---------------------------------------------------------------------------
+class ScheduleRowOut(BaseModel):
+    """Un bloque con TODO lo que necesita la rejilla semanal (una sola consulta)."""
+
+    id: int
+    group_id: int
+    course_id: int
+    course_code: str
+    course_name: str
+    group_code: str
+    teacher_id: int
+    teacher_name: str
+    room_id: int
+    room_code: str
+    semester_label: str
+    weekday: int
+    start_time: time
+    end_time: time
+
+
+@router.get("/schedule", response_model=list[ScheduleRowOut])
+async def general_schedule(
+    db: DbSession,
+    _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
+    semester: str | None = Query(None, max_length=40, description="Default: semestre vigente (R1)"),
+    course_id: int | None = None,
+    teacher_id: int | None = None,
+    room_id: int | None = None,
+    include_inactive: bool = Query(False, description="Incluye grupos desactivados"),
+) -> list[ScheduleRowOut]:
+    """Semana completa de un semestre: el admin ve huecos y cruces de un vistazo.
+
+    Es una sola consulta (no N+1 por grupo) y la usan tanto la vista general de
+    horarios como cualquier reporte de carga académica. El semestre por defecto
+    es el vigente (R1): los grupos históricos no se mezclan con el actual.
+    """
+    if semester is None:
+        semester = await semestre_vigente(db)
+    stmt = (
+        select(ScheduleBlock, CourseGroup, Course, AppUser, Room)
+        .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)
+        .join(Course, Course.id == CourseGroup.course_id)
+        .join(AppUser, AppUser.id == CourseGroup.teacher_id)
+        .join(Room, Room.id == ScheduleBlock.room_id)
+        .where(CourseGroup.semester_label == semester)  # type: ignore[arg-type]
+        .order_by(ScheduleBlock.weekday, ScheduleBlock.start_time, Course.code)
+    )
+    if not include_inactive:
+        stmt = stmt.where(CourseGroup.is_active)  # type: ignore[arg-type]
+    if course_id is not None:
+        stmt = stmt.where(CourseGroup.course_id == course_id)
+    if teacher_id is not None:
+        stmt = stmt.where(CourseGroup.teacher_id == teacher_id)
+    if room_id is not None:
+        stmt = stmt.where(ScheduleBlock.room_id == room_id)
+    rows = (await db.exec(stmt)).all()
+    return [
+        ScheduleRowOut(
+            id=b.id,  # type: ignore[arg-type]
+            group_id=g.id,  # type: ignore[arg-type]
+            course_id=c.id,  # type: ignore[arg-type]
+            course_code=c.code,
+            course_name=c.name,
+            group_code=g.group_code,
+            teacher_id=t.id,  # type: ignore[arg-type]
+            teacher_name=t.full_name,
+            room_id=r.id,  # type: ignore[arg-type]
+            room_code=r.code,
+            semester_label=g.semester_label,
+            weekday=b.weekday,
+            start_time=b.start_time,
+            end_time=b.end_time,
+        )
+        for b, g, c, t, r in rows
+    ]
+
+
 class EnrollIn(BaseModel):
     student_id: int
 
@@ -403,9 +493,6 @@ async def transfer_student(
     )
 
 
-# ---------------------------------------------------------------------------
-# Importación de horarios por PDF - RF-07 (previsualizar → confirmar)
-# ---------------------------------------------------------------------------
 from fastapi import File, UploadFile  # noqa: E402
 from pydantic import field_validator  # noqa: E402
 
@@ -477,9 +564,10 @@ class BloqueConfirmado(BaseModel):
     course_code: str = Field(min_length=3, max_length=20)
     course_name: str | None = Field(default=None, max_length=160)
     group_code: str = Field(min_length=1, max_length=5)
-    weekday: int = Field(ge=1, le=7)
+    weekday: int = Field(ge=1, le=5, description="1=Lunes … 5=Viernes")
     start_time: time
     end_time: time
+    room_id: int | None = Field(default=None, description="Aula del bloque; por defecto, la del import")
 
     @field_validator("course_code", "group_code")
     @classmethod
@@ -489,7 +577,7 @@ class BloqueConfirmado(BaseModel):
 
 class ImportConfirmIn(BaseModel):
     teacher_id: int = Field(description="Docente del/de los grupos creados")
-    room_id: int = Field(description="Aula del/de los grupos creados")
+    room_id: int = Field(description="Aula por defecto de los bloques importados")
     bloques: list[BloqueConfirmado] = Field(min_length=1, max_length=200)
 
 
@@ -552,7 +640,7 @@ async def import_pdf_confirm(
                 )).first()
                 if grupo is None:
                     grupo = CourseGroup(course_id=curso.id, group_code=b.group_code,
-                                        teacher_id=body.teacher_id, room_id=body.room_id,
+                                        teacher_id=body.teacher_id,
                                         semester_label=sem_vigente, capacity=40)
                     db.add(grupo)
                     await db.flush()
@@ -565,6 +653,7 @@ async def import_pdf_confirm(
             await add_block(
                 db, admin, group_id=grupo.id, weekday=b.weekday,
                 start_time=b.start_time, end_time=b.end_time,
+                room_id=b.room_id or body.room_id,
                 ip=_client_ip(request), commit=False,
             )
             bloques_creados += 1

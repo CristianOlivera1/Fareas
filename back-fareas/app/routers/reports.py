@@ -45,7 +45,7 @@ SQL_BASE = (
     "JOIN schedule_block  sb ON sb.id = s.block_id "
     "JOIN course_group    cg ON cg.id = sb.group_id "
     "JOIN course          c  ON c.id  = cg.course_id "
-    "JOIN room            r  ON r.id  = cg.room_id "
+    "JOIN room            r  ON r.id  = sb.room_id "  # R9: aula DEL BLOQUE, no del grupo
     "JOIN app_user        st ON st.id = ar.student_id "
     "WHERE s.session_date BETWEEN :d1 AND :d2 "
     "AND cg.is_active "
@@ -141,9 +141,6 @@ async def reporte_pdf(
     )
 
 
-# ---------------------------------------------------------------------------
-# Matriz de asistencia por grupo (11.8) — alumnos × fechas A/T/F/FJ/—
-# ---------------------------------------------------------------------------
 async def _grupo_y_curso(db, group_id: int) -> tuple[CourseGroup, Course]:
     grupo = await db.get(CourseGroup, group_id)
     if grupo is None:
@@ -235,9 +232,6 @@ async def reporte_matriz_grupo(
     )
 
 
-# ---------------------------------------------------------------------------
-# Riesgo DPI (11.8) — alumnos en alerta/límite (R7)
-# ---------------------------------------------------------------------------
 @router.get("/reports/dpi-risk.xlsx")
 async def reporte_riesgo_dpi(
     db: DbSession,

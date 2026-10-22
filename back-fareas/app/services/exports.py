@@ -16,14 +16,12 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-# Encabezado institucional compartido por ambos formatos (RF-16)
 TITULO = "FACULTAD DE INFORMÁTICA - UNAMBA"
 SUBTITULO = "Reporte de Asistencia - Sistema Fareas"
 
 AZUL = "155DFC"          # --fareas-primary
 AZUL_CLARO = "E8F0FE"
 
-# --- Columnas estándar (misma tabla en pantalla, Excel y PDF) ----------------
 HEADERS = ["Estudiante", "Código", "Curso", "Grupo", "Aula", "Estado", "Fecha", "Hora", "Método"]
 ANCHOS_PDF = [58 * mm, 18 * mm, 58 * mm, 12 * mm, 20 * mm, 22 * mm, 24 * mm, 16 * mm, 18 * mm]
 
@@ -72,16 +70,12 @@ def nombre_pdf(desde: date | None, hasta: date | None, now: datetime | None = No
     return _nombre_archivo("pdf", desde, hasta, now or datetime.now())
 
 
-# ---------------------------------------------------------------------------
-# Excel (openpyxl)
-# ---------------------------------------------------------------------------
 def excel_asistencia(filas: list[dict], titulo_periodo: str | None = None) -> bytes:
     """Libro de una hoja: encabezado institucional + tabla con estilos."""
     wb = Workbook()
     ws = wb.active
     ws.title = "Asistencia"
 
-    # Encabezado institucional
     ws.merge_cells("A1:I1")
     c = ws["A1"]
     c.value = TITULO
@@ -97,7 +91,6 @@ def excel_asistencia(filas: list[dict], titulo_periodo: str | None = None) -> by
     ws["A3"].font = Font(size=9, color="9CA3AF")
     ws["A3"].alignment = Alignment(horizontal="center")
 
-    # Fila de encabezados
     fila_hdr = 5
     fill_hdr = PatternFill("solid", fgColor=AZUL)
     fino = Side(style="thin", color="D1D5DB")
@@ -109,7 +102,6 @@ def excel_asistencia(filas: list[dict], titulo_periodo: str | None = None) -> by
         c.alignment = Alignment(horizontal="center", vertical="center")
         c.border = borde
 
-    # Datos con color por estado
     fills_estado = {k: PatternFill("solid", fgColor=f"{v[0]}22") for k, v in COLORES_ESTADO.items()}
     for i, r in enumerate(filas):
         valores = _fila(r)
@@ -123,7 +115,6 @@ def excel_asistencia(filas: list[dict], titulo_periodo: str | None = None) -> by
                 if fill:
                     c.fill = fill
 
-    # Anchos y freeze
     anchos = [32, 10, 38, 8, 12, 12, 12, 8, 10]
     for col, ancho in enumerate(anchos, start=1):
         ws.column_dimensions[get_column_letter(col)].width = ancho
@@ -135,9 +126,6 @@ def excel_asistencia(filas: list[dict], titulo_periodo: str | None = None) -> by
     return buf.getvalue()
 
 
-# ---------------------------------------------------------------------------
-# PDF (reportlab)
-# ---------------------------------------------------------------------------
 def pdf_asistencia(filas: list[dict], titulo_periodo: str | None = None) -> bytes:
     """PDF horizontal con encabezado institucional y tabla paginada."""
     buf = io.BytesIO()
@@ -191,9 +179,7 @@ def pdf_asistencia(filas: list[dict], titulo_periodo: str | None = None) -> byte
     return buf.getvalue()
 
 
-# ---------------------------------------------------------------------------
 # Matriz de asistencia por grupo (R7/11.8): alumnos × fechas con A/T/F/FJ/—
-# ---------------------------------------------------------------------------
 LEYENDA_MATRIZ = {
     "A": "Asistió",
     "T": "Tardanza",
@@ -276,9 +262,6 @@ def excel_matriz_grupo(
     return buf.getvalue()
 
 
-# ---------------------------------------------------------------------------
-# Riesgo DPI (R7/11.8): alumnos en alerta/límite por curso
-# ---------------------------------------------------------------------------
 COLOR_NIVEL = {"alerta": "B45309", "limite": "B91C1C"}
 
 

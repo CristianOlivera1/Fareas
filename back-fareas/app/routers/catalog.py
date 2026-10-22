@@ -21,9 +21,6 @@ from app.tables import AppUser, Device, DeviceType, FaceEmbedding, Room, UserRol
 router = APIRouter(tags=["catalog"])
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
@@ -35,9 +32,6 @@ async def _get_or_404(db, model, entity_id: int, name: str):
     return obj
 
 
-# ---------------------------------------------------------------------------
-# Aulas - RF-05
-# ---------------------------------------------------------------------------
 class RoomIn(BaseModel):
     code: str = Field(min_length=1, max_length=20, examples=["LAB 304"])
     name: str | None = Field(default=None, max_length=120)
@@ -119,9 +113,6 @@ async def update_room(
     return room_out(room)
 
 
-# ---------------------------------------------------------------------------
-# Dispositivos - RF-05, RF-35
-# ---------------------------------------------------------------------------
 class DeviceIn(BaseModel):
     room_id: int
     device_type: DeviceType
@@ -275,9 +266,6 @@ async def update_device(
     return device_out(device, room.code if room else None)
 
 
-# ---------------------------------------------------------------------------
-# Docentes - RF-02
-# ---------------------------------------------------------------------------
 class TeacherIn(BaseModel):
     full_name: str = Field(min_length=3, max_length=160, examples=["Aquino Cruz, Mario (Mag.)"])
     email: EmailStr
@@ -381,9 +369,6 @@ async def create_teacher(
     return person_out(user)
 
 
-# ---------------------------------------------------------------------------
-# Estudiantes - RF-03
-# ---------------------------------------------------------------------------
 class StudentIn(BaseModel):
     full_name: str = Field(min_length=3, max_length=160)
     email: EmailStr
@@ -464,9 +449,6 @@ async def create_student(
     return person_out(user)
 
 
-# ---------------------------------------------------------------------------
-# Acciones sobre una cuenta - RF-08
-# ---------------------------------------------------------------------------
 @router.get("/accounts/{user_id}", response_model=PersonOut)
 async def get_account(
     user_id: int, db: DbSession, _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE)

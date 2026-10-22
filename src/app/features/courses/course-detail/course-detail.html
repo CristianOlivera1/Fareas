@@ -33,7 +33,6 @@
   </app-ui-alert>
 }
 
-<!-- Grupos del curso (R9: cupo 40, docente y aula propios) -->
 @if (loading()) {
   <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
     @for (i of [1, 2, 3]; track i) {
@@ -50,7 +49,7 @@
     <h2 class="mt-3 font-semibold text-gray-900">Este curso aún no tiene grupos</h2>
     <p class="mx-auto mt-1 max-w-md text-sm text-gray-500">
       Un curso se divide en grupos (A, B, C…) cuando se llena el cupo de 40. Cada grupo tiene su
-      docente, su aula y su horario.
+      docente y su horario; el aula se elige en cada bloque (puede cambiar según el día).
     </p>
     @if (auth.isAdmin()) {
       <div class="mt-4 flex justify-center">
@@ -87,12 +86,21 @@
               </span>
             }
             @if (auth.isAdmin()) {
-              <button type="button"
-                class="grid size-7 place-items-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                title="Desactivar grupo"
-                (click)="$event.stopPropagation(); askDeleteGroup(g)">
-                <iconify-icon icon="material-symbols:delete-outline" width="16"></iconify-icon>
-              </button>
+              @if (g.is_active) {
+                <button type="button"
+                  class="grid size-7 place-items-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                  title="Desactivar grupo"
+                  (click)="$event.stopPropagation(); askDeleteGroup(g)">
+                  <iconify-icon icon="material-symbols:delete-outline" width="16"></iconify-icon>
+                </button>
+              } @else {
+                <button type="button"
+                  class="grid size-7 place-items-center rounded-lg text-gray-400 hover:bg-green-50 hover:text-green-600 transition-colors"
+                  title="Reactivar grupo"
+                  (click)="$event.stopPropagation(); reactivateGroup(g)">
+                  <iconify-icon icon="material-symbols:settings-backup-restore" width="16"></iconify-icon>
+                </button>
+              }
             }
           </div>
         </div>
@@ -101,10 +109,6 @@
           <div class="flex items-center gap-1.5">
             <iconify-icon icon="material-symbols:person-outline" width="15" class="text-gray-400"></iconify-icon>
             <span class="truncate">{{ g.teacher_name }}</span>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <iconify-icon icon="material-symbols:meeting-room-outline" width="15" class="text-gray-400"></iconify-icon>
-            <span>{{ g.room_code }}</span>
           </div>
         </dl>
 
@@ -124,68 +128,35 @@
   </div>
 }
 
-<!-- Horario del grupo seleccionado -->
 @if (selectedGroup(); as g) {
   <section class="mt-6">
     <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
       <h2 class="text-sm font-semibold text-gray-900">
         Horario del grupo {{ g.group_code }}
-        <span class="ml-1 font-normal text-gray-500">· {{ g.room_code }} · {{ g.teacher_name }}</span>
+        <span class="ml-1 font-normal text-gray-500">· {{ g.teacher_name }}</span>
       </h2>
       @if (blocksLoading()) {
         <span class="text-xs text-gray-400">Cargando horario…</span>
       }
     </div>
 
-    <div class="overflow-x-auto pb-1">
-      <div class="grid min-w-[980px] grid-cols-7 gap-3">
-        @for (d of dias; track d.value) {
-          <div class="rounded-xl border border-gray-200 bg-white p-2.5">
-            <div class="mb-2 flex items-center justify-between">
-              <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                {{ d.label }}
-              </span>
-              @if (auth.isAdmin()) {
-                <button type="button"
-                  class="grid size-6 place-items-center rounded-md text-gray-400 hover:bg-blue-50 hover:text-(--fareas-primary) transition-colors"
-                  [attr.aria-label]="'Añadir bloque el ' + d.label"
-                  [title]="'Añadir bloque el ' + d.label"
-                  (click)="openCreateBlock(d.value)">
-                  <iconify-icon icon="material-symbols:add" width="16"></iconify-icon>
-                </button>
-              }
-            </div>
-            <div class="space-y-1.5">
-              @for (b of blocksFor(d.value); track b.id) {
-                <div class="flex items-center justify-between gap-1 rounded-lg bg-blue-50 px-2 py-1.5">
-                  <span class="text-xs font-medium tabular-nums text-(--fareas-primary)">
-                    {{ time(b.start_time) }}–{{ time(b.end_time) }}
-                  </span>
-                  @if (auth.isAdmin()) {
-                    <button type="button"
-                      class="grid size-5 shrink-0 place-items-center rounded text-blue-300 hover:text-red-600 transition-colors"
-                      title="Eliminar bloque" (click)="askDeleteBlock(b)">
-                      <iconify-icon icon="material-symbols:close" width="14"></iconify-icon>
-                    </button>
-                  }
-                </div>
-              } @empty {
-                <p class="py-3 text-center text-[11px] text-gray-300">Sin bloques</p>
-              }
-            </div>
-          </div>
-        }
-      </div>
-    </div>
+    <app-schedule-table
+      [entries]="scheduleEntries()"
+      [hourFrom]="franja().from"
+      [hourTo]="franja().to"
+      [canEdit]="auth.isAdmin()"
+      (blockAdd)="onBlockAdd($event)"
+      (blockRemove)="onBlockRemove($event)"
+    />
 
     <p class="mt-2 text-xs text-gray-400">
-      Bloques de 1 h o 2 h. Cada bloque es una sesión independiente: su apertura, su tolerancia y
-      su cierre se calculan con su propia hora de inicio y fin (RF-23/RF-26).
+      Franja de clases {{ horaInicio() }}–{{ horaFin() }} (Parámetros), de Lunes a Viernes. Cada
+      bloque lleva su aula y es una sesión independiente: su apertura, su tolerancia y su cierre se
+      calculan con su propia hora de inicio y fin (RF-23/RF-26).
     </p>
   </section>
 }
 
-<!-- Alta de grupo -->
 <p-dialog header="Nuevo grupo" [(visible)]="groupDialogVisible" [modal]="true"
   [style]="{ width: '460px' }">
   <div class="space-y-4 pt-2">
@@ -203,15 +174,10 @@
         optionValue="value" placeholder="Selecciona el docente" [filter]="true" filterBy="label"
         [ngModel]="groupForm().teacher_id" (ngModelChange)="patch({ teacher_id: $event })" />
     </label>
-    <label class="block space-y-1">
-      <span class="text-sm font-medium text-gray-700">Aula <span class="text-red-500">*</span></span>
-      <p-select class="w-full" appendTo="body" [options]="roomOptions()" optionLabel="label"
-        optionValue="value" placeholder="Selecciona el aula" [filter]="true" filterBy="label"
-        [ngModel]="groupForm().room_id" (ngModelChange)="patch({ room_id: $event })" />
-    </label>
     <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-      El grupo se crea en el semestre vigente. Los choques de aula o de docente con otros grupos se
-      validan al crear el bloque de horario.
+      El grupo se crea en el semestre vigente. El <b>aula</b> se elige en cada bloque del horario
+      (un grupo puede dictar en laboratorios distintos según el día) y los choques de aula o de
+      docente se validan al crear el bloque.
     </app-ui-alert>
   </div>
   <ng-template pTemplate="footer">
@@ -220,7 +186,6 @@
   </ng-template>
 </p-dialog>
 
-<!-- Alta de bloque -->
 <p-dialog header="Nuevo bloque de horario" [(visible)]="blockDialogVisible" [modal]="true"
   [style]="{ width: '440px' }">
   <div class="space-y-4 pt-2">
@@ -236,9 +201,17 @@
       <app-ui-input label="Fin" [required]="true" type="time"
         [ngModel]="blockForm().end_time" (ngModelChange)="patchBlock({ end_time: $event })" />
     </div>
+    <label class="block space-y-1">
+      <span class="text-sm font-medium text-gray-700">Aula <span class="text-red-500">*</span></span>
+      <p-select class="w-full" appendTo="body" [options]="roomOptions()" optionLabel="label"
+        optionValue="value" placeholder="Aula del bloque" [filter]="true" filterBy="label"
+        [ngModel]="blockForm().room_id" (ngModelChange)="patchBlock({ room_id: $event })" />
+      <span class="text-xs text-gray-400">Se prellena con el aula del último bloque del grupo.</span>
+    </label>
     <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-      Bloques de 1 h o 2 h (8:00–9:00, 8:00–10:00…). El bloque no puede cruzarse con otro del mismo
-      aula ni con otro del mismo docente.
+      Bloques de 1 h o 2 h (07:00–09:00, 09:00–11:00…) entre las {{ horaInicio() }} y las
+      {{ horaFin() }} y dentro de la semana de Lunes a Viernes. El bloque no puede cruzarse con
+      otro de la misma aula ni con otro del mismo docente.
     </app-ui-alert>
   </div>
   <ng-template pTemplate="footer">

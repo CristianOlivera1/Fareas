@@ -89,7 +89,6 @@
   </ng-template>
 </app-data-table>
 
-<!-- Alta de un feriado puntual (cancela las sesiones de ese día, R12) -->
 <p-dialog header="Nuevo feriado" [(visible)]="createVisible" [modal]="true" [style]="{ width: '460px' }">
   <div class="space-y-4 pt-2">
     <label class="block space-y-1">
@@ -110,7 +109,6 @@
   </ng-template>
 </p-dialog>
 
-<!-- Paro por rango (R12): varios días de una vez, omitiendo fines de semana -->
 <p-dialog header="Paro o feriado por rango" [(visible)]="rangeVisible" [modal]="true"
   [style]="{ width: '500px' }">
   <div class="space-y-4 pt-2">

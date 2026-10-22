@@ -26,9 +26,6 @@ import { DataTableCellDirective } from '../../../shared/components/data-table/da
 import { TableColumn } from '../../../core/models/table-column';
 import { Holiday } from '../../../core/models/catalog';
 
-/** F3 · Feriados (RF-09 + R12): alta de un día, paro por rango y carga de los
- * feriados nacionales del año. Registrar una fecha CANCELA las sesiones de ese
- * día (el backend responde cuántas). Solo admin escribe. */
 @Component({
   selector: 'app-holidays',
   imports: [
@@ -61,7 +58,6 @@ export class HolidaysPage {
     { label: String(this.currentYear - 1), value: this.currentYear - 1 },
   ];
 
-  /** El filtro vive en la URL (?year=) como el resto del panel. */
   readonly yearUrl = this.qp.filter('year');
   readonly year = signal<number>(this.currentYear);
 
@@ -71,22 +67,18 @@ export class HolidaysPage {
   readonly saving = signal(false);
   readonly deleting = signal(false);
 
-  // Alta de un feriado puntual
   readonly form = signal({ holiday_date: '', description: '' });
   createVisible = false;
 
-  // Paro / feriado por rango (R12)
   readonly range = signal({ desde: '', hasta: '', description: '', omitir_fines_de_semana: true });
   rangeVisible = false;
 
   readonly nationalYear = signal(this.currentYear);
 
-  // Baja
   readonly deleteTarget = signal<Holiday | null>(null);
   deleteVisible = false;
 
   constructor() {
-    // Primer render: respeta ?year= de la URL; luego cada cambio recarga.
     const urlYear = this.yearUrl();
     if (urlYear) this.year.set(Number(urlYear));
     effect(() => {
@@ -276,7 +268,6 @@ export class HolidaysPage {
     }
   }
 
-  /** 2026-07-28 → 'martes, 28 de julio de 2026'. */
   formatDate(iso: string): string {
     if (!iso) return '—';
     return new Date(`${iso}T12:00:00`).toLocaleDateString('es-PE', {
@@ -293,7 +284,6 @@ export class HolidaysPage {
     return label.charAt(0).toUpperCase() + label.slice(1);
   }
 
-  /** 'JUL' — la etiqueta del bloque izquierdo de la tabla. */
   monthShort(iso: string): string {
     if (!iso) return '—';
     return new Date(`${iso}T12:00:00`)

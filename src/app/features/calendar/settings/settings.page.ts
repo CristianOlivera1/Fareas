@@ -48,8 +48,6 @@ const EMPTY: SettingsForm = {
   attendance_hour_end: '22:00',
 };
 
-/** F3 · Parámetros globales (RF-34, fila única). Los cambios aplican a las
- * sesiones SIGUIENTES, nunca retroactivos (R1/R2/R7/R11). Solo admin. */
 @Component({
   selector: 'app-settings',
   imports: [FormsModule, PageHeader, UiButton, UiInput, UiAlert, SelectModule],
@@ -93,7 +91,6 @@ export class SettingsPage {
     value: v,
   }));
 
-  /** Errores de forma antes de enviar (el backend re-valida con 422). */
   readonly problems = computed<string[]>(() => {
     const f = this.form();
     const out: string[] = [];

@@ -4,8 +4,6 @@ import { PageHeader } from '../../shared/components/page-header/page-header';
 
 /** iconify-icon es un Web Component: se declara via CUSTOM_ELEMENTS_SCHEMA. */
 
-/** Placeholder de las rutas creadas en F1; cada bloque posterior (F2-F6)
- * reemplaza este componente por la pantalla real. */
 @Component({
   selector: 'app-placeholder-page',
   imports: [PageHeader],
@@ -26,7 +24,6 @@ import { PageHeader } from '../../shared/components/page-header/page-header';
 export class PlaceholderPage {
   private readonly route = inject(ActivatedRoute);
 
-  /** data.placeholder = 'F2 · Catálogos' etc. (definido en app.routes.ts) */
   readonly meta = this.route.snapshot.data['placeholder'] as string | undefined;
 
   title(): string {
