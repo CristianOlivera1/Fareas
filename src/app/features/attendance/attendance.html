@@ -8,7 +8,6 @@
   </app-ui-button>
 </app-page-header>
 
-<!-- Sesiones abiertas AHORA: marcar a mano (RF-21), cerrar (RF-26) o cancelar (R5) -->
 @if (haySesiones()) {
   <app-ui-alert variant="info" title="Sesiones abiertas ahora" class="mb-4">
     <div class="mt-2 space-y-2">
@@ -42,7 +41,6 @@
   </app-ui-alert>
 }
 
-<!-- Sesiones por revisar (R4): cerradas sin ninguna marca (¿cámara caída?) -->
 @if (hayRevisiones()) {
   <app-ui-alert variant="warning" title="Sesiones por revisar (R4)" class="mb-4">
     <p class="mt-1 text-sm">
@@ -144,7 +142,6 @@
   </ng-template>
 </app-data-table>
 
-<!-- Modal RF-21: marca manual del docente/admin sobre la sesión abierta -->
 <p-dialog header="Marca manual — {{ modalSession()?.course_code }} G{{ modalSession()?.group_code }}"
   [(visible)]="modalVisible" [modal]="true" [style]="{ width: '520px' }" (onHide)="closeModal()">
   @if (modalSession(); as ses) {
@@ -188,7 +185,6 @@
   </ng-template>
 </p-dialog>
 
-<!-- Rectificación (RF-15): motivo obligatorio, el docente tiene plazo (R11) -->
 <p-dialog header="Rectificar asistencia" [(visible)]="rectifyVisible" [modal]="true"
   [style]="{ width: '500px' }">
   @if (rectifyTarget(); as r) {
@@ -226,7 +222,6 @@
   </ng-template>
 </p-dialog>
 
-<!-- Justificar UNA falta (R6): crea la justificación del día y liga el registro -->
 <p-dialog header="Justificar falta" [(visible)]="justifyVisible" [modal]="true"
   [style]="{ width: '500px' }">
   @if (justifyTarget(); as r) {
@@ -255,7 +250,6 @@
   </ng-template>
 </p-dialog>
 
-<!-- Cierre manual de la sesión (RF-26, admin) -->
 <p-dialog header="Cerrar sesión de clase" [(visible)]="closeVisible" [modal]="true"
   [style]="{ width: '480px' }">
   @if (closeTarget(); as s) {
@@ -280,7 +274,6 @@
   </ng-template>
 </p-dialog>
 
-<!-- Cancelar la sesión (R5): día sin clase, paro, falla del docente -->
 <p-dialog header="Cancelar la sesión" [(visible)]="cancelVisible" [modal]="true"
   [style]="{ width: '480px' }">
   @if (cancelTarget(); as s) {
@@ -310,7 +303,6 @@
   </ng-template>
 </p-dialog>
 
-<!-- R4: confirmar faltas de una sesión cerrada sin marcas -->
 <p-dialog header="Confirmar faltas de la sesión" [(visible)]="reviewConfirmVisible" [modal]="true"
   [style]="{ width: '480px' }">
   @if (reviewConfirmTarget(); as rv) {
@@ -334,7 +326,6 @@
   </ng-template>
 </p-dialog>
 
-<!-- R4: cancelar la clase que quedó por revisar -->
 <p-dialog header="Cancelar la clase" [(visible)]="reviewCancelVisible" [modal]="true"
   [style]="{ width: '480px' }">
   @if (reviewCancelTarget(); as rv) {

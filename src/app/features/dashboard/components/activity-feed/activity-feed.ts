@@ -16,13 +16,11 @@ interface IdentifiedPerson {
   camera: string;
   /** Similitud del embedding en % (RF-20: umbral mínimo 75%). */
   similarity: number;
-  /** Veredicto mostrado en la puerta (RF-25 / Tabla 8). */
   verdict: 'Asistió' | 'Tardanza';
   message: string;
   initials: string;
 }
 
-/** Detecciones de una misma sesión (LAB 305, misma cámara), coherentes con student-list. */
 const MOCK_ROTATION: IdentifiedPerson[] = [
   {
     name: 'Raul Montesinos Valdivia',

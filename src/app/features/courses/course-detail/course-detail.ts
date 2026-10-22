@@ -24,6 +24,10 @@ import { UiButton } from '../../../shared/components/ui-button/ui-button';
 import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { ModalDelete } from '../../../shared/components/modal-delete/modal-delete';
+import {
+  ScheduleEntry,
+  ScheduleTable,
+} from '../../../shared/components/schedule-table/schedule-table';
 import { Block, Group } from '../../../core/models/catalog';
 
 const DIAS = [
@@ -32,8 +36,6 @@ const DIAS = [
   { label: 'Miércoles', value: 3 },
   { label: 'Jueves', value: 4 },
   { label: 'Viernes', value: 5 },
-  { label: 'Sábado', value: 6 },
-  { label: 'Domingo', value: 7 },
 ];
 
 interface Option<T> {
@@ -44,7 +46,6 @@ interface Option<T> {
 interface GroupForm {
   group_code: string;
   teacher_id: number | null;
-  room_id: number | null;
   capacity: number;
 }
 
@@ -52,18 +53,17 @@ interface BlockForm {
   weekday: number;
   start_time: string;
   end_time: string;
+  /** R9: aula del bloque; arranca con el aula del último bloque del grupo. */
+  room_id: number | null;
 }
 
 type DeleteTarget = { kind: 'group'; group: Group } | { kind: 'block'; block: Block } | null;
 
-/** F2 · Detalle de curso: grupos (R9 con cupo y semestre) y su horario
- * semanal con validación de choques RF-06 (el 409 del backend se muestra
- * tal cual). Solo admin escribe; docente ve en modo lectura. */
 @Component({
   selector: 'app-course-detail-page',
   imports: [
     FormsModule, PageHeader, UiButton, UiInput, UiAlert, ModalDelete,
-    DialogModule, SelectModule,
+    DialogModule, SelectModule, ScheduleTable,
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './course-detail.html',
@@ -102,13 +102,26 @@ export class CourseDetailPage {
   readonly teacherOptions = signal<Option<number>[]>([]);
   readonly roomOptions = signal<Option<number>[]>([]);
 
+  /** RF-01: franja de clases del sistema (Parámetros, 07:00–20:00 por defecto).
+   * La tabla la dibuja completa y el alta de bloques no deja salirse de ella. */
+  readonly horaInicio = signal('07:00');
+  readonly horaFin = signal('20:00');
+  readonly franja = computed(() => ({
+    from: Number(this.horaInicio().slice(0, 2)),
+    to: Number(this.horaFin().slice(0, 2)),
+  }));
+
   readonly groupForm = signal<GroupForm>({
     group_code: '',
     teacher_id: null,
-    room_id: null,
     capacity: 40,
   });
-  readonly blockForm = signal<BlockForm>({ weekday: 1, start_time: '08:00', end_time: '10:00' });
+  readonly blockForm = signal<BlockForm>({
+    weekday: 1,
+    start_time: '08:00',
+    end_time: '10:00',
+    room_id: null,
+  });
 
   groupDialogVisible = false;
   blockDialogVisible = false;
@@ -130,11 +143,26 @@ export class CourseDetailPage {
     [...this.blocks()].sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time)),
   );
 
+  readonly scheduleEntries = computed<ScheduleEntry[]>(() => {
+    const group = this.selectedGroup();
+    if (!group) return [];
+    return this.blocks().map((b) => ({
+      id: b.id,
+      weekday: b.weekday,
+      start_time: b.start_time,
+      end_time: b.end_time,
+      course_code: group.course_code,
+      course_name: group.course_name,
+      group_code: group.group_code,
+      room_code: b.room_code,
+      teacher_name: group.teacher_name,
+    }));
+  });
+
   constructor() {
     void this.init();
   }
 
-  // --- Lectura -------------------------------------------------------------
   private async init(): Promise<void> {
     await this.loadContext();
     await this.loadGroups();
@@ -152,13 +180,14 @@ export class CourseDetailPage {
       const opciones = [...new Set([vigente ?? '', ...(labels ?? [])])].filter((s) => s !== '');
       this.semesters.set(opciones);
       if (!this.semester() && vigente) {
-        // Fija el semestre vigente en la URL para que el refresco lo conserve.
         await this.qp.update({ semester: vigente });
       }
       this.teacherOptions.set(
         (teachers?.items ?? []).map((t) => ({ label: t.full_name, value: t.id })),
       );
       this.roomOptions.set((rooms?.items ?? []).map((r) => ({ label: r.code, value: r.id })));
+      this.horaInicio.set(this.hora(cfg?.attendance_hour_start) ?? '07:00');
+      this.horaFin.set(this.hora(cfg?.attendance_hour_end) ?? '20:00');
     } catch (err) {
       this.toast.add({
         severity: 'warn',
@@ -215,7 +244,6 @@ export class CourseDetailPage {
     void this.loadGroups();
   }
 
-  /** Tarjeta del grupo: borde azul cuando es el grupo seleccionado. */
   cardClass(group: Group): string {
     return group.id === this.selectedGroupId()
       ? 'border-(--fareas-primary) ring-1 ring-(--fareas-primary)'
@@ -236,6 +264,15 @@ export class CourseDetailPage {
 
   blocksFor(weekday: number): Block[] {
     return this.selectedGroupBlocks().filter((b) => b.weekday === weekday);
+  }
+
+  onBlockAdd(event: { weekday: number; hour: number }): void {
+    this.openCreateBlock(event.weekday, this.hhmm(event.hour));
+  }
+
+  onBlockRemove(entry: ScheduleEntry): void {
+    const block = this.blocks().find((b) => b.id === entry.id);
+    if (block) this.askDeleteBlock(block);
   }
 
   time(value: string): string {
@@ -262,23 +299,22 @@ export class CourseDetailPage {
     void this.router.navigate(['..'], { relativeTo: this.route });
   }
 
-  // --- Grupos (R9) ---------------------------------------------------------
   patch(p: Partial<GroupForm>): void {
     this.groupForm.update((f) => ({ ...f, ...p }));
   }
 
   openCreateGroup(): void {
-    this.groupForm.set({ group_code: '', teacher_id: null, room_id: null, capacity: 40 });
+    this.groupForm.set({ group_code: '', teacher_id: null, capacity: 40 });
     this.groupDialogVisible = true;
   }
 
   async saveGroup(): Promise<void> {
     const f = this.groupForm();
-    if (!f.group_code.trim() || !f.teacher_id || !f.room_id) {
+    if (!f.group_code.trim() || !f.teacher_id) {
       this.toast.add({
         severity: 'warn',
         summary: 'Completa el grupo',
-        detail: 'Grupo, docente y aula son obligatorios',
+        detail: 'El código del grupo y el docente son obligatorios',
         life: 3500,
       });
       return;
@@ -289,7 +325,6 @@ export class CourseDetailPage {
         .createGroup(this.courseId, {
           group_code: f.group_code.trim().toUpperCase(),
           teacher_id: f.teacher_id,
-          room_id: f.room_id,
           capacity: Number(f.capacity) || 40,
         })
         .toPromise();
@@ -313,19 +348,24 @@ export class CourseDetailPage {
     }
   }
 
-  // --- Bloques (RF-06) -----------------------------------------------------
   patchBlock(p: Partial<BlockForm>): void {
     this.blockForm.update((f) => ({ ...f, ...p }));
   }
 
-  openCreateBlock(weekday?: number): void {
+  openCreateBlock(weekday?: number, hour?: string): void {
     const group = this.selectedGroup();
-    const sugeridas = this.blocksFor(weekday ?? 1);
-    const ultimo = sugeridas[sugeridas.length - 1];
+    const delDia = this.blocksFor(weekday ?? 1);
+    const ultimo = delDia[delDia.length - 1];
+    const finAnterior = ultimo ? this.time(ultimo.end_time) : null;
+    const inicio = hour ?? finAnterior ?? '08:00';
     this.blockForm.set({
       weekday: weekday ?? 1,
-      start_time: ultimo ? this.time(ultimo.end_time) : '08:00',
-      end_time: ultimo ? this.addHours(this.time(ultimo.end_time), 2) : '10:00',
+      start_time: inicio,
+      end_time: this.addHours(inicio, 2),
+      // R9: el grupo no tiene aula. Se prellena con la del último bloque de ese
+      // día y, si es el primero, con la del último bloque del grupo: el horario
+      // suele repetir laboratorio y evita re-elegirla en cada alta.
+      room_id: ultimo?.room_id ?? this.blocks().at(-1)?.room_id ?? null,
     });
     if (!group) {
       this.toast.add({
@@ -347,12 +387,25 @@ export class CourseDetailPage {
       this.toast.add({ severity: 'warn', summary: 'Indica hora de inicio y de fin', life: 3000 });
       return;
     }
+    if (!f.room_id) {
+      this.toast.add({ severity: 'warn', summary: 'Indica el aula del bloque', life: 3000 });
+      return;
+    }
     if (f.start_time >= f.end_time) {
       this.toast.add({
         severity: 'warn',
         summary: 'Rango inválido',
         detail: 'La hora de fin debe ser posterior al inicio',
         life: 3500,
+      });
+      return;
+    }
+    if (f.start_time < this.horaInicio() || f.end_time > this.horaFin()) {
+      this.toast.add({
+        severity: 'warn',
+        summary: 'Fuera de la franja de clases',
+        detail: `Las clases van de ${this.horaInicio()} a ${this.horaFin()}`,
+        life: 4000,
       });
       return;
     }
@@ -363,6 +416,7 @@ export class CourseDetailPage {
           weekday: Number(f.weekday),
           start_time: f.start_time,
           end_time: f.end_time,
+          room_id: f.room_id,
         })
         .toPromise();
       this.toast.add({ severity: 'success', summary: 'Bloque añadido', life: 2500 });
@@ -381,7 +435,6 @@ export class CourseDetailPage {
     }
   }
 
-  // --- Bajas (grupo / bloque) ---------------------------------------------
   askDeleteGroup(group: Group): void {
     this.deleteTarget.set({ kind: 'group', group });
     this.deleteVisible = true;
@@ -421,6 +474,31 @@ export class CourseDetailPage {
     this.deleteVisible = false;
   }
 
+  /** La baja del grupo es lógica (bloques e historial intactos): se puede
+   * deshacer y el grupo vuelve a abrir sesiones. */
+  async reactivateGroup(group: Group): Promise<void> {
+    this.saving.set(true);
+    try {
+      await this.api.activateGroup(group.id).toPromise();
+      this.toast.add({
+        severity: 'success',
+        summary: `Grupo ${group.group_code} reactivado`,
+        detail: 'Vuelve a abrir sesiones con sus bloques de siempre',
+        life: 3500,
+      });
+      await this.loadGroups();
+    } catch (err) {
+      this.toast.add({
+        severity: 'error',
+        summary: 'No se pudo reactivar el grupo',
+        detail: extractDetail(err),
+        life: 4500,
+      });
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
   async confirmDelete(): Promise<void> {
     const t = this.deleteTarget();
     if (!t) return;
@@ -452,9 +530,23 @@ export class CourseDetailPage {
     }
   }
 
+  private hhmm(hour: number): string {
+    return `${String(hour).padStart(2, '0')}:00`;
+  }
+
+  private hora(value: string | null | undefined): string | null {
+    return value ? value.slice(0, 5) : null;
+  }
+
+  private minutos(value: string): number {
+    const [h, m] = value.split(':').map(Number);
+    return h * 60 + (m || 0);
+  }
+
+  /** Fin propuesto al abrir el dialog: nunca se pasa del cierre de la franja
+   * (a las 19:00 propone 19:00–20:00, no 19:00–21:00). */
   private addHours(time: string, hours: number): string {
-    const [h, m] = time.split(':').map(Number);
-    const total = Math.min(23 * 60 + 59, h * 60 + m + hours * 60);
+    const total = Math.min(this.minutos(this.horaFin()), this.minutos(time) + hours * 60);
     const hh = String(Math.floor(total / 60)).padStart(2, '0');
     const mm = String(total % 60).padStart(2, '0');
     return `${hh}:${mm}`;

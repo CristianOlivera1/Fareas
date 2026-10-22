@@ -50,21 +50,38 @@ export interface Group {
   readonly group_code: string;
   readonly teacher_id: number;
   readonly teacher_name: string;
-  readonly room_id: number;
-  readonly room_code: string;
   /** R1: semestre al que pertenece el grupo ('2026-II'). */
   readonly semester_label: string;
   /** R8/R9: cupo del grupo (40 por defecto). */
   readonly capacity: number;
-  /** Matrículas activas (no retiradas). */
   readonly enrolled_count: number;
   readonly is_active: boolean;
+}
+
+export interface ScheduleRow {
+  readonly id: number;
+  readonly group_id: number;
+  readonly course_id: number;
+  readonly course_code: string;
+  readonly course_name: string;
+  readonly group_code: string;
+  readonly teacher_id: number;
+  readonly teacher_name: string;
+  readonly room_id: number;
+  readonly room_code: string;
+  readonly semester_label: string;
+  readonly weekday: number;
+  readonly start_time: string;
+  readonly end_time: string;
 }
 
 export interface Block {
   readonly id: number;
   readonly group_id: number;
-  /** 1=Lunes … 7=Domingo (isoweekday). */
+  /** R9: aula donde se dicta ESTE bloque (el grupo no tiene aula propia). */
+  readonly room_id: number;
+  readonly room_code: string;
+  /** 1=Lunes … 5=Viernes (isoweekday): la semana lectiva no tiene sábado ni domingo. */
   readonly weekday: number;
   readonly start_time: string; // 'HH:MM:SS'
   readonly end_time: string;
@@ -154,10 +171,8 @@ export interface Settings {
   readonly updated_at: string | null;
 }
 
-/** Registro de HOY (vista v_today_attendance + attendance.py). */
 export type AttendanceStatusApi = 'asistio' | 'tardanza' | 'falta';
 
-/** Registro de HOY (vista v_today_attendance + attendance.py). */
 export interface AttendanceToday {
   readonly record_id: number;
   readonly student_id: number;

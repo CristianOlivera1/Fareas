@@ -26,3 +26,4 @@ Always use Angular CLI abbreviations to generate elements, specifying the exact 
 - **Modern Control Flow:** Use the new control flow syntax (`@if`, `@for`, `@switch`) instead of the old structural directives (`*ngIf`, `*ngFor`).
 - **Signals:** Prioritize the use of Angular Signals for reactivity and state management over RxJS whenever possible.
 - **Structure:** Respect the project division visible in the architecture (e.g., separating business logic in `core/` and views in `features/`).
+- **No comments in code:** Do not include comments in code blocks unless strictly necessary to explain complex logic. Code should be self-explanatory through clear names and small functions.

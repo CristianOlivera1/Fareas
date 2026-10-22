@@ -1,0 +1,140 @@
+<app-page-header
+  title="Horario general"
+  subtitle="La semana completa de un semestre: huecos, cruces y carga en una sola vista (RF-06)"
+>
+  <app-ui-button variant="ghost" icon="material-symbols:refresh" (click)="load()">
+    Actualizar
+  </app-ui-button>
+  @if (auth.isAdmin()) {
+    <app-ui-button icon="material-symbols:add" (click)="openCreateBlock()">
+      Nuevo bloque
+    </app-ui-button>
+  }
+</app-page-header>
+
+<div class="mb-4 flex flex-wrap items-end gap-3">
+  <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
+    <span>Semestre</span>
+    <p-select class="w-44" appendTo="body" [options]="semesters()" placeholder="Vigente"
+      [ngModel]="semester()" (ngModelChange)="onSemester($event)" />
+  </label>
+  <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
+    <span>Curso</span>
+    <p-select class="w-64" appendTo="body" [options]="courseOptions()" optionLabel="label"
+      optionValue="value" placeholder="Todos" [filter]="true" filterBy="label" [showClear]="true"
+      [ngModel]="courseId() || null" (ngModelChange)="onCourse($event)" />
+  </label>
+  <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
+    <span>Docente</span>
+    <p-select class="w-56" appendTo="body" [options]="teacherOptions()" optionLabel="label"
+      optionValue="value" placeholder="Todos" [filter]="true" filterBy="label" [showClear]="true"
+      [ngModel]="teacherId() || null" (ngModelChange)="onTeacher($event)" />
+  </label>
+  <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
+    <span>Aula</span>
+    <p-select class="w-44" appendTo="body" [options]="roomOptions()" optionLabel="label"
+      optionValue="value" placeholder="Todas" [filter]="true" filterBy="label" [showClear]="true"
+      [ngModel]="roomId() || null" (ngModelChange)="onRoom($event)" />
+  </label>
+  @if (filtersActive()) {
+    <app-ui-button variant="ghost" size="sm" icon="material-symbols:filter-alt-off"
+      (click)="clearFilters()">
+      Limpiar filtros
+    </app-ui-button>
+  }
+</div>
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudo cargar el horario" class="mb-4 block">
+    {{ msg }}
+  </app-ui-alert>
+}
+
+<div class="mb-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+  <span class="rounded-full bg-gray-100 px-2 py-0.5 font-medium text-gray-600">
+    {{ semester() || 'Semestre vigente' }}
+  </span>
+  <span class="rounded-full bg-blue-50 px-2 py-0.5 font-medium text-(--fareas-primary)">
+    {{ rows().length }} clase{{ rows().length === 1 ? '' : 's' }}
+  </span>
+  <span class="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+    {{ libres() }} h libres en la franja
+  </span>
+  @if (filtersActive()) {
+    <span class="text-gray-400">El horario muestra solo lo que pasa los filtros.</span>
+  }
+  @if (loading()) {
+    <span class="text-gray-400">Cargando…</span>
+  }
+</div>
+
+<app-schedule-table
+  [entries]="entries()"
+  [hourFrom]="franja().from"
+  [hourTo]="franja().to"
+  [canEdit]="auth.isAdmin()"
+  (blockAdd)="openCreateBlock($event.weekday, $event.hour)"
+  (blockRemove)="onBlockRemove($event)"
+/>
+
+<p class="mt-2 text-xs text-gray-400">
+  Franja de clases {{ horaInicio() }}–{{ horaFin() }} (Parámetros), de Lunes a Viernes.
+  @if (auth.isAdmin()) {
+    Haz clic en una hora libre para añadir una clase ahí: el día y la hora ya vienen puestos y el
+    aula se prellena con la del grupo.
+  } @else {
+    Cada bloque lleva su propia aula; los choques de aula o docente los valida el sistema al crearlo.
+  }
+</p>
+
+<p-dialog header="Nuevo bloque de horario" [(visible)]="blockDialogVisible" [modal]="true"
+  [style]="{ width: '460px' }">
+  <div class="space-y-4 pt-2">
+    <label class="block space-y-1">
+      <span class="text-sm font-medium text-gray-700">Grupo <span class="text-red-500">*</span></span>
+      <p-select class="w-full" appendTo="body" [options]="groupOptions()" optionLabel="label"
+        optionValue="value" placeholder="Curso · grupo · docente" [filter]="true" filterBy="label"
+        [ngModel]="blockForm().group_id" (ngModelChange)="onGroup($event)" />
+    </label>
+    <label class="block space-y-1">
+      <span class="text-sm font-medium text-gray-700">Día <span class="text-red-500">*</span></span>
+      <p-select class="w-full" appendTo="body" [options]="dias" optionLabel="label"
+        optionValue="value" [ngModel]="blockForm().weekday"
+        (ngModelChange)="patchBlock({ weekday: $event })" />
+    </label>
+    <div class="grid grid-cols-2 gap-3">
+      <app-ui-input label="Inicio" [required]="true" type="time"
+        [ngModel]="blockForm().start_time" (ngModelChange)="patchBlock({ start_time: $event })" />
+      <app-ui-input label="Fin" [required]="true" type="time"
+        [ngModel]="blockForm().end_time" (ngModelChange)="patchBlock({ end_time: $event })" />
+    </div>
+    <label class="block space-y-1">
+      <span class="text-sm font-medium text-gray-700">Aula <span class="text-red-500">*</span></span>
+      <p-select class="w-full" appendTo="body" [options]="roomOptions()" optionLabel="label"
+        optionValue="value" placeholder="Aula del bloque" [filter]="true" filterBy="label"
+        [ngModel]="blockForm().room_id" (ngModelChange)="patchBlock({ room_id: $event })" />
+      <span class="text-xs text-gray-400">
+        Se prellena con el aula del último bloque del grupo; puedes cambiarla.
+      </span>
+    </label>
+    <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
+      El bloque debe caber entre las {{ horaInicio() }} y las {{ horaFin() }} y no puede cruzarse con
+      otro de la misma aula ni con otro del mismo docente.
+    </app-ui-alert>
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="blockDialogVisible = false">Cancelar</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="saveBlock()">Añadir bloque</app-ui-button>
+  </ng-template>
+</p-dialog>
+
+<app-modal-delete
+  [(visible)]="deleteVisible"
+  [itemLabel]="deleteLabel()"
+  entityName="bloque"
+  [softDelete]="false"
+  [loading]="deleting()"
+  [warning]="'La clase dejará de abrir sesiones; el historial de asistencias ya registrado se conserva.'"
+  (confirmed)="confirmDelete()"
+  (canceled)="deleteVisible = false"
+/>

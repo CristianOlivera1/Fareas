@@ -10,8 +10,6 @@ import {
   Settings,
 } from '../models/catalog';
 
-/** Calendario (routers/calendar_admin.py): feriados RF-09/R12, justificaciones
- * RF-10/R6 y parámetros globales RF-34. Solo admin escribe (backend re-valida). */
 @Injectable({ providedIn: 'root' })
 export class CalendarApi extends BaseApi {
   holidays(year?: number | null) {

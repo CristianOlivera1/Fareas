@@ -18,7 +18,6 @@ async def health(db: DbSession) -> dict:
         "environment": settings.ENVIRONMENT,
     }
     try:
-        # Un SELECT ORM trivial valida engine, driver asyncpg y mapeo de tablas.
         users = (await db.exec(select(func.count()).select_from(AppUser))).one()
         payload["database"] = "ok"
         payload["users"] = users

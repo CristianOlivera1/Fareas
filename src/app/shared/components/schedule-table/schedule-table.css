@@ -1,0 +1,43 @@
+.chip {
+  border-left-color: currentColor;
+}
+
+.tono-0 {
+  background: #ede9fe;
+  color: #4c1d95;
+}
+
+.tono-1 {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.tono-2 {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.tono-3 {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.tono-4 {
+  background: #fce7f3;
+  color: #9d174d;
+}
+
+.tono-5 {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.tono-6 {
+  background: #cffafe;
+  color: #155e75;
+}
+
+.tono-7 {
+  background: #ecfccb;
+  color: #3f6212;
+}

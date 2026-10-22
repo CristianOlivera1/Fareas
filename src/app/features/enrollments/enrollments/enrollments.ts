@@ -32,8 +32,6 @@ interface Option<T> {
   value: T;
 }
 
-/** F2 · Matrículas por grupo (R8): cupo de 40, un grupo activo por curso,
- * retiro con historial conservado y transferencia entre grupos del curso. */
 @Component({
   selector: 'app-enrollments-page',
   imports: [
@@ -87,18 +85,15 @@ export class EnrollmentsPage {
   readonly saving = signal(false);
   readonly deleting = signal(false);
 
-  // Alta de matrícula
   readonly studentOptions = signal<Option<number>[]>([]);
   readonly selectedStudentId = signal<number | null>(null);
   readonly searchingStudents = signal(false);
   enrollDialogVisible = false;
 
-  // Transferencia
   readonly transferStudent = signal<EnrolledStudent | null>(null);
   readonly transferTargetId = signal<number | null>(null);
   transferDialogVisible = false;
 
-  // Retiro (R8d)
   readonly deleteStudent = signal<EnrolledStudent | null>(null);
   deleteVisible = false;
 
@@ -106,7 +101,7 @@ export class EnrollmentsPage {
 
   readonly groupOptions = computed<Option<number>[]>(() =>
     this.groups().map((g) => ({
-      label: `Grupo ${g.group_code} · ${g.room_code} · ${g.enrolled_count}/${g.capacity}`,
+      label: `Grupo ${g.group_code} · ${g.enrolled_count}/${g.capacity}`,
       value: g.id,
     })),
   );
@@ -126,7 +121,7 @@ export class EnrollmentsPage {
     return this.groups()
       .filter((g) => g.id !== origen.id && g.is_active && g.enrolled_count < g.capacity)
       .map((g) => ({
-        label: `Grupo ${g.group_code} · ${g.room_code} · ${g.enrolled_count}/${g.capacity}`,
+        label: `Grupo ${g.group_code} · ${g.enrolled_count}/${g.capacity}`,
         value: g.id,
       }));
   });
@@ -135,7 +130,6 @@ export class EnrollmentsPage {
     void this.init();
   }
 
-  // --- Orquestación --------------------------------------------------------
   private async init(): Promise<void> {
     try {
       const [cfg, labels, courses] = await Promise.all([
@@ -173,7 +167,6 @@ export class EnrollmentsPage {
     try {
       const list = await this.api.courseGroups(courseId, sem).toPromise();
       this.groups.set(list ?? []);
-      // Si el grupo del URL ya no existe en el semestre, se descarta.
       if (this.groupId() && !(list ?? []).some((g) => g.id === this.groupIdNumber())) {
         this.students.set([]);
       }
@@ -202,7 +195,6 @@ export class EnrollmentsPage {
     }
   }
 
-  // --- Filtros -------------------------------------------------------------
   onSemester(value: string | null): void {
     this.students.set([]);
     void this.qp.update({ semester: value, group: null });
@@ -227,7 +219,6 @@ export class EnrollmentsPage {
     void this.loadStudents();
   }
 
-  // --- Alta ----------------------------------------------------------------
   openEnroll(): void {
     this.selectedStudentId.set(null);
     this.enrollDialogVisible = true;
@@ -296,7 +287,6 @@ export class EnrollmentsPage {
     }
   }
 
-  // --- Transferencia (R8e) -------------------------------------------------
   askTransfer(student: EnrolledStudent): void {
     this.transferStudent.set(student);
     this.transferTargetId.set(null);
@@ -334,7 +324,6 @@ export class EnrollmentsPage {
     }
   }
 
-  // --- Retiro / reactivación (R8d) ----------------------------------------
   askRetirar(student: EnrolledStudent): void {
     this.deleteStudent.set(student);
     this.deleteVisible = true;

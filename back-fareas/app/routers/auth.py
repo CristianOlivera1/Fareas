@@ -50,12 +50,10 @@ _OTP_TTL_SECONDS = otp.OTP_TTL_SECONDS
 _OTP_MAX_ATTEMPTS = otp.OTP_MAX_ATTEMPTS
 _otp_store = otp._store
 
-# ---------------------------------------------------------------------------
 # Rate limit de login en memoria (5 intentos fallidos por IP cada 60 s).
 # Alcance académico: un solo proceso, sin Redis — mismo patrón que el OTP.
 # La ventana es deslizante simple: se guarda la hora del último bloqueo y el
 # contador se limpia tras LOGIN_WINDOW_SECONDS sin fallos.
-# ---------------------------------------------------------------------------
 _LOGIN_MAX_ATTEMPTS = 5
 _LOGIN_WINDOW_SECONDS = 60.0
 _login_attempts: dict[str, dict] = {}  # ip -> {"count", "first"}
@@ -138,9 +136,6 @@ def _build_user_out(user: AppUser) -> UserOut:
     )
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
 @router.post("/login", response_model=LoginResponse)
 async def login(body: LoginRequest, request: Request, db: DbSession) -> LoginResponse:
     """RF-11. ``body.email`` acepta correo institucional O código de matrícula.

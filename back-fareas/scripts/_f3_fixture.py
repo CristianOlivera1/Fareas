@@ -46,6 +46,12 @@ async def _ctx() -> SQLModelAsyncSession:
 async def create() -> None:
     db = await _ctx()
     hoy = _naive_peru(ahora_peru()).date()
+    # Los bloques solo existen de Lunes a Viernes (CHECK de 001_schema.sql): en
+    # fin de semana no hay sesión "de hoy" que verificar.
+    assert hoy.isoweekday() <= 5, (
+        f"Hoy es {hoy} (día {hoy.isoweekday()}): el fixture crea sesiones DE HOY y la "
+        "semana lectiva es Lunes-Viernes. Corre este fixture un día de semana."
+    )
     teacher = (await db.exec(select(AppUser).where(AppUser.role == UserRole.DOCENTE))).first()
     admin = (await db.exec(select(AppUser).where(AppUser.role == UserRole.ADMIN))).first()
     room = (await db.exec(select(Room).where(Room.is_active))).first()
@@ -57,7 +63,7 @@ async def create() -> None:
 
     group = CourseGroup(
         course_id=course.id, group_code="Z", teacher_id=teacher.id if teacher else admin.id,
-        room_id=room.id, semester_label="2026-II", capacity=40,
+        semester_label="2026-II", capacity=40,
     )
     db.add(group)
     await db.flush()
@@ -66,8 +72,8 @@ async def create() -> None:
     # El primer bloque empieza al final del día para que el scheduler NO cierre
     # la sesión abierta mientras se verifica el cierre manual (RF-26).
     for i, inicio in enumerate([time(22, 0), time(10, 0), time(16, 0)]):
-        b = ScheduleBlock(group_id=group.id, weekday=hoy.isoweekday(), start_time=inicio,
-                          end_time=time(inicio.hour + 1, 0))
+        b = ScheduleBlock(group_id=group.id, room_id=room.id, weekday=hoy.isoweekday(),
+                          start_time=inicio, end_time=time(inicio.hour + 1, 0))
         db.add(b)
         await db.flush()
         bloques.append(b)

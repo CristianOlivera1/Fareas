@@ -68,9 +68,6 @@ def _combo(hora: time, d: date) -> datetime:
     return datetime.combine(d, hora)
 
 
-# ---------------------------------------------------------------------------
-# Ventanas (R2) y resolución de sesión (R3, R10)
-# ---------------------------------------------------------------------------
 def clasificar(now: datetime, bloque: ScheduleBlock, fecha: date, cfg: AppSettings) -> str | None:
     """R2: clasifica un instante dentro de la ventana del bloque.
 
@@ -95,8 +92,9 @@ async def es_feriado(db: SQLModelAsyncSession, d: date) -> bool:
 async def bloques_candidatos(
     db: SQLModelAsyncSession, room_id: int, now: datetime, cfg: AppSettings
 ) -> list[tuple[ScheduleBlock, CourseGroup]]:
-    """Bloques del aula cuya ventana R2 contiene `now`: grupos activos del
-    semestre vigente (R1); la ventana de sesión es [inicio−E, fin]."""
+    """Bloques de ESTA aula (R9: el aula es del bloque, no del grupo) cuya
+    ventana R2 contiene `now`: grupos activos del semestre vigente (R1); la
+    ventana de sesión es [inicio−E, fin]."""
     weekday = now.date().isoweekday()
     ahora_dt = _combo(now.time(), now.date())
     pares = (
@@ -104,7 +102,7 @@ async def bloques_candidatos(
             select(ScheduleBlock, CourseGroup)
             .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)
             .where(
-                CourseGroup.room_id == room_id,
+                ScheduleBlock.room_id == room_id,
                 CourseGroup.is_active,  # type: ignore[arg-type]
                 CourseGroup.semester_label == cfg.semester_label,  # R1
                 ScheduleBlock.weekday == weekday,
@@ -189,9 +187,7 @@ async def resolver_sesion(
     return sesion, bloque
 
 
-# ---------------------------------------------------------------------------
 # Matrícula activa a la fecha (R8) y justificación vigente (R6)
-# ---------------------------------------------------------------------------
 async def matriculados_activos(
     db: SQLModelAsyncSession, group_id: int, fecha: date
 ) -> list[Enrollment]:
@@ -227,9 +223,6 @@ async def justificacion_vigente(
     return fila[0] if isinstance(fila, tuple) else fila
 
 
-# ---------------------------------------------------------------------------
-# Marca de asistencia (RF-21 / R2)
-# ---------------------------------------------------------------------------
 async def registrar_marca(
     db: SQLModelAsyncSession,
     session: AttendanceSession,
@@ -293,9 +286,6 @@ async def registrar_marca(
     return record
 
 
-# ---------------------------------------------------------------------------
-# Apertura programada (R3)
-# ---------------------------------------------------------------------------
 async def abrir_sesiones_del_dia(db: SQLModelAsyncSession, now: datetime | None = None) -> int:
     """R3: abre la sesión de cada bloque cuya ventana de apertura ya empezó.
 
@@ -352,9 +342,6 @@ async def abrir_sesiones_del_dia(db: SQLModelAsyncSession, now: datetime | None 
     return abiertas
 
 
-# ---------------------------------------------------------------------------
-# Cierre de sesión (RF-26 + R4) → faltas automáticas + alertas DPI (R7)
-# ---------------------------------------------------------------------------
 async def cerrar_sesion(
     db: SQLModelAsyncSession,
     session: AttendanceSession,
@@ -462,15 +449,11 @@ async def cerrar_sesiones_pendientes(db: SQLModelAsyncSession) -> list[dict]:
     resumenes = []
     for sesion, bloque in abiertas:
         fin = _combo(bloque.end_time, sesion.session_date)
-        # cierra si su ventana terminó (hoy u otra fecha pasada)
         if sesion.session_date < hoy or (sesion.session_date == hoy and now >= fin):
             resumenes.append(await cerrar_sesion(db, sesion))
     return resumenes
 
 
-# ---------------------------------------------------------------------------
-# Cancelación (R5)
-# ---------------------------------------------------------------------------
 def _es_docente(actor) -> bool:
     return getattr(actor, "role", None) is not None and actor.role.value == "docente"
 
@@ -562,9 +545,6 @@ async def cancelar_dia(
     return await cancelar_sesion(db, sesion, actor, reason, ip)
 
 
-# ---------------------------------------------------------------------------
-# Sesiones por revisar (R4)
-# ---------------------------------------------------------------------------
 async def resolver_revision(
     db: SQLModelAsyncSession,
     session: AttendanceSession,

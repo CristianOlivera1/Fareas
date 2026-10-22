@@ -16,7 +16,6 @@ Chart.register(...registerables);
 
 const HOURS = ['7:00', '8:00', '9:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
 
-/** Registros de asistencia por hora de inicio de bloque (07:00–20:00). Escala de la facultad (~90 marcas/h). */
 const MOCK_SERIES: Record<string, number[]> = {
   Hoy: [62, 78, 84, 90, 71, 55, 12, 0, 48, 66, 74, 31, 0],
   Ayer: [58, 74, 80, 87, 68, 52, 10, 0, 44, 60, 70, 28, 0],

@@ -32,10 +32,6 @@ from app.tables import AppSettings, AppUser, UserRole
 logger = logging.getLogger("fareas.dashboard")
 router = APIRouter(tags=["dashboard"])
 
-# ---------------------------------------------------------------------------
-# 1) Resumen de tarjetas — RF-13 (+ R5/R7: canceladas fuera, en_riesgo,
-#    sessions_to_review; docente: todo filtrado por SUS grupos)
-# ---------------------------------------------------------------------------
 class Summary(BaseModel):
     asistencias_hoy: int
     tardanzas_hoy: int
@@ -157,9 +153,6 @@ async def summary(db: DbSession, user: CurrentUser) -> Summary:
     )
 
 
-# ---------------------------------------------------------------------------
-# 2) Feed en vivo — SSE (RF-13): reemplaza el setInterval del mock Angular
-# ---------------------------------------------------------------------------
 async def _usuario_de_token(access_token: str) -> AppUser:
     """Auth para SSE: EventSource no manda headers → token por query."""
     try:
@@ -219,9 +212,6 @@ async def dashboard_live_room(
     return await dashboard_live(access_token=access_token, room_id=room_id)
 
 
-# ---------------------------------------------------------------------------
-# 3) Estadísticas para los gráficos (PLAN §5)
-# ---------------------------------------------------------------------------
 HORA_INICIO, HORA_FIN = 7, 20  # franja institucional (app_settings 07:00–20:00)
 
 

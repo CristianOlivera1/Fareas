@@ -45,10 +45,6 @@
         <iconify-icon icon="material-symbols:person-outline" width="15" class="text-gray-400"></iconify-icon>
         {{ g.teacher_name }}
       </span>
-      <span class="inline-flex items-center gap-1.5">
-        <iconify-icon icon="material-symbols:meeting-room-outline" width="15" class="text-gray-400"></iconify-icon>
-        {{ g.room_code }}
-      </span>
     </div>
     <div class="ml-auto min-w-40">
       <div class="mb-1 flex items-center justify-between text-[11px] text-gray-500">
@@ -179,7 +175,6 @@
   </app-data-table>
 }
 
-<!-- Alta de matrícula (R8: cupo, un grupo por curso y cruce de horarios) -->
 <p-dialog header="Matricular alumno" [(visible)]="enrollDialogVisible" [modal]="true"
   [style]="{ width: '460px' }">
   <div class="space-y-4 pt-2">
@@ -204,7 +199,6 @@
   </ng-template>
 </p-dialog>
 
-<!-- Transferencia entre grupos del mismo curso (R8e) -->
 <p-dialog header="Transferir alumno" [(visible)]="transferDialogVisible" [modal]="true"
   [style]="{ width: '460px' }">
   <div class="space-y-4 pt-2">

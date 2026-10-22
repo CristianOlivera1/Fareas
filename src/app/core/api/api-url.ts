@@ -21,7 +21,6 @@ export interface ListParams {
   readonly [key: string]: unknown;
 }
 
-/** Serializa ListParams → HttpParams (ignora null/undefined/''). */
 export function toParams(params?: ListParams): HttpParams {
   let http = new HttpParams();
   for (const [key, value] of Object.entries(params ?? {})) {
@@ -31,7 +30,6 @@ export function toParams(params?: ListParams): HttpParams {
   return http;
 }
 
-/** Helper base para services de listados paginados (F2-F6 lo reutilizan). */
 export abstract class BaseApi {
   protected readonly http = inject(HttpClient);
 

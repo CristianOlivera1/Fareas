@@ -28,7 +28,6 @@ interface StudentRow {
   time: string;
 }
 
-/** Datos de demostración coherentes con el activity-feed y la página de asistencias. */
 const MOCK_STUDENTS: StudentRow[] = [
   { code: '221181', name: 'Raul Montesinos Valdivia', initials: 'RM', status: 'Asistió', course: 'Metodología de la Investigación Científica', room: 'LAB 305', time: '9:02 am' },
   { code: '231204', name: 'Razib Rahman Ttito', initials: 'RT', status: 'Tardanza', course: 'Metodología de la Investigación Científica', room: 'LAB 305', time: '9:18 am' },

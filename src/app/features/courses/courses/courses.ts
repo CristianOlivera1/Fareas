@@ -31,8 +31,6 @@ interface CourseForm {
   name: string;
 }
 
-/** F2 · Cursos y grupos: primer nivel de la malla académica (RF-06).
- * El detalle del curso (grupos + horario) vive en `/courses/:courseId`. */
 @Component({
   selector: 'app-courses-page',
   imports: [

@@ -63,7 +63,7 @@ class ScrfdDetector:
             (g, s) for g, s in zip(groups, STRIDES[:n_levels], strict=True)
         ]
 
-    # -- pre/post-proceso ----------------------------------------------------
+
     def _preprocess(self, frame: np.ndarray) -> np.ndarray:
         img = cv2.resize(frame, self.input_size, interpolation=cv2.INTER_LINEAR)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32)
@@ -109,7 +109,7 @@ class ScrfdDetector:
         kps[:, 1::2] = centers[:, 1:2] - kps_d[:, 1::2]
         return scores, boxes, kps
 
-    # -- API -------------------------------------------------------------------
+
     def detect(self, frame: np.ndarray, det_thresh: float | None = None, max_faces: int = 0) -> list[Face]:
         """Detecta rostros. `max_faces>0` limita a los N de mayor score."""
         thresh = self.det_thresh if det_thresh is None else det_thresh

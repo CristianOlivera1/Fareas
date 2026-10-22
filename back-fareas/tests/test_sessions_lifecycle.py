@@ -28,7 +28,7 @@ from app.tables import (
     ScheduleBlock,
     SessionStatus,
 )
-from tests.helpers_b6 import CURSO, AULA, crear, h, limpiar
+from tests.helpers_b6 import CURSO, AULA, crear, h, limpiar, weekday_hoy
 
 
 async def _limpiar_aperturas_del_barrido(db) -> None:
@@ -126,7 +126,7 @@ async def test_barrido_cierra_al_fin_del_bloque(db_session, escenario):
     hoy = datetime.now().date()
     # Bloque auxiliar que ya terminó hoy (00:10-00:20) para el barrido real
     bloque = ScheduleBlock(
-        group_id=esc["grupo_id"], weekday=hoy.isoweekday(),
+        group_id=esc["grupo_id"], room_id=esc["aula_id"], weekday=weekday_hoy(),
         start_time=time(0, 10), end_time=time(0, 20),
     )
     db_session.add(bloque)
@@ -203,11 +203,11 @@ async def test_bloques_contiguos_r10(db_session, escenario):
 
     # Grupo B del MISMO curso en la MISMA aula, con bloque 09:00-11:00 (se solapa)
     grupo_b = CourseGroup(course_id=esc["curso_id"], group_code="B",
-                          teacher_id=esc["docente_id"], room_id=esc["aula_id"],
+                          teacher_id=esc["docente_id"],
                           semester_label=cfg.semester_label)
     db_session.add(grupo_b)
     await db_session.flush()
-    bloque_b = ScheduleBlock(group_id=grupo_b.id, weekday=1,
+    bloque_b = ScheduleBlock(group_id=grupo_b.id, room_id=esc["aula_id"], weekday=1,
                              start_time=time(9, 0), end_time=time(11, 0))
     db_session.add(bloque_b)
 

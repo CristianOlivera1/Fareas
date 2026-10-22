@@ -311,9 +311,8 @@ async def detener_bucle_camaras() -> None:
         with contextlib.suppress(asyncio.CancelledError):
             await _task
         _task = None
-    # cierra todas las fuentes abiertas
-    for _room_id, src in list(_fuentes.items()):
-        with contextlib.suppress(Exception):
-            await asyncio.to_thread(src.release)
+        for _room_id, src in list(_fuentes.items()):
+            with contextlib.suppress(Exception):
+                await asyncio.to_thread(src.release)
     _fuentes.clear()
     logger.info("Bucle de cámaras detenido")

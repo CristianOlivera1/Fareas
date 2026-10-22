@@ -99,15 +99,17 @@ async def test_docente_no_marca_en_grupo_ajeno(client, admin_headers, docente_he
 async def test_sessions_today(client, admin_headers, db_session, escenario):
     """F3: el listado de sesiones de hoy alimenta el modal RF-21."""
     esc = escenario
-    # Antes de abrir la sesión: no hay ninguna del escenario. La BD de
-    # desarrollo puede tener sesiones abiertas del scheduler para otros
-    # cursos, así que se filtra por el curso/grupo de prueba en vez de
-    # exigir que la lista global esté vacía (test determinista).
+
+    def _del_escenario(resp) -> list[dict]:
+        """Solo las sesiones del grupo del test: el endpoint es GLOBAL (el admin
+        ve todas las aulas) y la BD de desarrollo puede tener sesiones abiertas
+        de otros grupos (p. ej. las que abre el scheduler en clases reales)."""
+        return [f for f in resp.json() if f["group_id"] == esc["grupo_id"]]
+
+    # Antes de abrir la sesión: el grupo no aparece (la del horario aún no existe)
     r = await client.get(f"{API}/attendance/sessions-today", headers=admin_headers)
     assert r.status_code == 200, r.text
-    assert not any(
-        f["course_code"] == CURSO and f["group_code"] == "A" for f in r.json()
-    )
+    assert _del_escenario(r) == []
 
     # Se abre la sesión LUN 08:00-10:00. El escenario B6 usa el próximo
     # lunes: si HOY no es lunes, se ancla la sesión a la fecha actual para
@@ -125,9 +127,10 @@ async def test_sessions_today(client, admin_headers, db_session, escenario):
 
     r = await client.get(f"{API}/attendance/sessions-today", headers=admin_headers)
     assert r.status_code == 200, r.text
-    propias = [f for f in r.json() if f["session_id"] == sesion.id]
-    assert len(propias) == 1
-    s = propias[0]
+    filas = _del_escenario(r)
+    assert len(filas) == 1
+    s = filas[0]
+    assert s["session_id"] == sesion.id
     assert s["status"] == "abierta"
     assert s["room_code"] == AULA
     assert s["course_code"] == CURSO
@@ -137,7 +140,7 @@ async def test_sessions_today(client, admin_headers, db_session, escenario):
     # Cerrada: DESAPARECE del listado (solo sesiones abiertas de hoy)
     await client.post(f"{API}/sessions/{sesion.id}/close", headers=admin_headers)
     r = await client.get(f"{API}/attendance/sessions-today", headers=admin_headers)
-    assert all(f["session_id"] != sesion.id for f in r.json()), r.text
+    assert _del_escenario(r) == [], r.text
 
 
 async def test_attendance_me_del_estudiante(client, admin_headers, db_session, escenario):

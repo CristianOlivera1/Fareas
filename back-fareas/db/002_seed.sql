@@ -66,20 +66,14 @@ INSERT INTO course (code, name) VALUES
   ('ISA906', 'Interacción Humano Computador')
 ON CONFLICT (code) DO NOTHING;
 
--- Grupo único (A) por curso con su docente, aula y el semestre vigente (R1)
-INSERT INTO course_group (course_id, group_code, teacher_id, room_id, semester_label)
+-- Grupo único (A) por curso con su docente y el semestre vigente (R1).
+-- El aula NO va en el grupo: vive en cada bloque horario (R9).
+INSERT INTO course_group (course_id, group_code, teacher_id, semester_label)
 SELECT c.id, 'A',
        (SELECT id FROM app_user WHERE email = CASE c.code
            WHEN 'ISA903' THEN 'aquino.mario@unamba.edu.pe'
            WHEN 'ISA905' THEN 'cari.francisco@unamba.edu.pe'
            ELSE 'aquino.mario@unamba.edu.pe' END),
-       (SELECT id FROM room WHERE code = CASE c.code
-           WHEN 'ISA901' THEN 'LAB 401'
-           WHEN 'ISA902' THEN 'LAB 304'
-           WHEN 'ISA903' THEN 'LAB 304'
-           WHEN 'ISA904' THEN 'LAB 304'
-           WHEN 'ISA905' THEN 'LAB 305'
-           WHEN 'ISA906' THEN 'LAB 304' END),
        (SELECT semester_label FROM app_settings WHERE id = 1)
 FROM course c
 WHERE NOT EXISTS (
@@ -88,39 +82,43 @@ WHERE NOT EXISTS (
     AND g.semester_label = (SELECT semester_label FROM app_settings WHERE id = 1)
 );
 
--- Bloques horarios (weekday: 1=Lun ... 5=Vie), según el horario de ejemplo.
--- Nota: ISA904 Jueves 11:00-13:00 se solapa con ISA906 (distinto aula y
--- distinto docente), por eso la BD solo impide duplicar el bloque exacto de un
--- grupo (uq_group_course_code_sem); la validación real de choques RF-06 la
+-- Bloques horarios (weekday: 1=Lun ... 5=Vie) con SU AULA (RF-06/R9): el aula
+-- va en el bloque, así el mismo grupo puede dictar en labs distintos según el
+-- día (ISA901 Lun/Mar/Jue en LAB 401 y Vie en LAB 306).
+-- Nota: la BD solo impide duplicar el bloque exacto de un grupo
+-- (uq_block_group_time); la validación de choques de aula/docente RF-06 la
 -- aplica la API al crear bloques.
-INSERT INTO schedule_block (group_id, weekday, start_time, end_time)
-SELECT g.id, v.weekday, v.start_time::time, v.end_time::time
+INSERT INTO schedule_block (group_id, room_id, weekday, start_time, end_time)
+SELECT g.id, r.id, v.weekday, v.start_time::time, v.end_time::time
 FROM (VALUES
   -- ISA903 Inteligencia Artificial I (LAB 304) - Lun/Mié 07:00-09:00, Vie 11:00-13:00
-  ('ISA903', 1, '07:00', '09:00'),
-  ('ISA903', 3, '07:00', '09:00'),
-  ('ISA903', 5, '11:00', '13:00'),
-  -- ISA901 Computación Gráfica (LAB 401) - Mar/Jue 07:00-09:00, Vie 09:00-11:00
-  ('ISA901', 2, '07:00', '09:00'),
-  ('ISA901', 4, '07:00', '09:00'),
-  ('ISA901', 5, '09:00', '11:00'),
+  ('ISA903', 1, '07:00', '09:00', 'LAB 304'),
+  ('ISA903', 3, '07:00', '09:00', 'LAB 304'),
+  ('ISA903', 5, '11:00', '13:00', 'LAB 304'),
+  -- ISA901 Computación Gráfica - Mar/Jue 07:00-09:00 (LAB 401), Vie 07:00-09:00 (LAB 306)
+  -- (el viernes NO puede ser 09:00-11:00: chocaría con ISA905 para los alumnos
+  --  matriculados en ambos cursos, y R8c/R9 rechazaría cualquier alta ahí)
+  ('ISA901', 2, '07:00', '09:00', 'LAB 401'),
+  ('ISA901', 4, '07:00', '09:00', 'LAB 401'),
+  ('ISA901', 5, '07:00', '09:00', 'LAB 306'),
   -- ISA905 Metodología (LAB 305) - Lun/Mié/Vie 09:00-11:00
-  ('ISA905', 1, '09:00', '11:00'),
-  ('ISA905', 3, '09:00', '11:00'),
-  ('ISA905', 5, '09:00', '11:00'),
+  ('ISA905', 1, '09:00', '11:00', 'LAB 305'),
+  ('ISA905', 3, '09:00', '11:00', 'LAB 305'),
+  ('ISA905', 5, '09:00', '11:00', 'LAB 305'),
   -- ISA902 Sistemas Distribuidos (LAB 304) - Mar/Jue 09:00-11:00, Vie 14:00-16:00
-  ('ISA902', 2, '09:00', '11:00'),
-  ('ISA902', 4, '09:00', '11:00'),
-  ('ISA902', 5, '14:00', '16:00'),
+  ('ISA902', 2, '09:00', '11:00', 'LAB 304'),
+  ('ISA902', 4, '09:00', '11:00', 'LAB 304'),
+  ('ISA902', 5, '14:00', '16:00', 'LAB 304'),
   -- ISA906 Interacción Humano Computador (LAB 304) - Lun/Mié 11:00-13:00
-  ('ISA906', 1, '11:00', '13:00'),
-  ('ISA906', 3, '11:00', '13:00'),
+  ('ISA906', 1, '11:00', '13:00', 'LAB 304'),
+  ('ISA906', 3, '11:00', '13:00', 'LAB 304'),
   -- ISA904 Programación Paralela - Jue 11:00-13:00 (LAB 304), Mar 14:00-16:00 (LAB 306)
-  ('ISA904', 4, '11:00', '13:00'),
-  ('ISA904', 2, '14:00', '16:00')
-) AS v(course_code, weekday, start_time, end_time)
+  ('ISA904', 4, '11:00', '13:00', 'LAB 304'),
+  ('ISA904', 2, '14:00', '16:00', 'LAB 306')
+) AS v(course_code, weekday, start_time, end_time, room_code)
 JOIN course c        ON c.code = v.course_code
 JOIN course_group g  ON g.course_id = c.id AND g.group_code = 'A'
+JOIN room r          ON r.code = v.room_code
 WHERE NOT EXISTS (
   SELECT 1 FROM schedule_block sb
   JOIN course_group g2 ON g2.id = sb.group_id

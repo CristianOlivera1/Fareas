@@ -1,0 +1,115 @@
+<div class="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+  <table class="w-full min-w-[900px] border-collapse text-left">
+    <caption class="sr-only">Horario semanal de clases</caption>
+    <thead>
+      <tr class="border-b-2 border-gray-200 bg-gray-50/80">
+        <th
+          scope="col"
+          class="sticky left-0 z-10 w-24 bg-gray-50 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500"
+        >
+          Horario
+        </th>
+        @for (d of dayLabels(); track d.value) {
+          <th
+            scope="col"
+            class="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500"
+          >
+            {{ d.label }}
+          </th>
+        }
+      </tr>
+    </thead>
+    <tbody>
+      @for (row of rows(); track row.hour) {
+        <tr class="border-b border-gray-100 last:border-0" [style.height.rem]="horaRem">
+          <th
+            scope="row"
+            class="sticky left-0 z-10 w-24 bg-gray-50 px-3 py-2 align-top text-[11px] font-medium tabular-nums whitespace-nowrap text-gray-500"
+          >
+            {{ row.label }}
+          </th>
+          @for (cell of row.cells; track cell.weekday) {
+            @if (!cell.covered) {
+              <td
+                class="align-top p-1"
+                [style.height.rem]="altoCelda(cell.rowspan)"
+                [attr.rowspan]="cell.rowspan > 1 ? cell.rowspan : null"
+              >
+                @if (cell.entries.length === 0) {
+                  @if (canEdit()) {
+                    <button
+                      type="button"
+                      class="group/celda flex h-full min-h-14 w-full items-center justify-center rounded-lg border border-dashed border-transparent transition-colors hover:border-gray-300 hover:bg-gray-50"
+                      [attr.aria-label]="'Añadir clase el ' + dayLabel(cell.weekday) + ' a las ' + row.label"
+                      [title]="'Añadir clase el ' + dayLabel(cell.weekday) + ' a las ' + row.label"
+                      (click)="blockAdd.emit({ weekday: cell.weekday, hour: row.hour })"
+                    >
+                      <span class="text-sm text-gray-300 group-hover/celda:hidden">—</span>
+                      <iconify-icon
+                        icon="material-symbols:add"
+                        width="18"
+                        class="hidden text-(--fareas-primary) group-hover/celda:block"
+                      ></iconify-icon>
+                    </button>
+                  } @else {
+                    <div class="flex h-full min-h-14 items-center justify-center text-sm text-gray-300">—</div>
+                  }
+                } @else {
+                  <div class="flex h-full min-h-14 flex-col gap-1">
+                    @for (e of cell.entries; track e.id) {
+                      <div
+                        class="chip tono-{{ tono(e.course_code) }} group relative flex flex-1 flex-col rounded-lg border-l-[3px] px-2.5 py-1.5"
+                      >
+                        <div class="flex items-start justify-between gap-1">
+                          <span class="text-[12px] font-semibold leading-tight">
+                            {{ e.course_code }}
+                          </span>
+                          @if (e.group_code) {
+                            <span class="rounded bg-white/70 px-1 text-[10px] font-medium tabular-nums">
+                              G{{ e.group_code }}
+                            </span>
+                          }
+                        </div>
+                        @if (e.course_name) {
+                          <p class="mt-0.5 line-clamp-2 text-[11px] leading-snug opacity-80">
+                            {{ e.course_name }}
+                          </p>
+                        }
+                        <div class="mt-auto pt-1 text-[10px] leading-tight opacity-70">
+                          <div class="flex items-center gap-1">
+                            <iconify-icon icon="material-symbols:meeting-room-outline" width="12"></iconify-icon>
+                            <span class="truncate">{{ e.room_code || 'Sin aula' }}</span>
+                            <span class="tabular-nums">
+                              · {{ hhmm(e.start_time) }}–{{ hhmm(e.end_time) }}
+                            </span>
+                          </div>
+                          @if (e.teacher_name) {
+                            <div class="mt-0.5 flex items-center gap-1">
+                              <iconify-icon icon="material-symbols:person-outline" width="12"></iconify-icon>
+                              <span class="truncate">{{ e.teacher_name }}</span>
+                            </div>
+                          }
+                        </div>
+                        @if (canEdit()) {
+                          <button
+                            type="button"
+                            class="absolute right-1 top-1 grid size-5 place-items-center rounded bg-white/60 text-current opacity-0 transition-opacity hover:bg-white focus-visible:opacity-100 group-hover:opacity-100"
+                            [attr.aria-label]="'Quitar la clase de ' + e.course_code"
+                            title="Quitar esta clase"
+                            (click)="blockRemove.emit(e)"
+                          >
+                            <iconify-icon icon="material-symbols:close" width="13"></iconify-icon>
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+              </td>
+            }
+          }
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>

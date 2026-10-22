@@ -133,7 +133,6 @@ CREATE TABLE course_group (
     course_id  BIGINT      NOT NULL REFERENCES course(id) ON DELETE CASCADE,
     group_code VARCHAR(5)  NOT NULL,          -- 'A' | 'B' | 'C' ...
     teacher_id BIGINT      NOT NULL REFERENCES app_user(id),
-    room_id    BIGINT      NOT NULL REFERENCES room(id),
     is_active  BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP   NOT NULL DEFAULT NOW(),
     semester_label VARCHAR(40) NOT NULL,      -- R1: cada grupo vive en UN semestre
@@ -144,22 +143,34 @@ CREATE TABLE course_group (
 CREATE UNIQUE INDEX uq_group_course_code_sem ON course_group (course_id, group_code, semester_label);
 CREATE INDEX idx_group_semester ON course_group (semester_label);
 CREATE INDEX idx_group_teacher  ON course_group (teacher_id);
-CREATE INDEX idx_group_room     ON course_group (room_id);
 
 CREATE TABLE schedule_block (
-    id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    group_id   BIGINT NOT NULL REFERENCES course_group(id) ON DELETE CASCADE,
-    weekday    SMALLINT NOT NULL CHECK (weekday BETWEEN 1 AND 7),
+    id         BIGINT   GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    group_id   BIGINT   NOT NULL REFERENCES course_group(id) ON DELETE CASCADE,
+    weekday    SMALLINT NOT NULL,                       -- 1=Lunes … 5=Viernes
     start_time TIME     NOT NULL,
     end_time   TIME     NOT NULL,
+    -- R9/RF-06: el AULA va en el bloque (un grupo puede dictar en labs
+    -- distintos según el día). Va al final, que es donde la deja el ALTER de
+    -- db/003_aula_por_bloque.sql: pg_dump respeta el orden físico y así la BD
+    -- migrada y la recién instalada dan el MISMO dump.
+    room_id    BIGINT   NOT NULL REFERENCES room(id),
     CHECK (start_time < end_time)
 );
+-- Semana lectiva Lunes-Viernes. NOT VALID a propósito, igual que
+-- chk_user_dni_8: controla altas y ediciones nuevas sin revalidar los bloques
+-- que ya existían antes de db/003_aula_por_bloque.sql.
+ALTER TABLE schedule_block ADD CONSTRAINT schedule_block_weekday_check
+    CHECK (weekday BETWEEN 1 AND 5) NOT VALID;
+-- El AULA va en el bloque (un grupo puede dictar en labs distintos según el día;
+-- course_group no guarda aula: la única fuente de verdad es schedule_block).
 -- Evita duplicar el mismo bloque de un grupo; la validación de SOLAPAMIENTO
 -- (misma aula o mismo docente en horarios que se cruzan, RF-06) la aplica la
 -- API al crear bloques, porque sí son válidos los bloques simultáneos en
 -- aulas y docentes distintos (grupos paralelos, Tabla 2 del documento).
 CREATE UNIQUE INDEX uq_block_group_time ON schedule_block (group_id, weekday, start_time);
 CREATE INDEX idx_block_lookup ON schedule_block (weekday, start_time);
+CREATE INDEX idx_block_room   ON schedule_block (room_id);
 
 -- enrollment - matrícula estudiante ↔ grupo (RF-03, RF-22)
 CREATE TABLE enrollment (
@@ -332,7 +343,7 @@ JOIN attendance_session s ON s.id = ar.session_id
 JOIN schedule_block  sb ON sb.id = s.block_id
 JOIN course_group    cg ON cg.id = sb.group_id
 JOIN course          c  ON c.id  = cg.course_id
-JOIN room            r  ON r.id  = cg.room_id
+JOIN room            r  ON r.id  = sb.room_id
 JOIN app_user        st ON st.id = ar.student_id
 WHERE s.session_date = CURRENT_DATE
   AND s.status <> 'cancelada';

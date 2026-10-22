@@ -105,7 +105,6 @@ export class DevicesPage {
       if (this.tab() === 'monitoreo') void this.loadStatus();
     });
 
-    // RF-35: auto-refresh del monitoreo cada 30 s
     interval(REFRESH_MONITOREO_MS)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {

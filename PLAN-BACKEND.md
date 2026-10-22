@@ -26,6 +26,7 @@
 2. **Sin Alembic** - la BD se crea/actualiza con **scripts SQL manuales numerados** en `back-fareas/db/` que tú ejecutas en pgAdmin o psql. Detalle en §1.
 3. **Sin Docker** - todo nativo en Windows: PostgreSQL (instalador oficial), Python en `.venv`, OpenCV/ONNX Runtime vía pip. Docker queda descartado para este proyecto.
 4. **No se entrena ningún modelo** - pesos preentrenados buffalo_l; el "aprendizaje" del sistema es el enrolamiento (RF-04).
+5. **No comentarios en el código** - no incluir comentarios salvo que sean estrictamente necesarios para explicar una lógica compleja. El código debe ser autoexplicativo (nombres claros, funciones pequeñas).
 
 ---
 
@@ -192,7 +193,7 @@ completa sin `test_vision.py`: **92 passed**.
 ### Bloque 4 - Catálogo académico (1–2 días) - RF-02…RF-06, RF-09, RF-10, RF-32, RF-34, RF-35 - **✅ COMPLETADO Y VERIFICADO**
 - [x] CRUDs de aulas (`/rooms`), dispositivos (`/devices`, `/devices/status` público RF-35), docentes (`/teachers`) y estudiantes (`/students`), con paginación (`?page=&page_size=&q=`).
 - [x] RF-08: alta de docente/estudiante genera **clave temporal** y la envía por correo (`services/accounts.py`); `POST /accounts/{id}/send-temp-password` la reenvía con clave nueva.
-- [x] Cursos → grupos → bloques con **validación de solapamientos** en `services/schedule.py`: rechaza misma aula o mismo docente en rangos que se cruzan; grupos paralelos (aula y docente distintos) SÍ se permiten (Tabla 2).
+- [x] Cursos → grupos → bloques con **validación de solapamientos** en `services/schedule.py`: rechaza mismo aula o mismo docente en rangos que se cruzan; grupos paralelos (aula y docente distintos) SÍ se permiten (Tabla 2). **R9 (2026-10-16):** el AULA es del bloque (`schedule_block.room_id`, obligatoria); el choque se compara contra el aula del bloque y la semana lectiva es **Lun–Vie** (CHECK `weekday BETWEEN 1 AND 5`). **R9 (2026-10-17):** se eliminó `course_group.room_id` (la «aula sugerida»); el grupo ya no lleva aula y un bloque sin `room_id` responde **422** («Indica el aula donde se dicta el bloque») en `services/schedule.py` (`db/004_aula_solo_en_bloque.sql`). Nuevo `GET /schedule`: la semana completa de un semestre (join bloque+grupo+curso+docente+aula, filtros `course_id`/`teacher_id`/`room_id`, `include_inactive`) para la vista general de horarios. **RF-01 (2026-10-16):** todo bloque cae dentro de la franja de clases de `app_settings` (`attendance_hour_start/end`, 07:00–20:00) al crear y al editar → 422 con el motivo; la baja del grupo es lógica y se deshace con `POST /groups/{id}/activate` (auditado).
 - [x] Matrículas RF-22: `POST/DELETE /groups/{id}/students`, listado `/groups/{id}/students`.
 - [x] Feriados RF-09 (`/holidays`), justificaciones por rango RF-10 (`/justifications`), parámetros RF-34 (`GET/PATCH /settings`).
 - [x] Bitácora RF-32: TODAS las escrituras del catálogo llaman `services/audit.py` dentro de su transacción; lectura admin paginada en `GET /audit-log` (`routers/audit.py`) con filtros action/entity/actor/desde.
@@ -306,11 +307,11 @@ completa sin `test_vision.py`: **92 passed**.
 | 2 | Límite de inasistencia | 30 %, y la inhabilitación aplica **al SUPERARLO** (> 30 %), no al alcanzarlo. Las tardanzas no suman; las faltas justificadas no cuentan. Aviso preventivo ≥ 20 %. |
 | 3 | Quién justifica | Docente (solo sus grupos y su curso) o admin (todos). Todo queda en `audit_log`. Sin plazo para justificar. |
 | 4 | Bloques | Solo 1 h o 2 h; cada bloque es una sesión independiente (sin lógica de arrastre). `block_minutes` pasa a ser **informativo** (la duración real sale de `start_time/end_time`). |
-| 5 | Grupos | Los crea el admin al llenarse el cupo; cada uno con docente y aula propios. |
+| 5 | Grupos | Los crea el admin al llenarse el cupo; cada uno con su docente (el aula se elige en cada bloque). |
 | 6 | Cupo | **40 para todos los cursos** (editable por grupo). |
 | 7 | Cambio de grupo | Las faltas anteriores se **conservan y se suman al curso** (transferencia = retirar origen + matricular destino en una transacción). |
 | 8 | Fechas del semestre | **2026-II: 2026-08-17 → 2026-12-19** (propuesta cargada en `app_settings`); el admin las registra/modifica con `PATCH /settings`. |
-| 9 | Escuela / aula | Una sola escuela (sin campo "escuela"); el aula pertenece al grupo, no al bloque; **no** se implementa cambio de aula por fecha. |
+| 9 | Escuela / aula | Una sola escuela (sin campo "escuela"); el aula pertenece al **BLOQUE**, no al grupo, para que un mismo grupo dicte en laboratorios distintos según el día. **(2026-10-16, 003_aula_por_bloque.sql; 2026-10-17 se quitó del todo `course_group.room_id`, 004_aula_solo_en_bloque.sql.)** |
 
 **Base de datos (scripts manuales, §1; verificados):**
 1. `db/001_schema.sql` — **esquema completo y vigente** (absorbe lo que se aplicó
@@ -325,7 +326,11 @@ completa sin `test_vision.py`: **92 passed**.
    `cancelada` del enum `session_status`; vistas `v_student_dpi` y
    `v_today_attendance` con las reglas R5/R6/R7.
 2. `db/002_seed.sql` — datos demo + los parámetros vigentes del semestre
-   (umbral facial calibrado 0.55, DPI 20/30, semestre 2026-II).
+   (umbral facial calibrado 0.55, DPI 20/30, semestre 2026-II). El horario demo
+   lleva **el aula en cada bloque** y no puede tener clases cruzadas para un
+   alumno: R8c/R9 lo rechazaría al editar (por eso ISA901 iba Vie 07:00-09:00).
+3. `db/003_aula_por_bloque.sql` — **pendiente** (aula por bloque + semana
+   Lun–Vie). Se borra cuando todo el equipo lo aplicó; regla en el README.
 
 > **Nota de compatibilidad (regla vigente, 2026-10-16):** `001_schema.sql` **sí
 > se edita**: es la foto del esquema real, y `002_seed.sql` fija los valores

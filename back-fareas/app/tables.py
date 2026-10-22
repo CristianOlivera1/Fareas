@@ -99,7 +99,6 @@ class AppSettings(SQLModel, table=True):
     updated_at: datetime | None = Field(default=None, **server_now_kwargs())
 
 
-# app_user (RF-01, RF-02, RF-03)
 class AppUser(SQLModel, table=True):
     __tablename__ = "app_user"
 
@@ -120,7 +119,6 @@ class AppUser(SQLModel, table=True):
     updated_at: datetime | None = Field(default=None, **server_now_kwargs())
 
 
-# room (RF-05)
 class Room(SQLModel, table=True):
     __tablename__ = "room"
 
@@ -133,7 +131,6 @@ class Room(SQLModel, table=True):
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
 
 
-# device (RF-05, RF-33, RF-35)
 class Device(SQLModel, table=True):
     __tablename__ = "device"
 
@@ -151,7 +148,6 @@ class Device(SQLModel, table=True):
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
 
 
-# course / course_group / schedule_block (RF-06)
 class Course(SQLModel, table=True):
     __tablename__ = "course"
 
@@ -168,7 +164,6 @@ class CourseGroup(SQLModel, table=True):
     course_id: int = Field(foreign_key="course.id")
     group_code: str = Field(max_length=5)  # 'A' | 'B' | 'C'
     teacher_id: int = Field(foreign_key="app_user.id")
-    room_id: int = Field(foreign_key="room.id")
     semester_label: str = Field(max_length=40)  # R1/R9: la unicidad incluye el semestre
     capacity: int = 40  # R8: cupo por defecto (decisión: 40 para todos los cursos)
     is_active: bool = True
@@ -176,13 +171,18 @@ class CourseGroup(SQLModel, table=True):
 
 
 class ScheduleBlock(SQLModel, table=True):
+    """Bloque horario de un grupo con SU AULA (R9/RF-06): el mismo grupo puede
+    dictar en labs distintos según el día, por eso el aula vive aquí y no en el
+    grupo (que solo guarda la sugerida)."""
+
     __tablename__ = "schedule_block"
 
     id: int | None = Field(default=None, primary_key=True)
     group_id: int = Field(foreign_key="course_group.id")
-    weekday: int = Field(ge=1, le=7)  # 1=Lunes … 7=Domingo
+    weekday: int = Field(ge=1, le=5)  # 1=Lunes … 5=Viernes (semana lectiva)
     start_time: time
     end_time: time
+    room_id: int = Field(foreign_key="room.id")  # aula donde se dicta ESTE bloque
 
 
 # enrollment (RF-03, RF-22) - retiro con withdrawn_at (R8): si hay registros la
@@ -239,7 +239,6 @@ class FaceEmbedding(SQLModel, table=True):
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
 
 
-# holiday (RF-09)
 class Holiday(SQLModel, table=True):
     __tablename__ = "holiday"
 
@@ -249,7 +248,6 @@ class Holiday(SQLModel, table=True):
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
 
 
-# justification (RF-10)
 class Justification(SQLModel, table=True):
     __tablename__ = "justification"
 
@@ -264,7 +262,6 @@ class Justification(SQLModel, table=True):
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
 
 
-# attendance_session (RF-26, R4, R5)
 class AttendanceSession(SQLModel, table=True):
     __tablename__ = "attendance_session"
 
@@ -280,7 +277,6 @@ class AttendanceSession(SQLModel, table=True):
     cancelled_at: datetime | None = None
 
 
-# attendance_record (RF-15, RF-21, RF-22, RF-23, R6)
 class AttendanceRecord(SQLModel, table=True):
     __tablename__ = "attendance_record"
 
@@ -299,7 +295,6 @@ class AttendanceRecord(SQLModel, table=True):
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
 
 
-# audit_log (RF-32) - escritura desde servicios, lectura solo admin
 class AuditLog(SQLModel, table=True):
     __tablename__ = "audit_log"
 

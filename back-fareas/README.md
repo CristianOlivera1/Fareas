@@ -111,36 +111,78 @@ esquema se mantiene a mano, pero con estas reglas.
 2. **`002_seed.sql` también**, si el cambio toca datos demo o parámetros (p. ej.
    `app_settings`: semestre, niveles DPI, umbral facial), o si agrega columnas
    `NOT NULL` a tablas que el seed llena.
-3. **Para las BD que ya existen, además va un ALTER numerado nuevo**
-   (`db/003_algo.sql`, `004_…`): el paso a paso para la BD que ya tiene datos.
-   Debe ser **re-ejecutable** (`ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT
-   EXISTS`, bloques `DO $$ … EXCEPTION WHEN duplicate_object THEN NULL; END $$`)
-   y nunca recrea ni borra datos.
-   > **ALTER vigente (2026-10-22):** `db/003_password_otp.sql` agrega
-   > `app_user.token_version INTEGER NOT NULL DEFAULT 0` (invalida JWT al
-   > cambiar/restablecer la contraseña). Se borra cuando todo el equipo lo haya
-   > aplicado; su contenido ya está en `001_schema.sql`.
-4. **Cuando todo el equipo ya aplicó el ALTER, SE BORRA** (su contenido ya vive
-   en `001`) y se menciona en el commit. Así: un dev nuevo instala con 2
-   scripts, y una BD vieja se pone al día con el ALTER pendiente + esos 2.
-5. El `ADD VALUE` de un enum no se puede usar en la misma transacción que lo
-   agrega: va en su propio archivo (por eso `006` existió como archivo aparte).
+3. **Para las BD que ya existen va ADEMÁS un ALTER numerado nuevo**
+   (`db/003_algo.sql`, `004_…`): el paso a paso, en orden, para la BD que ya
+   tiene datos. Debe ser **re-ejecutable** (`ADD COLUMN IF NOT EXISTS`,
+   `CREATE INDEX IF NOT EXISTS`, `DROP CONSTRAINT IF EXISTS`, bloques `DO $$
+   … EXCEPTION WHEN duplicate_object THEN NULL; END $$`) y nunca recrea ni
+   borra datos.
+4. **Cuando TODO el equipo ya aplicó el ALTER, SE BORRA** (su contenido ya vive
+   en `001` + `002`) y se deja constancia en el commit. Así quedan siempre 2
+   scripts: un dev nuevo instala con `001` + `002`, y una BD vieja se pone al
+   día con el ALTER pendiente.
+5. **Al borrar un ALTER, anótalo aquí** (y siembra la fecha):
 
-Lo que se revisa al actualizar (la comparación que prueba que `001` + `002`
-reproducen la BD real):
+   | Archivo borrado | Fecha | Qué consolidó |
+   |---|---|---|
+   | `005_reglas_negocio.sql`, `006_session_cancelada.sql`, `007_vistas_reglas.sql` | 2026-10-16 | Reglas R1–R13: columnas nuevas, enum `cancelada` y las vistas R5/R6/R7 |
+
+6. El `ADD VALUE` de un enum no se puede usar en la misma transacción que lo
+   agrega: va en su propio archivo (por eso `006` existió como archivo aparte).
+7. **`001` reproduce el DDL tal cual está en la BD, orden de columnas incluido.**
+   Si un ALTER agrega una columna, esa columna se escribe **al final** de su
+   tabla en `001` (es donde queda físicamente y `pg_dump` respeta el orden).
+   Así el `diff` de abajo sigue siendo una comprobación real.
+   **Excepción: DROP COLUMN.** PostgreSQL no cierra el hueco que deja una
+   columna borrada, así que en la BD migrada las columnas posteriores quedan
+   con un `attnum` corrido y un `pg_dump` las lista en el mismo orden lógico
+   pero no idéntico al de una instalación nueva. En ese caso el diff se revisa
+   por nombre + tipo + nulabilidad + default (la estructura es la misma; solo
+   cambia la numeración interna), y se anota en el ALTER.
+
+Un ALTER **pendiente** (aún no aplicado por todo el equipo) se corre una vez:
 
 ```bash
-# 1) DDL de la BD de desarrollo ya migrada = base para editar 001_schema.sql
-pg_dump -U postgres -d fareas --schema-only --no-owner --no-acl > /tmp/fareas.sql
-
-# 2) BD limpia + los 2 scripts; su DDL debe coincidir con el anterior
-createdb -U postgres fareas_check
-psql -U postgres -d fareas_check -v ON_ERROR_STOP=1 -f db/001_schema.sql
-psql -U postgres -d fareas_check -v ON_ERROR_STOP=1 -f db/002_seed.sql
-pg_dump -U postgres -d fareas_check --schema-only --no-owner --no-acl > /tmp/check.sql
-diff /tmp/fareas.sql /tmp/check.sql   # solo deben variar los SET/comentarios
-dropdb -U postgres fareas_check
+psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/003_aula_por_bloque.sql
+psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/004_aula_solo_en_bloque.sql
 ```
+
+**Pendientes ahora mismo:** `db/003_aula_por_bloque.sql` (el aula pasa del grupo
+al bloque y la semana lectiva queda Lun–Vie) y `db/004_aula_solo_en_bloque.sql`
+(elimina `course_group.room_id`: el grupo ya no guarda aula). Quien ya los aplicó:
+borra su línea cuando todo el equipo los tenga, junto con el archivo.
+
+Lo que se revisa al actualizar: que una BD **vieja + ALTER** y una instalación
+**nueva con `001` + `002`** queden idénticas. Ese es el contrato de la regla.
+
+```bash
+# 1) BD "vieja": los scripts de git ANTES del cambio, y encima el ALTER nuevo
+git show HEAD:back-fareas/db/001_schema.sql > /tmp/old_001.sql
+git show HEAD:back-fareas/db/002_seed.sql > /tmp/old_002.sql
+createdb -U postgres fareas_mig
+psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f /tmp/old_001.sql
+psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f /tmp/old_002.sql
+psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f db/003_aula_por_bloque.sql
+psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f db/004_aula_solo_en_bloque.sql
+psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f db/003_aula_por_bloque.sql  # 2ª vez: re-ejecutable
+psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f db/004_aula_solo_en_bloque.sql  # 2ª vez: re-ejecutable
+
+# 2) instalación nueva: los 2 scripts ya actualizados
+createdb -U postgres fareas_nueva
+psql -U postgres -d fareas_nueva -v ON_ERROR_STOP=1 -f db/001_schema.sql
+psql -U postgres -d fareas_nueva -v ON_ERROR_STOP=1 -f db/002_seed.sql
+
+# 3) los dos DDL deben ser IGUALES
+pg_dump -U postgres -d fareas_mig   --schema-only --no-owner --no-acl > /tmp/mig.sql
+pg_dump -U postgres -d fareas_nueva --schema-only --no-owner --no-acl > /tmp/nueva.sql
+diff <(grep -v '\restrict' /tmp/mig.sql) <(grep -v '\restrict' /tmp/nueva.sql)   # vacío
+
+# 4) y la suite contra la BD migrada
+DATABASE_URL=... pytest -q
+```
+
+> `pg_dump` 17 mete un token aleatorio `\restrict`/`\unrestrict` en cada dump:
+> por eso el `grep -v` — es lo único que puede aparecer en el `diff`.
 
 `001` y `002` se ejecutan sobre una BD **vacía**: no son idempotentes a nivel
 de esquema (`CREATE TYPE/TABLE` fallan si los objetos ya existen).
@@ -198,8 +240,12 @@ Reglas del flujo:
 - **Estudiantes:** `GET/POST /students` (`?semester=` para filtrar por ciclo)
 - **Cuentas:** `GET/PATCH /accounts/{id}` · `POST /accounts/{id}/send-temp-password` (reenvía credenciales RF-08)
 - **Cursos/grupos/bloques:** `GET/POST /courses` · `GET /courses/{id}/groups` · `POST /courses/{id}/groups`
-  · `GET/POST /groups/{id}/blocks` · `PATCH/DELETE /blocks/{id}` · `DELETE /groups/{id}` -
-  **choques RF-06:** misma aula o mismo docente en rangos que se cruzan → 409; grupos paralelos válidos
+  · `GET/POST /groups/{id}/blocks` · `PATCH/DELETE /blocks/{id}` · `DELETE /groups/{id}`
+  · `POST /groups/{id}/activate` (deshace la baja lógica) · `GET /schedule?semester=&course_id=&teacher_id=&room_id=`
+  (semana completa del semestre, una sola consulta) -
+  **choques RF-06:** misma aula (la **del bloque**, R9) o mismo docente en rangos que se cruzan → 409;
+  grupos paralelos válidos. Semana lectiva **Lun–Vie** (`weekday` 1..5). El aula va SOLO en el bloque
+  (`room_id` obligatorio): el grupo no guarda aula y su ausencia responde 422
 - **Matrículas RF-22:** `GET/POST /groups/{id}/students` · `DELETE /groups/{id}/students/{student_id}`
 - **Calendario:** `GET/POST /holidays` · `DELETE /holidays/{id}` · `GET/POST /justifications`
   · `DELETE /justifications/{id}` · `GET/PATCH /settings` (RF-34)
@@ -302,7 +348,8 @@ Protocolo en `ws://localhost:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET>`
 - `POST /courses/import-pdf` — subes la constancia de matrícula (multipart, solo admin);
   devuelve bloques horarios CANDIDATOS (curso, grupo, día, horas) con `confiable` y `nota`
   para lo ambiguo. **No persiste nada**: pantalla de revisión del RF-07.
-- `POST /courses/import-pdf/confirm` — recibe la propuesta corregida + `teacher_id` + `room_id`;
+- `POST /courses/import-pdf/confirm` — recibe la propuesta corregida + `teacher_id` + `room_id`
+  (aula por defecto: cada bloque puede traer la suya);
   crea cursos/grupos/bloques con la misma validación de choques RF-06, **todo o nada** (rollback).
   Un PDF escaneado (sin texto) → 422 con explicación: RF-07 procesa constancias digitales.
 
