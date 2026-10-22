@@ -2,33 +2,53 @@
 
 Decisión de diseño (PLAN §7): JWT de acceso simple con expiración de 120 min
 SIN refresh tokens — no hay tabla de sesiones ni rotación; el logout es
-cliente (descartar el token). Alcance académico, sin sobre-ingeniería.
+cliente (descartar el token). El claim ``ver`` (token_version) permite
+invalidar los tokens emitidos antes de un cambio de contraseña.
+
+Flujo de cambio de contraseña (2026-10-22):
+1. ``POST /auth/change-password/otp``: valida la contraseña actual y envía un
+   OTP al correo institucional.
+2. ``POST /auth/change-password/otp/verify``: valida el código (marca verified).
+3. ``POST /auth/change-password``: consume el OTP verificado, actualiza la
+   contraseña, incrementa ``token_version`` y devuelve un token nuevo.
+
+La clave temporal (``must_change_password=True``) sigue cambiándose sin OTP:
+el usuario acaba de recibirla por correo y el guard lo obliga a cambiarla.
 """
-import secrets
+import logging
 import time
 
 from fastapi import APIRouter, HTTPException, Request, status
-from pwdlib import PasswordHash
 from sqlmodel import select
 
 from app.core.deps import CurrentUserPending, DbSession
 from app.core.security import create_access_token, hash_password, verify_password
 from app.schemas.auth import (
+    ChangePasswordOtpRequest,
+    ChangePasswordOtpResponse,
     ChangePasswordRequest,
+    ChangePasswordResponse,
     LoginRequest,
     LoginResponse,
     MessageResponse,
     RecoverRequest,
     ResetPasswordRequest,
     UserOut,
+    VerifyChangePasswordOtpRequest,
     VerifyOtpRequest,
 )
-from app.services.emailer import send_otp
+from app.services import otp
+from app.services.audit import audit
+from app.services.emailer import send_otp, send_password_changed_notice
 from app.tables import AppUser
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger("fareas.auth")
 
-_pwd = PasswordHash.recommended()
+# Compatibilidad con imports/tests antiguos: el store real vive en services.otp.
+_OTP_TTL_SECONDS = otp.OTP_TTL_SECONDS
+_OTP_MAX_ATTEMPTS = otp.OTP_MAX_ATTEMPTS
+_otp_store = otp._store
 
 # Rate limit de login en memoria (5 intentos fallidos por IP cada 60 s).
 # Alcance académico: un solo proceso, sin Redis — mismo patrón que el OTP.
@@ -67,11 +87,43 @@ def _login_rate_reset(request: Request) -> None:
     """Login correcto: limpia la cuenta de fallos de esa IP."""
     _login_attempts.pop(_login_rate_ip(request), None)
 
-# OTP en memoria (RF-12). Alcance académico: un solo proceso; sin Redis.
-# email -> {"hash", "expires_at", "attempts", "verified"}
-_OTP_TTL_SECONDS = 10 * 60
-_OTP_MAX_ATTEMPTS = 5
-_otp_store: dict[str, dict] = {}
+
+def _client_ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
+
+
+async def _notify_password_changed(user: AppUser) -> None:
+    """Aviso de seguridad best-effort: la contraseña YA se guardó y no debe
+    devolverse un 500 si el SMTP falla. El fallo queda en el log."""
+    try:
+        await send_password_changed_notice(user.email, user.full_name)
+    except Exception:  # noqa: BLE001 - el cambio de clave no depende del correo
+        logger.exception("No se pudo enviar el aviso de clave actualizada a %s", user.email)
+
+
+def _otp_http_error(exc: otp.OtpError) -> HTTPException:
+    """Traduce errores del servicio OTP a respuestas HTTP coherentes."""
+    if isinstance(exc, otp.OtpCooldownError):
+        return HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Espera {exc.seconds} segundos antes de solicitar otro código",
+        )
+    if isinstance(exc, otp.OtpAttemptsExceededError):
+        return HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Demasiados intentos. Solicita un código nuevo.",
+        )
+    if isinstance(exc, otp.OtpInvalidError):
+        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Código incorrecto")
+    if isinstance(exc, otp.OtpNotVerifiedError):
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verifica primero el código enviado a tu correo",
+        )
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="El código expiró o no existe. Solicita uno nuevo.",
+    )
 
 
 def _build_user_out(user: AppUser) -> UserOut:
@@ -108,7 +160,7 @@ async def login(body: LoginRequest, request: Request, db: DbSession) -> LoginRes
             detail="Credenciales incorrectas o usuario inactivo",
         )
     _login_rate_reset(request)
-    access = create_access_token(user.id, user.role.value)
+    access = create_access_token(user.id, user.role.value, user.token_version)
     return LoginResponse(access_token=access, user=_build_user_out(user))
 
 
@@ -121,18 +173,121 @@ async def me(user: CurrentUserPending) -> UserOut:
     return _build_user_out(user)
 
 
-@router.post("/change-password", response_model=MessageResponse)
-async def change_password(body: ChangePasswordRequest, user: CurrentUserPending, db: DbSession) -> MessageResponse:
-    """RF-11: cambio de clave (obligatorio si must_change_password=True)."""
+@router.post("/change-password/otp", response_model=ChangePasswordOtpResponse)
+async def request_change_password_otp(
+    body: ChangePasswordOtpRequest,
+    request: Request,
+    user: CurrentUserPending,
+    db: DbSession,
+) -> ChangePasswordOtpResponse:
+    """Paso 1: confirma la contraseña actual y envía un OTP al correo.
+
+    El OTP es un segundo factor: no reemplaza la contraseña actual. La clave
+    temporal (primer login) no usa este endpoint; se cambia directo.
+    """
+    if user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tu contraseña es temporal; cámbiala directamente sin código",
+        )
     if not verify_password(body.current_password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La contraseña actual no es correcta")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña actual no es correcta",
+        )
+
+    try:
+        code = otp.issue(user.id, otp.OtpPurpose.CHANGE_PASSWORD)  # type: ignore[arg-type]
+    except otp.OtpError as exc:
+        raise _otp_http_error(exc) from exc
+
+    await send_otp(user.email, code, purpose=otp.OtpPurpose.CHANGE_PASSWORD)
+    await audit(
+        db,
+        user,
+        action="password_change_otp",
+        entity="app_user",
+        entity_id=user.id,
+        ip_address=_client_ip(request),
+    )
+    await db.commit()
+
+    return ChangePasswordOtpResponse(
+        message="Código enviado al correo institucional",
+        email=otp.mask_email(user.email),
+        expires_in=otp.OTP_TTL_SECONDS,
+        resend_in=otp.OTP_RESEND_SECONDS,
+    )
+
+
+@router.post("/change-password/otp/verify", response_model=MessageResponse)
+async def verify_change_password_otp(
+    body: VerifyChangePasswordOtpRequest,
+    user: CurrentUserPending,
+) -> MessageResponse:
+    """Paso 2: valida el código y lo deja listo para el cambio final."""
+    try:
+        otp.verify(user.id, otp.OtpPurpose.CHANGE_PASSWORD, body.code)  # type: ignore[arg-type]
+    except otp.OtpError as exc:
+        raise _otp_http_error(exc) from exc
+    return MessageResponse(message="Código validado. Define tu nueva contraseña")
+
+
+@router.post("/change-password", response_model=ChangePasswordResponse)
+async def change_password(
+    body: ChangePasswordRequest,
+    request: Request,
+    user: CurrentUserPending,
+    db: DbSession,
+) -> ChangePasswordResponse:
+    """RF-11: cambio de clave.
+
+    - Cuenta normal: exige un OTP verificado (paso 2) y lo consume.
+    - Clave temporal (``must_change_password=True``): sin OTP (RF-11).
+
+    En ambos casos se incrementa ``token_version``: los tokens anteriores
+    quedan inválidos (todas las sesiones). El token nuevo de la respuesta
+    mantiene viva la sesión que hizo el cambio.
+    """
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña actual no es correcta",
+        )
     if body.current_password == body.new_password:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La nueva clave debe ser distinta")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva clave debe ser distinta",
+        )
+
+    used_otp = not user.must_change_password
+    if used_otp:
+        try:
+            otp.consume(user.id, otp.OtpPurpose.CHANGE_PASSWORD)  # type: ignore[arg-type]
+        except otp.OtpError as exc:
+            raise _otp_http_error(exc) from exc
+
     user.password_hash = hash_password(body.new_password)
     user.must_change_password = False
+    user.token_version += 1
     db.add(user)
+    await audit(
+        db,
+        user,
+        action="password_changed",
+        entity="app_user",
+        entity_id=user.id,
+        new_value={"method": "otp" if used_otp else "temporary_password"},
+        ip_address=_client_ip(request),
+    )
     await db.commit()
-    return MessageResponse(message="Contraseña actualizada correctamente")
+
+    access = create_access_token(user.id, user.role.value, user.token_version)
+    await _notify_password_changed(user)
+    return ChangePasswordResponse(
+        message="Contraseña actualizada correctamente",
+        access_token=access,
+    )
 
 
 @router.post("/recover", response_model=MessageResponse)
@@ -141,46 +296,55 @@ async def recover(body: RecoverRequest, db: DbSession) -> MessageResponse:
     user = (await db.exec(select(AppUser).where(AppUser.email == body.email.lower()))).first()
     # Respuesta uniforme: no revelar si el correo existe o no.
     if user is not None:
-        code = f"{secrets.randbelow(1_000_000):06d}"
-        _otp_store[body.email.lower()] = {
-            "hash": _pwd.hash(code),
-            "expires_at": time.monotonic() + _OTP_TTL_SECONDS,
-            "attempts": 0,
-            "verified": False,
-        }
-        await send_otp(body.email.lower(), code)
+        try:
+            code = otp.issue(user.id, otp.OtpPurpose.RECOVER)  # type: ignore[arg-type]
+        except otp.OtpCooldownError:
+            # Reenvío dentro del cooldown: no se envía otro correo.
+            pass
+        else:
+            await send_otp(user.email, code, purpose=otp.OtpPurpose.RECOVER)
     return MessageResponse(message="Si el correo existe, se envió un código de recuperación")
 
 
 @router.post("/recover/verify", response_model=MessageResponse)
-async def verify_otp(body: VerifyOtpRequest) -> MessageResponse:
+async def verify_otp(body: VerifyOtpRequest, db: DbSession) -> MessageResponse:
     """RF-12 paso 2: valida el código (habilita el reseteo)."""
-    entry = _otp_store.get(body.email.lower())
-    if entry is None or time.monotonic() > entry["expires_at"]:
-        _otp_store.pop(body.email.lower(), None)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Código expirado o inexistente")
-    if entry["attempts"] >= _OTP_MAX_ATTEMPTS:
-        _otp_store.pop(body.email.lower(), None)
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Demasiados intentos; solicita otro código")
-    entry["attempts"] += 1
-    if not _pwd.verify(body.code, entry["hash"]):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Código incorrecto")
-    entry["verified"] = True
+    user = (await db.exec(select(AppUser).where(AppUser.email == body.email.lower()))).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Código expirado o inexistente",
+        )
+    try:
+        otp.verify(user.id, otp.OtpPurpose.RECOVER, body.code)  # type: ignore[arg-type]
+    except otp.OtpError as exc:
+        raise _otp_http_error(exc) from exc
     return MessageResponse(message="Código validado. Ahora define tu nueva contraseña")
 
 
 @router.post("/recover/reset", response_model=MessageResponse)
 async def reset_password(body: ResetPasswordRequest, db: DbSession) -> MessageResponse:
     """RF-12 paso 3: establece la nueva contraseña (requiere OTP verificado)."""
-    entry = _otp_store.get(body.email.lower())
-    if entry is None or not entry.get("verified") or time.monotonic() > entry["expires_at"]:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Valida primero el código enviado al correo")
     user = (await db.exec(select(AppUser).where(AppUser.email == body.email.lower()))).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cuenta no encontrada")
+    try:
+        otp.consume(user.id, otp.OtpPurpose.RECOVER)  # type: ignore[arg-type]
+    except otp.OtpError as exc:
+        raise _otp_http_error(exc) from exc
+
     user.password_hash = hash_password(body.new_password)
     user.must_change_password = False
+    user.token_version += 1
     db.add(user)
+    await audit(
+        db,
+        user,
+        action="password_reset",
+        entity="app_user",
+        entity_id=user.id,
+        new_value={"method": "recover_otp"},
+    )
     await db.commit()
-    _otp_store.pop(body.email.lower(), None)
+    await _notify_password_changed(user)
     return MessageResponse(message="Contraseña restablecida. Ya puedes iniciar sesión")

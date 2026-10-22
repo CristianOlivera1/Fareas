@@ -163,6 +163,8 @@ async def _usuario_de_token(access_token: str) -> AppUser:
         user = (await db.exec(select(AppUser).where(AppUser.id == payload.user_id))).first()
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="Usuario inexistente o inactivo")
+    if payload.token_version != user.token_version:
+        raise HTTPException(status_code=401, detail="Sesión invalidada. Inicia sesión nuevamente.")
     if user.must_change_password:  # R14: mismo bloqueo que el resto de la API
         raise HTTPException(status_code=403, detail={
             "code": "must_change_password",

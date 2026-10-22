@@ -132,6 +132,11 @@ export class Sidebar implements OnInit {
     this.userMenuOpen.update((v) => !v);
   }
 
+  closeUserMenu(): void {
+    this.userMenuOpen.set(false);
+    this.closeOnMobile();
+  }
+
   logout(): void {
     this.auth.logout();
   }

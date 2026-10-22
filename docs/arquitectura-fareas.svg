@@ -1,0 +1,333 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 760" width="1300" height="760" font-family="Segoe UI, Inter, Helvetica Neue, Arial, sans-serif">
+  <defs>
+    <marker id="aSolid" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#111111"/>
+    </marker>
+    <marker id="aGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#6b7280"/>
+    </marker>
+    <marker id="aOpen" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1,1 L11,6 L1,11" fill="none" stroke="#111111" stroke-width="1.6" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <!-- ===================== ENCABEZADO ===================== -->
+  <text x="40" y="42" font-size="20" font-weight="700" letter-spacing="0.6" fill="#111111">ARQUITECTURA DEL SISTEMA FAREAS</text>
+  <text x="40" y="63" font-size="11" fill="#6b7280">Control de asistencia con reconocimiento facial · UNAMBA · Angular 21 + FastAPI + PostgreSQL 17 + ONNX Runtime (CPU)</text>
+
+  <!-- ===================== TÍTULOS DE COLUMNA ===================== -->
+  <g font-size="12" font-weight="700" letter-spacing="1.6" text-anchor="middle" fill="#111111">
+    <text x="145" y="100">CÁMARA IP</text>
+    <text x="460" y="100">INFERENCIA (IA)</text>
+    <text x="780" y="100">CORE BACKEND</text>
+    <text x="1100" y="100">ALMACENAMIENTO</text>
+  </g>
+
+  <!-- ===================== CAJA A: CÁMARA ===================== -->
+  <rect x="40" y="110" width="210" height="220" rx="14" fill="#ffffff" stroke="#111111" stroke-width="2"/>
+  <g stroke="#111111" stroke-width="2" fill="none">
+    <rect x="131" y="136" width="28" height="12" rx="4"/>
+    <path d="M145,148 v12"/>
+    <rect x="100" y="160" width="90" height="50" rx="15"/>
+    <circle cx="145" cy="185" r="15"/>
+  </g>
+  <circle cx="145" cy="185" r="6.5" fill="#111111"/>
+  <g font-size="9.5" fill="#6b7280" text-anchor="middle">
+    <text x="145" y="234" font-size="11.5" font-weight="700" fill="#111111">Hikvision DS-2CD2347G3</text>
+    <text x="145" y="252">4 MP · PoE+ · NEMA 4X</text>
+    <text x="145" y="270">RTSP (sub-stream 102)</text>
+    <text x="145" y="288">~2 fps por aula</text>
+    <text x="145" y="306">1 cámara por aula</text>
+  </g>
+
+  <!-- flecha RTSP -->
+  <path d="M250,220 H312" stroke="#111111" stroke-width="2" fill="none" marker-end="url(#aSolid)"/>
+  <text x="281" y="210" font-size="10" font-weight="600" text-anchor="middle" fill="#111111">RTSP</text>
+
+  <!-- ===================== CAJA B: INFERENCIA ===================== -->
+  <rect x="320" y="110" width="280" height="220" rx="14" fill="#ffffff" stroke="#111111" stroke-width="2"/>
+
+  <!-- detector facial: brackets + cabeza -->
+  <g stroke="#111111" stroke-width="2" fill="none" stroke-linecap="round">
+    <path d="M376,147 H362 V161"/>
+    <path d="M404,147 H418 V161"/>
+    <path d="M362,189 V203 H376"/>
+    <path d="M418,189 V203 H404"/>
+    <circle cx="390" cy="169" r="8.5"/>
+    <path d="M377,193 a13,13 0 0 1 26,0"/>
+  </g>
+
+  <line x1="446" y1="145" x2="446" y2="205" stroke="#d1d5db" stroke-width="1.5"/>
+
+  <!-- malla facial (embedding) -->
+  <g stroke="#111111" stroke-width="1.6" fill="none">
+    <path d="M500,146 L523,158 L519,187 L500,201 L481,187 L477,158 Z"/>
+    <path d="M500,146 L500,172 L523,158 M500,172 L519,187 M500,172 L481,187 M500,172 L477,158 M500,172 L500,201"/>
+  </g>
+  <g fill="#111111">
+    <circle cx="500" cy="146" r="2.4"/><circle cx="523" cy="158" r="2.4"/>
+    <circle cx="519" cy="187" r="2.4"/><circle cx="500" cy="201" r="2.4"/>
+    <circle cx="481" cy="187" r="2.4"/><circle cx="477" cy="158" r="2.4"/>
+    <circle cx="500" cy="172" r="2.4"/>
+  </g>
+
+  <g font-size="10" font-weight="700" text-anchor="middle" fill="#111111">
+    <text x="390" y="222">SCRFD</text>
+    <text x="500" y="222">ArcFace</text>
+  </g>
+  <g font-size="9" text-anchor="middle" fill="#6b7280">
+    <text x="390" y="236">detección</text>
+    <text x="500" y="236">512-d</text>
+  </g>
+
+  <g font-size="9.5" fill="#6b7280" text-anchor="middle">
+    <text x="460" y="262" font-size="11" font-weight="700" fill="#111111">ONNX Runtime · CPU</text>
+    <text x="460" y="280">alineación por 5 landmarks</text>
+    <text x="460" y="298">embedding 512-d normalizado</text>
+    <text x="460" y="316">umbral coseno 0.55 (RF-20)</text>
+  </g>
+
+  <!-- flecha in-process -->
+  <path d="M600,220 H652" stroke="#111111" stroke-width="2" fill="none" marker-end="url(#aSolid)"/>
+  <text x="626" y="242" font-size="8" font-weight="600" text-anchor="middle" fill="#111111">mismo</text>
+  <text x="626" y="253" font-size="8" font-weight="600" text-anchor="middle" fill="#111111">proceso</text>
+  <text x="626" y="265" font-size="7.5" text-anchor="middle" fill="#6b7280">(sin red)</text>
+
+  <!-- ===================== CAJA C: BACKEND ===================== -->
+  <rect x="660" y="110" width="240" height="220" rx="14" fill="#ffffff" stroke="#111111" stroke-width="2"/>
+
+  <!-- chip FastAPI -->
+  <g stroke="#111111" stroke-width="2" fill="none">
+    <rect x="742" y="142" width="76" height="54" rx="9"/>
+    <path d="M742,154 h-8 M742,169 h-8 M742,184 h-8 M818,154 h8 M818,169 h8 M818,184 h8"/>
+    <path d="M757,142 v-8 M772,142 v-8 M791,142 v-8 M803,142 v-8"/>
+  </g>
+  <text x="780" y="178" font-size="16" font-weight="700" text-anchor="middle" fill="#111111" font-family="Consolas, monospace">&lt;/&gt;</text>
+
+  <!-- iconos pequeños: configuración, reglas, métricas -->
+  <g stroke="#111111" stroke-width="1.7" fill="none" stroke-linecap="round">
+    <circle cx="731" cy="219" r="6.5"/>
+    <path d="M731,209.5 v-2.5 M731,228.5 v2.5 M721.5,219 h-2.5 M740.5,219 h2.5 M724.5,212.5 l-1.8,-1.8 M737.5,225.5 l1.8,1.8 M724.5,225.5 l-1.8,1.8 M737.5,212.5 l1.8,-1.8"/>
+    <circle cx="780" cy="219" r="8"/>
+    <path d="M776,219 l3,3 5.5,-6"/>
+    <path d="M824,226 v-10 M831,226 v-17 M838,226 v-24" stroke-width="2.6"/>
+  </g>
+
+  <g font-size="9.5" fill="#6b7280" text-anchor="middle">
+    <text x="780" y="248" font-size="11.5" font-weight="700" fill="#111111">FastAPI · Python</text>
+    <text x="780" y="266">motor de asistencia (RF-23)</text>
+    <text x="780" y="282">APScheduler · cierre RF-26</text>
+    <text x="780" y="298">bucle de cámaras · SSE</text>
+    <text x="780" y="314">JWT + RBAC (RF-01)</text>
+  </g>
+
+  <!-- flecha BD doble -->
+  <path d="M900,220 H952" stroke="#111111" stroke-width="2" fill="none" marker-start="url(#aSolid)" marker-end="url(#aSolid)"/>
+  <text x="926" y="204" font-size="9" font-weight="600" text-anchor="middle" fill="#111111">SQL</text>
+  <text x="926" y="216" font-size="8" text-anchor="middle" fill="#6b7280">asyncpg</text>
+
+  <!-- ===================== CAJA D: ALMACENAMIENTO ===================== -->
+  <rect x="960" y="110" width="270" height="220" rx="14" fill="#ffffff" stroke="#111111" stroke-width="2"/>
+  <line x1="960" y1="224" x2="1230" y2="224" stroke="#111111" stroke-width="1.5"/>
+
+  <g stroke="#111111" stroke-width="2" fill="none">
+    <ellipse cx="1000" cy="152" rx="23" ry="7.5"/>
+    <path d="M977,152 v38 a23,7.5 0 0 0 46,0 v-38"/>
+    <path d="M977,166 a23,7.5 0 0 0 46,0"/>
+    <path d="M977,180 a23,7.5 0 0 0 46,0"/>
+  </g>
+  <g font-size="9.5" fill="#6b7280">
+    <text x="1036" y="150" font-size="11.5" font-weight="700" fill="#111111">PostgreSQL 17</text>
+    <text x="1036" y="168">REAL[512]</text>
+    <text x="1036" y="184">coseno en NumPy</text>
+    <text x="1036" y="200">sin pgvector</text>
+  </g>
+  <text x="1000" y="216" font-size="8.5" text-anchor="middle" fill="#9ca3af">14 tablas · 2 vistas</text>
+
+  <g stroke="#111111" stroke-width="2" fill="none">
+    <path d="M978,286 a12,12 0 0 1 2,-23 a17,17 0 0 1 33,-1 a11,11 0 0 1 -1,24 Z"/>
+  </g>
+  <g font-size="9.5" fill="#6b7280">
+    <text x="1036" y="252" font-size="11" font-weight="700" fill="#111111">Fotos de enrolamiento</text>
+    <text x="1036" y="270">storage/ local (desarrollo)</text>
+    <text x="1036" y="286">Cloudflare R2 (producción)</text>
+    <text x="1036" y="302">URLs firmadas</text>
+  </g>
+
+  <!-- ===================== BUS DE CONEXIÓN A CAPAS INFERIORES ===================== -->
+  <path d="M780,330 V385" stroke="#111111" stroke-width="2" fill="none"/>
+  <path d="M470,385 H1120" stroke="#111111" stroke-width="2" fill="none"/>
+  <path d="M470,385 V428" stroke="#111111" stroke-width="2" fill="none" marker-end="url(#aSolid)"/>
+  <path d="M820,385 V428" stroke="#111111" stroke-width="2" fill="none" marker-end="url(#aSolid)"/>
+  <path d="M1120,385 V428" stroke="#111111" stroke-width="2" fill="none" marker-end="url(#aSolid)"/>
+  <circle cx="780" cy="385" r="3.5" fill="#111111"/>
+
+  <g font-size="9" font-weight="600" fill="#111111">
+    <rect x="478" y="400" width="83" height="15" rx="7" fill="#ffffff"/>
+    <text x="484" y="411">WebSocket TLS</text>
+    <rect x="828" y="400" width="66" height="15" rx="7" fill="#ffffff"/>
+    <text x="834" y="411">REST + SSE</text>
+    <rect x="1128" y="400" width="38" height="15" rx="7" fill="#ffffff"/>
+    <text x="1134" y="411">SMTP</text>
+  </g>
+
+  <!-- ===================== LEYENDA ===================== -->
+  <rect x="40" y="450" width="230" height="140" rx="12" fill="#ffffff" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <g stroke="#111111" stroke-width="2" fill="none" marker-end="url(#aSolid)">
+    <path d="M62,488 H108"/>
+  </g>
+  <path d="M62,527 H106" stroke="#111111" stroke-width="2" fill="none" marker-start="url(#aSolid)" marker-end="url(#aSolid)"/>
+  <path d="M62,566 H108" stroke="#6b7280" stroke-width="2" fill="none" stroke-dasharray="6 5" marker-end="url(#aGray)"/>
+  <g font-size="10" fill="#374151">
+    <text x="124" y="492">Flujo de datos</text>
+    <text x="124" y="531">Consulta / sincronización</text>
+    <text x="124" y="570">Señal de control</text>
+  </g>
+
+  <!-- ===================== CAJA E: ESP32 ===================== -->
+  <rect x="300" y="430" width="340" height="170" rx="14" fill="#ffffff" stroke="#4b5563" stroke-width="1.8" stroke-dasharray="7 5"/>
+
+  <!-- placa ESP32 -->
+  <g stroke="#111111" stroke-width="2" fill="none">
+    <rect x="330" y="455" width="58" height="92" rx="6"/>
+    <rect x="344" y="480" width="30" height="34" rx="3" fill="#111111"/>
+    <path d="M330,466 h-7 M330,478 h-7 M330,490 h-7 M330,502 h-7 M330,514 h-7 M330,526 h-7"/>
+    <path d="M388,466 h7 M388,478 h7 M388,490 h7 M388,502 h7 M388,514 h7 M388,526 h7"/>
+    <rect x="344" y="463" width="30" height="9" rx="2"/>
+  </g>
+
+  <!-- anillo LED -->
+  <circle cx="500" cy="492" r="17" fill="none" stroke="#111111" stroke-width="2"/>
+  <g fill="#111111">
+    <circle cx="500" cy="481" r="2.2"/><circle cx="507.8" cy="484.2" r="2.2"/>
+    <circle cx="511" cy="492" r="2.2"/><circle cx="507.8" cy="499.8" r="2.2"/>
+    <circle cx="500" cy="503" r="2.2"/><circle cx="492.2" cy="499.8" r="2.2"/>
+    <circle cx="489" cy="492" r="2.2"/><circle cx="492.2" cy="484.2" r="2.2"/>
+  </g>
+  <text x="528" y="496" font-size="10" fill="#374151">Anillo LED RGB</text>
+
+  <!-- buzzer -->
+  <g stroke="#111111" stroke-width="2" fill="none" stroke-linejoin="round">
+    <path d="M486,538 h8 l10,-7 v26 l-10,-7 h-8 Z"/>
+    <path d="M510,540 a8,8 0 0 1 0,14"/>
+  </g>
+  <text x="528" y="546" font-size="10" fill="#374151">Buzzer</text>
+
+  <path d="M392,492 h86" stroke="#6b7280" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <path d="M392,538 h84" stroke="#6b7280" stroke-width="1.6" stroke-dasharray="5 4"/>
+
+  <text x="330" y="568" font-size="9" fill="#6b7280">ESP32 WROOM-32</text>
+  <text x="470" y="588" font-size="9.5" font-weight="600" text-anchor="middle" fill="#111111">hello + heartbeat 30 s · veredicto LED/buzzer</text>
+
+  <!-- ===================== CAJA F: DASHBOARD ===================== -->
+  <rect x="680" y="430" width="280" height="170" rx="14" fill="#ffffff" stroke="#4b5563" stroke-width="1.8" stroke-dasharray="7 5"/>
+
+  <g stroke="#111111" stroke-width="2" fill="none">
+    <rect x="782" y="452" width="76" height="54" rx="6"/>
+    <path d="M820,506 v12 M804,518 h32"/>
+    <circle cx="800" cy="470" r="6"/>
+    <path d="M792,496 v-12 M802,496 v-20 M812,496 v-16" stroke-width="2.6" stroke-linecap="round"/>
+    <circle cx="836" cy="486" r="8" stroke-width="2.6" stroke-dasharray="30 12"/>
+  </g>
+
+  <g text-anchor="middle">
+    <text x="820" y="546" font-size="11" font-weight="700" fill="#111111">Angular 21 · PrimeNG</text>
+    <text x="820" y="564" font-size="9.5" fill="#6b7280">dashboard en vivo (RF-13)</text>
+    <text x="820" y="580" font-size="9.5" fill="#6b7280">roles admin · docente · estudiante</text>
+  </g>
+
+  <!-- ===================== CAJA G: NOTIFICACIONES ===================== -->
+  <rect x="1000" y="430" width="240" height="170" rx="14" fill="#ffffff" stroke="#4b5563" stroke-width="1.8" stroke-dasharray="7 5"/>
+
+  <g stroke="#111111" stroke-width="2" fill="none">
+    <rect x="1088" y="458" width="64" height="44" rx="5"/>
+    <path d="M1088,462 l32,22 32,-22"/>
+  </g>
+
+  <g text-anchor="middle">
+    <text x="1120" y="546" font-size="11" font-weight="700" fill="#111111">Correo institucional</text>
+    <text x="1120" y="564" font-size="9.5" fill="#6b7280">clave temporal (RF-08)</text>
+    <text x="1120" y="580" font-size="9.5" fill="#6b7280">OTP (RF-12) · alertas DPI (RF-24)</text>
+  </g>
+
+  <!-- ===================== TIRA DE FLUJO ===================== -->
+  <rect x="40" y="630" width="1220" height="88" rx="16" fill="#ffffff" stroke="#111111" stroke-width="2"/>
+
+  <!-- 1. estudiante -->
+  <g stroke="#111111" stroke-width="2" fill="none" stroke-linecap="round" transform="translate(134,662)">
+    <circle cx="0" cy="-7" r="7"/>
+    <path d="M-13,13 a13,13 0 0 1 26,0"/>
+  </g>
+  <!-- 2. cámara -->
+  <g stroke="#111111" stroke-width="2" fill="none" transform="translate(263,660)">
+    <rect x="-15" y="-9" width="30" height="18" rx="6"/>
+    <circle cx="4" cy="0" r="4.5"/>
+    <path d="M-11,-9 l4,-5 h8"/>
+  </g>
+  <!-- 3. detección -->
+  <g stroke="#111111" stroke-width="1.8" fill="none" transform="translate(392,661)">
+    <path d="M-11,-13 h-5 v5 M11,-13 h5 v5 M-11,13 h-5 v-5 M11,13 h5 v-5"/>
+    <circle cx="0" cy="-2" r="5"/>
+    <path d="M-8,10 a8,8 0 0 1 16,0"/>
+  </g>
+  <!-- 4. malla ArcFace -->
+  <g stroke="#111111" stroke-width="1.5" fill="none" transform="translate(521,661)">
+    <path d="M0,-14 L13,-7 L11,8 L0,14 L-11,8 L-13,-7 Z"/>
+    <path d="M0,-14 L0,-1 L13,-7 M0,-1 L11,8 M0,-1 L-11,8 M0,-1 L-13,-7 M0,-1 L0,14"/>
+  </g>
+  <!-- 5. FastAPI chip -->
+  <g stroke="#111111" stroke-width="1.8" fill="none" transform="translate(650,661)">
+    <rect x="-15" y="-12" width="30" height="24" rx="4"/>
+    <path d="M-15,-5 h-4 M-15,5 h-4 M15,-5 h4 M15,5 h4"/>
+  </g>
+  <text x="650" y="669" font-size="8.5" font-weight="700" text-anchor="middle" fill="#111111" font-family="Consolas, monospace">&lt;/&gt;</text>
+  <!-- 6. base de datos -->
+  <g stroke="#111111" stroke-width="1.8" fill="none" transform="translate(779,661)">
+    <ellipse cx="0" cy="-9" rx="12" ry="4"/>
+    <path d="M-12,-9 v18 a12,4 0 0 0 24,0 v-18"/>
+    <path d="M-12,-3 a12,4 0 0 0 24,0"/>
+  </g>
+  <!-- 7. ESP32 -->
+  <g stroke="#111111" stroke-width="1.8" fill="none" transform="translate(908,661)">
+    <rect x="-10" y="-14" width="20" height="28" rx="3"/>
+    <rect x="-5" y="-6" width="10" height="12" rx="2" fill="#111111"/>
+    <path d="M-10,-9 h-4 M-10,-2 h-4 M-10,5 h-4 M10,-9 h4 M10,-2 h4 M10,5 h4"/>
+  </g>
+  <!-- 8. alerta / acuse -->
+  <g stroke="#111111" stroke-width="1.8" fill="none" stroke-linejoin="round" transform="translate(1037,661)">
+    <path d="M0,-13 a10,10 0 0 1 10,10 c0,7 3,9 4,10 H-14 c1,-1 4,-3 4,-10 a10,10 0 0 1 10,-10 Z"/>
+    <path d="M-3,12 a3,3 0 0 0 6,0"/>
+  </g>
+  <!-- 9. dashboard -->
+  <g stroke="#111111" stroke-width="1.8" fill="none" transform="translate(1166,661)">
+    <rect x="-14" y="-12" width="28" height="19" rx="3"/>
+    <path d="M0,7 v5 M-7,12 h14"/>
+    <path d="M-8,0 v-5 M-3,0 v-9 M2,0 v-7" stroke-width="2.2" stroke-linecap="round"/>
+  </g>
+
+  <!-- flechas de la tira -->
+  <g stroke="#111111" stroke-width="1.8" fill="none" marker-end="url(#aSolid)">
+    <path d="M172,661 H204"/>
+    <path d="M301,661 H333"/>
+    <path d="M430,661 H462"/>
+    <path d="M559,661 H591"/>
+    <path d="M688,661 H720"/>
+    <path d="M817,661 H849"/>
+    <path d="M946,661 H978"/>
+    <path d="M1075,661 H1107"/>
+  </g>
+
+  <g font-size="8.5" fill="#6b7280" text-anchor="middle">
+    <text x="134" y="700">Estudiante</text>
+    <text x="263" y="700">Cámara IP</text>
+    <text x="392" y="700">Detección</text>
+    <text x="521" y="700">ArcFace</text>
+    <text x="650" y="700">FastAPI</text>
+    <text x="779" y="700">PostgreSQL</text>
+    <text x="908" y="700">ESP32</text>
+    <text x="1037" y="700">LED / buzzer</text>
+    <text x="1166" y="700">Dashboard</text>
+  </g>
+
+  <text x="40" y="742" font-size="9" fill="#9ca3af">Arquitectura lógica implementada. Sin Docker, Redis, Celery, Alembic ni pgvector (decisión de alcance, PLAN §7).</text>
+</svg>

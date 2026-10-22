@@ -72,6 +72,12 @@ export const routes: Routes = [
           import('./features/attendance/attendance').then((m) => m.Attendance),
         data: { title: 'Asistencias' },
       },
+      {
+        path: 'profile',
+        loadComponent: () =>
+          import('./features/profile/profile/profile').then((m) => m.ProfilePage),
+        data: { title: 'Mi perfil' },
+      },
 
       {
         path: 'schedule',

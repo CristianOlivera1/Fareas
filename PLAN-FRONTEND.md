@@ -14,6 +14,7 @@
 | ✅ Hecho | Detalle |
 |---|---|
 | Login completo RF-11/RF-12 | `features/auth/login`, `recover-password`, `change-password` + guards (`authGuard`, `loginGuard`, `mustChangePasswordGuard`) |
+| Mi perfil con OTP (2026-10-22) | `features/profile` → cambio guiado de 3 pasos (clave actual → código al correo → nueva clave), contador de reenvío y persistencia del token nuevo |
 | AuthService | signals `currentUser/isAuthenticated/isAdmin/isDocente/mustChangePassword`, rate-limit cliente, sin refresh tokens (coherente backend) |
 | Interceptor 401 | `core/interceptors/auth.ts` → limpia sesión y manda a `/login?reason=session_expired` |
 | Layout admin | `layouts/admin` con Sidebar + Header funcionales (menú PLANO: Dashboard, Asistencias) |
@@ -275,6 +276,34 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 - **Entregable:** el estudiante entra con su cuenta del BD (código o correo), ve SU historial
   y sus alertas DPI siguen llegando por correo (RF-24) sin cambio en el backend.
 
+### F3c - "Mi perfil": cambio de contraseña con OTP (2026-10-22) - **✅ LISTO**
+> El backend ya expone `/auth/change-password/otp` → `/otp/verify` →
+> `/change-password` (PLAN-BACKEND, Bloque 3b). La UI mantiene el estilo del
+> sistema: tarjeta blanca `rounded-2xl border-gray-100`, azul primario, iconos
+> Material Symbols, `app-ui-input`/`app-ui-button`/`app-ui-alert`.
+- [x] **Paso 1 - Identidad:** contraseña actual + botón "Enviar código". Muestra
+  un aviso de que el código llegará al correo institucional.
+- [x] **Paso 2 - Código:** correo **enmascarado**, input de 6 dígitos
+  (`inputmode=numeric`, `maxlength=6`, `autocomplete=one-time-code`, solo dígitos
+  al pegar), botón "Verificar código", reenvío con **contador de 60 s** y enlace
+  "Usar otra contraseña actual".
+- [x] **Paso 3 - Nueva clave:** nueva contraseña + confirmación (mín. 8), valida
+  que coincidan y que no sea igual a la actual; botón "Actualizar contraseña".
+- [x] Barra de progreso + `aria-current="step"`, `aria-live="polite"` para
+  errores/éxito, foco automático al cambiar de paso, `aria-invalid` en el input,
+  y `motion-reduce` en transiciones.
+- [x] Manejo de errores del backend: 400 (clave/código), 429 (cooldown o intentos
+  agotados → vuelve al paso 1), OTP vencido (vuelve al paso 2 para reenviar).
+- [x] Al éxito: alerta "Contraseña actualizada", formulario limpio y vuelta al
+  paso 1. `AuthService.changePassword` guarda el `access_token` nuevo porque
+  `token_version` invalidó el anterior.
+- [x] Spec `profile.spec.ts`: recorre los 3 pasos con `HttpTestingController` y
+  verifica cuerpos de petición, correo enmascarado, transición y éxito.
+- **Archivos:** `features/profile/profile/profile.{ts,html,spec.ts}`,
+  `core/services/auth/auth.ts`, `core/models/user.ts`,
+  `shared/components/ui-input/ui-input.{ts,html}`.
+- **Verificación:** `npm run build` OK y `npm test -- --watch=false` OK.
+
 ### F4 - Enrolamiento facial (½-1 día) - RF-04, RF-20
 - [ ] Página `/faces`: buscar estudiante → `GET /students/{id}/faces` muestra estado actual
   (enrolado sí/no, foto, fecha); flujo de captura: **webcam** (`navigator.mediaDevices.getUserMedia`,
@@ -485,7 +514,7 @@ void loop() {
 
 | Endpoint | Lo usa (pantalla) | Rol |
 |---|---|---|
-| `POST /auth/login` · `GET /auth/me` · `POST /auth/change-password` · `/auth/recover/*` | Login/recuperación (YA) | todos |
+| `POST /auth/login` · `GET /auth/me` · `POST /auth/change-password` · `/auth/change-password/otp` + `/otp/verify` · `/auth/recover/*` | Login/recuperación/Mi perfil (YA) | todos |
 | `GET/POST /rooms` · `PATCH /rooms/{id}` | Aulas (F2) | A admin · L docente |
 | `GET/POST /devices` · `PATCH /devices/{id}` · `GET /devices/status` | Dispositivos + Monitoreo RF-35 (F2/F5) | A admin · status público |
 | `GET/POST /teachers` · `GET/POST /students` · `GET/PATCH /accounts/{id}` · `POST /accounts/{id}/send-temp-password` | Catálogo de personas (F2) | A admin · L docente |

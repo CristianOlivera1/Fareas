@@ -117,7 +117,7 @@ async def test_sessions_today(client, admin_headers, db_session, escenario):
     sesion, _ = await resolver_sesion(db_session, esc["aula_id"], now=h(esc["lunes"], "08:15"))
     await db_session.commit()
     assert sesion is not None
-    from datetime import timezone, timedelta
+    from datetime import timedelta, timezone
 
     peru_hoy = datetime.now(timezone(timedelta(hours=-5))).date()
     if sesion.session_date != peru_hoy:

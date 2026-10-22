@@ -30,6 +30,25 @@ export interface ChangePasswordRequest {
   readonly new_password: string;
 }
 
+export interface ChangePasswordOtpRequest {
+  readonly current_password: string;
+}
+
+export interface ChangePasswordOtpResponse {
+  readonly message: string;
+  readonly email: string;
+  readonly expires_in: number;
+  readonly resend_in: number;
+}
+
+export interface VerifyChangePasswordOtpRequest {
+  readonly code: string;
+}
+
+export interface ChangePasswordResponse extends MessageResponse {
+  readonly access_token?: string;
+}
+
 export interface RecoverRequest {
   readonly email: string;
 }
