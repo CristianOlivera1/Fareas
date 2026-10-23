@@ -20,30 +20,23 @@ import { CatalogApi } from '../../../core/services/catalog-api';
 import { CalendarApi } from '../../../core/services/calendar-api';
 import { extractDetail } from '../../../shared/utils/api-error';
 import { CYCLES, toRoman } from '../../../shared/utils/cycles';
-import {
+import type {
   ScheduleImportPreview,
   ScheduleImportResult,
   ScheduleImportRow,
 } from '../../../core/models/imports';
+import { LECTURE_WEEKDAYS } from '../../../shared/utils/weekdays';
+import { formatTime } from '../../../shared/utils/schedule-hours';
+import {
+  groupScheduleImportRows,
+  scheduleImportRowIssues,
+} from '../../../shared/utils/schedule-import';
+import type { ScheduleImportGroup } from '../../../shared/utils/schedule-import';
 
 interface Option<T> {
   readonly label: string;
   readonly value: T;
 }
-
-interface ImportGroup {
-  readonly code: string;
-  readonly name: string;
-  readonly rows: ScheduleImportRow[];
-}
-
-const DAYS: Option<number>[] = [
-  { label: 'Lunes', value: 1 },
-  { label: 'Martes', value: 2 },
-  { label: 'Miércoles', value: 3 },
-  { label: 'Jueves', value: 4 },
-  { label: 'Viernes', value: 5 },
-];
 
 const STEPS = [
   { number: 1, label: 'Archivo y contexto' },
@@ -66,7 +59,7 @@ export class ScheduleImportPage {
   private readonly toast = inject(MessageService);
 
   readonly steps = STEPS;
-  readonly days = DAYS;
+  readonly weekdays = LECTURE_WEEKDAYS;
   readonly roman = toRoman;
   readonly cycleOptions: Option<number>[] = CYCLES.map((cycle) => ({
     label: `Ciclo ${toRoman(cycle)}`,
@@ -101,34 +94,17 @@ export class ScheduleImportPage {
   );
   readonly canConfirm = computed(() => {
     if (this.rows().length === 0) return false;
-    if (this.defaultTeacherId() === null || this.defaultRoomId() === null) return false;
-    return this.rows().every((row) => this.rowIssues(row).length === 0);
+    return this.rows().every(
+      (row) => this.rowIssues(row).length === 0 && !this.pendingSuggestion(row),
+    );
   });
   readonly reviewCount = computed(() => this.rows().filter((row) => this.needsReview(row)).length);
   readonly filteredRows = computed(() =>
     this.onlyReview() ? this.rows().filter((row) => this.needsReview(row)) : this.rows(),
   );
-  readonly groups = computed<ImportGroup[]>(() => {
-    const grouped = new Map<string, ScheduleImportRow[]>();
-    const sorted = [...this.filteredRows()].sort(
-      (a, b) =>
-        a.course_code.localeCompare(b.course_code) ||
-        a.group_code.localeCompare(b.group_code) ||
-        a.weekday - b.weekday ||
-        a.start_time.localeCompare(b.start_time),
-    );
-    for (const row of sorted) {
-      const code = row.course_code.trim().toUpperCase() || 'SIN CURSO';
-      const rows = grouped.get(code) ?? [];
-      rows.push(row);
-      grouped.set(code, rows);
-    }
-    return [...grouped.entries()].map(([code, rows]) => ({
-      code,
-      name: rows.find((row) => row.course_name.trim())?.course_name.trim() ?? 'Curso sin nombre',
-      rows,
-    }));
-  });
+  readonly groups = computed<ScheduleImportGroup[]>(() =>
+    groupScheduleImportRows(this.filteredRows()),
+  );
   readonly typeLabel = computed(() => this.documentLabel(this.preview()?.tipo));
 
   constructor() {
@@ -137,23 +113,34 @@ export class ScheduleImportPage {
 
   private async loadContext(): Promise<void> {
     try {
-      const [cfg, labels, teachers, rooms] = await Promise.all([
+      const [settings, semesterLabels, teacherPage, roomPage] = await Promise.all([
         this.calendar.settings().toPromise(),
         this.calendar.semesters().toPromise(),
         this.catalog.teachers({ page_size: 100 }).toPromise(),
         this.catalog.rooms({ page_size: 100 }).toPromise(),
       ]);
-      const current = cfg?.semester_label ?? null;
-      this.currentSemester.set(current);
-      this.semesters.set([...new Set([current ?? '', ...(labels ?? [])].filter(Boolean))]);
-      if (!this.semester()) this.semester.set(current ?? labels?.[0] ?? null);
-      this.hourFrom.set(cfg?.attendance_hour_start?.slice(0, 5) ?? '07:00');
-      this.hourTo.set(cfg?.attendance_hour_end?.slice(0, 5) ?? '20:00');
+      const currentSemester = settings?.semester_label ?? null;
+      this.currentSemester.set(currentSemester);
+      this.semesters.set(
+        [...new Set([currentSemester ?? '', ...(semesterLabels ?? [])])].filter(Boolean),
+      );
+      if (!this.semester()) {
+        this.semester.set(currentSemester ?? semesterLabels?.[0] ?? null);
+      }
+      this.hourFrom.set(
+        settings?.attendance_hour_start ? formatTime(settings.attendance_hour_start) : '07:00',
+      );
+      this.hourTo.set(
+        settings?.attendance_hour_end ? formatTime(settings.attendance_hour_end) : '20:00',
+      );
       this.teachers.set(
-        (teachers?.items ?? []).map((teacher) => ({ label: teacher.full_name, value: teacher.id })),
+        (teacherPage?.items ?? []).map((teacher) => ({
+          label: teacher.full_name,
+          value: teacher.id,
+        })),
       );
       this.rooms.set(
-        (rooms?.items ?? []).map((room) => ({ label: room.code, value: room.id })),
+        (roomPage?.items ?? []).map((room) => ({ label: room.code, value: room.id })),
       );
     } catch (err) {
       this.toast.add({
@@ -192,36 +179,40 @@ export class ScheduleImportPage {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const preview = await this.api.importSchedule(file).toPromise();
-      if (!preview) return;
-      this.preview.set(preview);
+      const importPreview = await this.api.importSchedule(file).toPromise();
+      if (!importPreview) return;
+      this.preview.set(importPreview);
       this.nextRow = 0;
       this.rows.set(
-        preview.bloques.map((block) => ({
+        importPreview.bloques.map((block) => ({
           key: this.newKey(),
           course_code: (block.course_code ?? '').toUpperCase(),
           course_name: block.course_name ?? '',
           group_code: (block.group_code ?? '').toUpperCase(),
+          teacher_id: block.teacher_id ?? null,
+          room_id: block.room_id ?? null,
+          teacher_name: block.teacher_name ?? null,
+          room_code: block.room_code ?? null,
+          course_suggestion: block.curso_sugerido ?? null,
+          suggestion_dismissed: false,
           weekday: block.weekday,
-          start_time: block.start_time.slice(0, 5),
-          end_time: block.end_time.slice(0, 5),
-          teacher_id: null,
-          room_id: null,
+          start_time: formatTime(block.start_time),
+          end_time: formatTime(block.end_time),
           confiable: block.confiable,
           nota: block.nota,
           linea: block.linea,
           pagina: block.pagina,
         })),
       );
-      this.onlyReview.set(preview.ambiguousos > 0);
+      this.onlyReview.set(importPreview.ambiguousos > 0);
       this.step.set(2);
       this.toast.add({
-        severity: preview.ambiguousos > 0 ? 'warn' : 'success',
-        summary: `${preview.total} bloque(s) detectado(s)`,
+        severity: importPreview.ambiguousos > 0 ? 'warn' : 'success',
+        summary: `${importPreview.total} bloque(s) detectado(s)`,
         detail:
-          preview.ambiguousos > 0
-            ? `${preview.ambiguousos} fila(s) necesitan revisión antes de guardar.`
-            : 'Revisa y asigna el docente y el aula de cada bloque.',
+          importPreview.ambiguousos > 0
+            ? `${importPreview.ambiguousos} fila(s) necesitan revisión antes de guardar.`
+            : 'Revisa los datos detectados; docente y aula son opcionales.',
         life: 4500,
       });
     } catch (err) {
@@ -249,7 +240,41 @@ export class ScheduleImportPage {
     const value = (event.target as HTMLInputElement).value
       .toUpperCase()
       .replace(/[^A-Z0-9_-]/g, '');
-    this.updateRow(key, field === 'course_code' ? { course_code: value } : { group_code: value });
+    this.updateRow(
+      key,
+      field === 'course_code'
+        ? { course_code: value, course_suggestion: null, suggestion_dismissed: true }
+        : { group_code: value },
+    );
+  }
+
+  pendingSuggestion(row: ScheduleImportRow): boolean {
+    return row.course_suggestion != null && !row.suggestion_dismissed;
+  }
+
+  applyCourseSuggestion(row: ScheduleImportRow): void {
+    const suggestion = row.course_suggestion;
+    if (!suggestion) return;
+    const original = row.course_code;
+    this.rows.update((rows) =>
+      rows.map((item) =>
+        item.course_code === original
+          ? {
+              ...item,
+              course_code: suggestion.code,
+              course_name: suggestion.name,
+              course_suggestion: null,
+              suggestion_dismissed: true,
+              confiable: true,
+              nota: null,
+            }
+          : item,
+      ),
+    );
+  }
+
+  dismissCourseSuggestion(row: ScheduleImportRow): void {
+    this.updateRow(row.key, { suggestion_dismissed: true });
   }
 
   onTextInput(key: string, event: Event): void {
@@ -274,6 +299,10 @@ export class ScheduleImportPage {
         end_time: '10:00',
         teacher_id: null,
         room_id: null,
+        teacher_name: null,
+        room_code: null,
+        course_suggestion: null,
+        suggestion_dismissed: true,
         confiable: false,
         nota: 'Fila añadida a mano',
         linea: '',
@@ -287,31 +316,16 @@ export class ScheduleImportPage {
   }
 
   rowIssues(row: ScheduleImportRow): string[] {
-    const issues: string[] = [];
-    const code = row.course_code.trim();
-    const group = row.group_code.trim();
-    if (code.length < 3 || code.length > 20) issues.push('Código de curso de 3 a 20 caracteres');
-    if (group.length < 1 || group.length > 5) issues.push('Grupo de 1 a 5 caracteres');
-    if (!Number.isInteger(row.weekday) || row.weekday < 1 || row.weekday > 5) {
-      issues.push('Día de lunes a viernes');
-    }
-    const start = this.minutes(row.start_time);
-    const end = this.minutes(row.end_time);
-    const from = this.minutes(this.hourFrom());
-    const to = this.minutes(this.hourTo());
-    if (start === null || end === null) {
-      issues.push('Hora de inicio y fin válidas');
-    } else {
-      if (start >= end) issues.push('La hora de inicio debe ser menor que la de fin');
-      if (end - start > 120) issues.push('El bloque no puede durar más de 2 horas');
-      if (from !== null && start < from) issues.push(`La clase empieza antes de ${this.hourFrom()}`);
-      if (to !== null && end > to) issues.push(`La clase termina después de ${this.hourTo()}`);
-    }
-    return issues;
+    return scheduleImportRowIssues(row, this.hourFrom(), this.hourTo());
   }
 
   needsReview(row: ScheduleImportRow): boolean {
-    return !row.confiable || row.nota !== null || this.rowIssues(row).length > 0;
+    return (
+      !row.confiable ||
+      row.nota !== null ||
+      this.rowIssues(row).length > 0 ||
+      this.pendingSuggestion(row)
+    );
   }
 
   groupNeedsReview(group: ImportGroup): boolean {
@@ -324,10 +338,6 @@ export class ScheduleImportPage {
 
   issuesText(row: ScheduleImportRow): string {
     return this.rowIssues(row).join(' · ');
-  }
-
-  dayLabel(weekday: number): string {
-    return DAYS.find((day) => day.value === weekday)?.label ?? `Día ${weekday}`;
   }
 
   goToStep(step: number): void {
@@ -343,11 +353,11 @@ export class ScheduleImportPage {
     const roomId = this.defaultRoomId();
     const cycle = this.cycle();
     const semester = this.semester();
-    if (teacherId === null || roomId === null || cycle === null || semester === null) {
+    if (cycle === null || semester === null) {
       this.toast.add({
         severity: 'warn',
         summary: 'Completa la importación',
-        detail: 'Indica el docente y el aula por defecto, además del periodo y el ciclo.',
+        detail: 'Indica el periodo y el ciclo antes de confirmar.',
         life: 4000,
       });
       return;
@@ -363,7 +373,7 @@ export class ScheduleImportPage {
     }
     this.confirming.set(true);
     try {
-      const result = await this.api
+      const importResult = await this.api
         .confirmScheduleImport({
           teacher_id: teacherId,
           room_id: roomId,
@@ -374,20 +384,20 @@ export class ScheduleImportPage {
             course_name: row.course_name.trim() || null,
             group_code: row.group_code.trim().toUpperCase(),
             weekday: row.weekday,
-            start_time: row.start_time.slice(0, 5),
-            end_time: row.end_time.slice(0, 5),
+            start_time: formatTime(row.start_time),
+            end_time: formatTime(row.end_time),
             teacher_id: row.teacher_id,
             room_id: row.room_id,
           })),
         })
         .toPromise();
-      if (!result) return;
-      this.result.set(result);
+      if (!importResult) return;
+      this.result.set(importResult);
       this.step.set(3);
       this.toast.add({
         severity: 'success',
         summary: 'Horario importado',
-        detail: `${result.bloques_creados} bloque(s) creados en ${result.grupos_creados.length} grupo(s).`,
+        detail: `${importResult.bloques_creados} bloque(s) creados en ${importResult.grupos_creados.length} grupo(s).`,
         life: 4500,
       });
     } catch (err) {
@@ -428,14 +438,5 @@ export class ScheduleImportPage {
   private newKey(): string {
     this.nextRow += 1;
     return `block-${this.nextRow}`;
-  }
-
-  private minutes(value: string): number | null {
-    const match = /^(\d{2}):(\d{2})/.exec(value);
-    if (!match) return null;
-    const hours = Number(match[1]);
-    const minutes = Number(match[2]);
-    if (hours > 23 || minutes > 59) return null;
-    return hours * 60 + minutes;
   }
 }

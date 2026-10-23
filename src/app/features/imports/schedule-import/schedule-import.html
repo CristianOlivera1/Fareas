@@ -89,7 +89,7 @@
         <div>
           <h2 class="text-sm font-semibold text-gray-900">2. Revisa los bloques detectados</h2>
           <p class="mt-0.5 text-sm text-gray-500">
-            {{ typeLabel() }} · {{ p.paginas }} página(s) · asigna docente y aula antes de confirmar.
+            {{ typeLabel() }} · {{ p.paginas }} página(s) · completa o corrige lo que haga falta.
           </p>
         </div>
         <div class="flex flex-wrap gap-2 text-xs">
@@ -113,16 +113,18 @@
           Solo revisar ({{ reviewCount() }})
         </label>
         <label class="block space-y-1">
-          <span class="text-xs font-medium text-gray-500">Docente por defecto</span>
+          <span class="text-xs font-medium text-gray-500">Docente por defecto (opcional)</span>
           <p-select class="w-52" appendTo="body" [options]="teachers()" optionLabel="label"
-            optionValue="value" [filter]="true" filterBy="label" placeholder="Selecciona"
-            [ngModel]="defaultTeacherId()" (ngModelChange)="defaultTeacherId.set($event)" />
+            optionValue="value" [filter]="true" filterBy="label" placeholder="Sin asignar"
+            [showClear]="true" [ngModel]="defaultTeacherId()"
+            (ngModelChange)="defaultTeacherId.set($event)" />
         </label>
         <label class="block space-y-1">
-          <span class="text-xs font-medium text-gray-500">Aula por defecto</span>
+          <span class="text-xs font-medium text-gray-500">Aula por defecto (opcional)</span>
           <p-select class="w-32" appendTo="body" [options]="rooms()" optionLabel="label"
-            optionValue="value" [filter]="true" filterBy="label" placeholder="Selecciona"
-            [ngModel]="defaultRoomId()" (ngModelChange)="defaultRoomId.set($event)" />
+            optionValue="value" [filter]="true" filterBy="label" placeholder="Sin asignar"
+            [showClear]="true" [ngModel]="defaultRoomId()"
+            (ngModelChange)="defaultRoomId.set($event)" />
         </label>
         <app-ui-button variant="ghost" size="sm" icon="material-symbols:add" (click)="addRow()">
           Añadir fila
@@ -130,8 +132,9 @@
       </div>
 
       <p class="mt-2 text-xs text-gray-400">
-        La fila puede sobrescribir el docente o el aula con sus propios selectores. Un grupo ya
-        existente conserva su docente y no se reasigna desde la importación.
+        El docente y el aula son opcionales: si no los eliges, el bloque se guarda como “Sin
+        asignar” y puedes completarlo luego desde el calendario. Un grupo ya existente conserva su
+        docente y no se reasigna desde la importación.
       </p>
 
       @if (groups().length === 0) {
@@ -187,7 +190,21 @@
                       <td class="px-2 py-2">
                         <input [value]="row.course_code" (input)="onCodeInput(row.key, $event, 'course_code')"
                           maxlength="20" aria-label="Código del curso"
-                          class="w-24 rounded-md border border-gray-300 px-2 py-1.5 font-mono text-xs uppercase focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+                          class="w-28 rounded-md border border-gray-300 px-2 py-1.5 font-mono text-xs uppercase focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+                        @if (pendingSuggestion(row) && row.course_suggestion; as s) {
+                          <div class="mt-1 flex flex-wrap items-center gap-1 text-[10px] leading-tight">
+                            <button type="button" class="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800 hover:bg-amber-200"
+                              [title]="s.motivo + ' (' + (s.score * 100).toFixed(0) + '%)'"
+                              (click)="applyCourseSuggestion(row)">
+                              ¿{{ s.code }}?
+                            </button>
+                            <button type="button" class="text-gray-400 hover:text-gray-700"
+                              title="Mantener el código escrito y crear o usar ese curso"
+                              (click)="dismissCourseSuggestion(row)">
+                              Es otro
+                            </button>
+                          </div>
+                        }
                       </td>
                       <td class="px-2 py-2">
                         <input [value]="row.course_name" (input)="onTextInput(row.key, $event)"
@@ -200,7 +217,7 @@
                           class="w-16 rounded-md border border-gray-300 px-2 py-1.5 text-xs uppercase focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
                       </td>
                       <td class="px-2 py-2">
-                        <p-select class="w-28" appendTo="body" [options]="days" optionLabel="label"
+                        <p-select class="w-28" appendTo="body" [options]="weekdays" optionLabel="label"
                           optionValue="value" [ngModel]="row.weekday"
                           (ngModelChange)="updateRow(row.key, { weekday: $event })" />
                       </td>
@@ -216,14 +233,15 @@
                       </td>
                       <td class="px-2 py-2">
                         <p-select class="w-44" appendTo="body" [options]="teachers()" optionLabel="label"
-                          optionValue="value" [filter]="true" filterBy="label" placeholder="Por defecto"
+                          optionValue="value" [filter]="true" filterBy="label"
+                          [placeholder]="row.teacher_name || 'Sin asignar'"
                           [showClear]="true" [ngModel]="row.teacher_id"
                           (ngModelChange)="updateRow(row.key, { teacher_id: $event })" />
                       </td>
                       <td class="px-2 py-2">
                         <p-select class="w-28" appendTo="body" [options]="rooms()" optionLabel="label"
-                          optionValue="value" placeholder="Por defecto" [showClear]="true"
-                          [ngModel]="row.room_id"
+                          optionValue="value" [placeholder]="row.room_code || 'Sin asignar'"
+                          [showClear]="true" [ngModel]="row.room_id"
                           (ngModelChange)="updateRow(row.key, { room_id: $event })" />
                       </td>
                       <td class="px-2 py-2">
@@ -238,6 +256,12 @@
                             [title]="row.nota ?? row.linea">
                             <iconify-icon icon="material-symbols:warning-outline" width="13"></iconify-icon>
                             Revisar
+                          </span>
+                        } @else if (pendingSuggestion(row)) {
+                          <span class="inline-flex max-w-32 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800"
+                            [title]="'¿Quisiste decir ' + row.course_suggestion?.code + '?'">
+                            <iconify-icon icon="material-symbols:help-outline" width="13"></iconify-icon>
+                            ¿Curso?
                           </span>
                         } @else {
                           <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700">
@@ -266,7 +290,7 @@
         <p class="text-xs text-gray-500">
           {{ rows().length }} fila(s) · {{ reviewCount() }} por revisar
           @if (!canConfirm()) {
-            <span class="text-red-600">· completa docente y aula por defecto</span>
+            <span class="text-red-600">· corrige las filas pendientes o resuelve las sugerencias</span>
           }
         </p>
         <div class="flex flex-wrap items-center gap-2">

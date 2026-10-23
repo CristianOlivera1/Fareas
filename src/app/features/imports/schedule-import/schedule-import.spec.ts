@@ -84,7 +84,9 @@ describe('ScheduleImportPage', () => {
 
     expect(component.step()).toBe(2);
     expect(component.rows().length).toBe(1);
-    expect(component.canConfirm()).toBe(false);
+    expect(component.rows()[0].teacher_id).toBeNull();
+    expect(component.rows()[0].room_id).toBeNull();
+    expect(component.canConfirm()).toBe(true);
 
     component.defaultTeacherId.set(3);
     component.defaultRoomId.set(7);
@@ -122,5 +124,59 @@ describe('ScheduleImportPage', () => {
 
     expect(component.step()).toBe(3);
     expect(component.result()?.bloques_creados).toBe(1);
+  });
+
+  it('resuelve una sugerencia de curso antes de confirmar', async () => {
+    component.onFile(new File(['horario'], 'horario.png', { type: 'image/png' }));
+    component.semester.set('2026-II');
+    component.cycle.set(9);
+
+    const reading = component.readSchedule();
+    const preview = httpMock.expectOne(`${API}/courses/import-pdf`);
+    preview.flush({
+      tipo: 'imagen',
+      paginas: 1,
+      total: 1,
+      confiables: 1,
+      ambiguousos: 0,
+      bloques: [
+        {
+          course_code: 'TSTUI9O1',
+          course_name: 'ALGEBRA LINEAL',
+          group_code: 'A',
+          teacher_name: 'Docente de Prueba',
+          teacher_id: 3,
+          room_code: 'LAB 305',
+          room_id: 7,
+          weekday: 1,
+          start_time: '07:00',
+          end_time: '09:00',
+          confiable: true,
+          nota: null,
+          linea: 'TSTUI9O1 ALGEBRA LINEAL GRUPO A LUNES 07:00 - 09:00',
+          pagina: 1,
+          confianza: 0.98,
+          curso_sugerido: {
+            id: 4,
+            code: 'TSTUI901',
+            name: 'ALGEBRA LINEAL',
+            cycle: 9,
+            score: 0.92,
+            motivo: 'código parecido',
+          },
+        },
+      ],
+    });
+    await reading;
+
+    expect(component.rows()[0].teacher_id).toBe(3);
+    expect(component.rows()[0].room_id).toBe(7);
+    expect(component.canConfirm()).toBe(false);
+    expect(component.pendingSuggestion(component.rows()[0])).toBe(true);
+
+    component.applyCourseSuggestion(component.rows()[0]);
+
+    expect(component.rows()[0].course_code).toBe('TSTUI901');
+    expect(component.canConfirm()).toBe(true);
   });
 });

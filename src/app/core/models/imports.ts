@@ -1,7 +1,21 @@
+export interface CourseSuggestion {
+  readonly id: number;
+  readonly code: string;
+  readonly name: string;
+  readonly cycle: number;
+  readonly score: number;
+  readonly motivo: string;
+}
+
 export interface ScheduleImportBlock {
   readonly course_code: string | null;
   readonly course_name: string | null;
   readonly group_code: string | null;
+  readonly teacher_name: string | null;
+  readonly room_code: string | null;
+  readonly teacher_id: number | null;
+  readonly room_id: number | null;
+  readonly curso_sugerido: CourseSuggestion | null;
   readonly weekday: number;
   readonly start_time: string;
   readonly end_time: string;
@@ -31,6 +45,10 @@ export interface ScheduleImportRow {
   end_time: string;
   teacher_id: number | null;
   room_id: number | null;
+  teacher_name: string | null;
+  room_code: string | null;
+  course_suggestion: CourseSuggestion | null;
+  suggestion_dismissed: boolean;
   confiable: boolean;
   nota: string | null;
   linea: string;
@@ -49,8 +67,8 @@ export interface ScheduleImportBlockIn {
 }
 
 export interface ScheduleImportConfirmIn {
-  readonly teacher_id: number;
-  readonly room_id: number;
+  readonly teacher_id: number | null;
+  readonly room_id: number | null;
   readonly cycle: number;
   readonly semester_label: string;
   readonly bloques: ScheduleImportBlockIn[];

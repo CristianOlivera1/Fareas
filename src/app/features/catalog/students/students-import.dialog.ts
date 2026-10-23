@@ -98,7 +98,7 @@ export class StudentsImportDialog {
         .toPromise();
       this.groupOptions.set(
         (groups ?? []).map((group) => ({
-          label: `${group.course_code} · Grupo ${group.group_code} — ${group.teacher_name}`,
+          label: `${group.course_code} · Grupo ${group.group_code} — ${group.teacher_name ?? 'Sin docente'}`,
           value: group.id,
         })),
       );

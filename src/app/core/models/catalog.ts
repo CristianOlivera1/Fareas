@@ -49,8 +49,8 @@ export interface Group {
   readonly course_code: string;
   readonly course_name: string;
   readonly group_code: string;
-  readonly teacher_id: number;
-  readonly teacher_name: string;
+  readonly teacher_id: number | null;
+  readonly teacher_name: string | null;
   readonly semester_label: string;
   readonly cycle: number;
   readonly capacity: number;
@@ -65,10 +65,10 @@ export interface ScheduleRow {
   readonly course_code: string;
   readonly course_name: string;
   readonly group_code: string;
-  readonly teacher_id: number;
-  readonly teacher_name: string;
-  readonly room_id: number;
-  readonly room_code: string;
+  readonly teacher_id: number | null;
+  readonly teacher_name: string | null;
+  readonly room_id: number | null;
+  readonly room_code: string | null;
   readonly semester_label: string;
   readonly cycle: number;
   readonly weekday: number;
@@ -79,8 +79,10 @@ export interface ScheduleRow {
 export interface Block {
   readonly id: number;
   readonly group_id: number;
-  readonly room_id: number;
-  readonly room_code: string;
+  readonly room_id: number | null;
+  readonly room_code: string | null;
+  readonly teacher_id: number | null;
+  readonly teacher_name: string | null;
   readonly weekday: number;
   readonly start_time: string;
   readonly end_time: string;

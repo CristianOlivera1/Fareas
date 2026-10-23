@@ -66,13 +66,25 @@ export class CoursesApi extends BaseApi {
   }
   createBlock(
     groupId: number,
-    body: { weekday: number; start_time: string; end_time: string; room_id: number },
+    body: {
+      weekday: number;
+      start_time: string;
+      end_time: string;
+      room_id: number | null;
+      teacher_id: number | null;
+    },
   ) {
     return this.post<Block>(`/groups/${groupId}/blocks`, body);
   }
   updateBlock(
     id: number,
-    body: { weekday?: number; start_time?: string; end_time?: string; room_id?: number },
+    body: {
+      weekday?: number;
+      start_time?: string;
+      end_time?: string;
+      room_id?: number | null;
+      teacher_id?: number | null;
+    },
   ) {
     return this.patch<Block>(`/blocks/${id}`, body);
   }
@@ -94,10 +106,10 @@ export class CoursesApi extends BaseApi {
   unenroll(groupId: number, studentId: number) {
     return this.delete<{ message: string }>(`/groups/${groupId}/students/${studentId}`);
   }
-  transfer(groupId: number, studentId: number, destinoGroupId: number) {
+  transfer(groupId: number, studentId: number, destinationGroupId: number) {
     return this.post<{ message: string }>(
       `/groups/${groupId}/students/${studentId}/transfer`,
-      { destino_group_id: destinoGroupId },
+      { destino_group_id: destinationGroupId },
     );
   }
 
