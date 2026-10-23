@@ -9,7 +9,7 @@
   ">
   <div class="relative flex items-center justify-between h-14 px-3 shrink-0 z-70">
     <div class="absolute bottom-0 left-6 right-0 h-px bg-gray-100"></div>
-    <a routerLink="/admin/dashboard" class="flex items-center min-w-0 z-80 ">
+    <a [routerLink]="homeRoute()" class="flex items-center min-w-0 z-80 ">
       @if (isOpen()) {
       <span class="text-lg font-semibold tracking-tight text-gray-900 truncate">
         Fareas<span class="text-(--fareas-primary)">.</span>
@@ -129,10 +129,6 @@
       <a routerLink="/admin/profile" (click)="closeUserMenu()"
         class="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
         <iconify-icon icon="material-symbols:person-outline" width="16" /> Mi perfil
-      </a>
-      <a routerLink="/admin/dashboard" (click)="closeUserMenu()"
-        class="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
-        <iconify-icon icon="material-symbols:settings-outline" width="16" /> Configuración
       </a>
       <div class="border-t border-gray-100 my-1"></div>
       <button (click)="logout()"

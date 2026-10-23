@@ -9,6 +9,7 @@ import {
 import { Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth/auth';
+import { ROLE_HOME } from '../../../core/constants/nav';
 import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
 
@@ -88,7 +89,8 @@ export class ChangePassword {
     this.auth.changePassword({ current_password, new_password }).subscribe({
       next: () => {
         this.isSubmitting.set(false);
-        void this.router.navigate(['/admin/dashboard']);
+        const role = this.auth.currentUser()?.role;
+        void this.router.navigateByUrl(role ? ROLE_HOME[role] : '/login');
       },
       error: (err: HttpErrorResponse) => {
         this.isSubmitting.set(false);

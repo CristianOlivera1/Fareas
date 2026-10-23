@@ -7,7 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
 
 from app.core.security import hash_password, hash_refresh_token
 from app.services import otp
-from app.tables import AppUser, AuditLog, RefreshToken
+from app.tables import AppUser, AuditLog, PasswordOtp, RefreshToken
 
 pytestmark = pytest.mark.asyncio
 
@@ -204,9 +204,18 @@ async def test_password_reset_revokes_refresh_tokens(
 
     r = await client.post(f"{API}/recover", json={"email": email})
     assert r.status_code == 200
-    key = (user_id, otp.OtpPurpose.RECOVER)
-    assert key in otp._store
-    otp._store[key].code_hash = hash_password("123456")
+    row = (
+        await db_session.exec(
+            select(PasswordOtp).where(
+                PasswordOtp.user_id == user_id,
+                PasswordOtp.purpose == str(otp.OtpPurpose.RECOVER),
+            )
+        )
+    ).first()
+    assert row is not None
+    row.code_hash = hash_password("123456")
+    db_session.add(row)
+    await db_session.commit()
 
     assert (
         await client.post(

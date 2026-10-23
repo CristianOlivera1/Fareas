@@ -15,8 +15,8 @@
 |---|---|
 | Login completo RF-11/RF-12 | `features/auth/login`, `recover-password`, `change-password` + guards (`authGuard`, `loginGuard`, `mustChangePasswordGuard`) |
 | Mi perfil con OTP (2026-10-22) | `features/profile` → cambio guiado de 3 pasos (clave actual → código al correo → nueva clave), contador de reenvío y persistencia del token nuevo |
-| AuthService | signals `currentUser/isAuthenticated/isAdmin/isDocente/mustChangePassword`, rate-limit cliente, sin refresh tokens (coherente backend) |
-| Interceptor 401 | `core/interceptors/auth.ts` → limpia sesión y manda a `/login?reason=session_expired` |
+| AuthService | signals `currentUser/isAuthenticated/isAdmin/isDocente/mustChangePassword`, rate-limit cliente, refresh tokens de 30 días (`/auth/refresh`) |
+| Interceptor | `core/interceptors/auth.ts` → ante 401 renueva con el refresh token y reintenta; si falla, limpia sesión y manda a `/login?reason=session_expired`; un 403 `must_change_password` lleva a `/auth/change-password` |
 | Layout admin | `layouts/admin` con Sidebar + Header funcionales (menú PLANO: Dashboard, Asistencias) |
 | Dashboard mock | 4 tarjetas, activity-feed con `setInterval`, hourly-chart, distribution-chart, student-list (todos con MOCK data) |
 | Asistencia mock | `features/attendance` con tabla estática |
@@ -24,7 +24,8 @@
 | Horarios por ciclo (F2b, 2026-10-22) | Cursos con ciclo I–X, filtro por ciclo y pestañas por ciclo en `/schedule`; el grupo hereda el ciclo del curso y los choques siguen siendo del periodo |
 | Importación OCR (F6b/F6c, 2026-10-23) | `/imports` importa horarios (PDF/foto, 3 pasos, tabla editable) y `/students` incorpora «Importar nómina» (diálogo 3 pasos, correo generado y matrícula opcional); ambos consumen los endpoints reales y son solo admin |
 | Host global de toasts (2026-10-12) | `app.html` incluye `<p-toast>`; sin él, TODOS los `toast.add()` de la app (errores 409 incluidos) quedaban invisibles |
-| Build y tests OK | `ng build --configuration development` pasa; `dist/fareas` generado. `npm test` 7/7 (2026-10-23) |
+| Enrolamiento facial (F4, 2026-10-23) | `/faces` busca estudiantes, muestra estado y foto firmada, captura 3–5 fotos por webcam o archivos, exige consentimiento y permite eliminar el rostro; `/students` enlaza «Enrolar rostro» |
+| Build y tests OK | `ng build` pasa; `dist/fareas` generado. `ng test` 11/11 archivos, 47 pruebas (2026-10-23) |
 
 **Stack fijo:** Angular 21 (standalone + signals + OnPush), PrimeNG 20, Tailwind 4,
 Chart.js 4, material-symbols/akar-icons ya en uso.
@@ -63,13 +64,16 @@ Chart.js 4, material-symbols/akar-icons ya en uso.
 ## 2. Estructura de rutas objetivo (Bloque F1 las crea; F2-F6 las llenan)
 
 ```
-/admin                    → AdminLayout (authGuard + roleGuard admin|docente)
+/admin                    → AdminLayout (authGuard) + `navGuard(ruta)` por hijo; roles desde `core/constants/nav.ts`
+  /me                     → Mis asistencias + DPI (F3b)    [estudiante]
+  /profile                → Mi perfil (cambio de clave con OTP) [todos los roles]
+  /schedule               → Horario general (F2b)         [admin CRUD; docente lectura]
   /dashboard              → Dashboard REAL (F5)          [admin, docente]
   /attendance             → Asistencias REAL (F3)        [admin, docente]
   /courses                → Cursos y grupos + bloques (F2) [admin CRUD; docente lectura]
   /enrollments            → Matrículas por grupo (F2)     [admin CRUD; docente lectura]
   /teachers               → Docentes (F2)                 [admin]
-  /students               → Estudiantes + estado facial + importar nómina OCR (F2/F4/F6c) [admin; docente lee]
+  /students               → Estudiantes + estado facial + importar nómina OCR (F2/F4/F6c) [admin; docente lee solo los matriculados en sus grupos]
   /rooms                  → Aulas (F2)                    [admin]
   /devices                → Dispositivos + monitoreo RF-35 (F2/F5) [admin]
   /calendar/holidays      → Feriados (F3)                 [admin CRUD; docente lee]
@@ -80,17 +84,18 @@ Chart.js 4, material-symbols/akar-icons ya en uso.
   /reports                → Reportes Excel/PDF (F6)       [admin, docente]
   /audit                  → Bitácora RF-32 (F6)           [admin]
 /login  /auth/recover  /auth/change-password   → (ya existen, solo retoques visuales)
+**                        → NotFoundPage (404), sin redirigir a /login
 ```
 
-Guard nuevo en F1: `roleGuard` leyendo `data: { roles: ['admin'] }` de la ruta;
-el menú del sidebar filtra con la MISMA matriz (una sola fuente de verdad:
-`core/constants/nav.ts`).
+Fuente única de roles: `navGuard(ruta)` deriva los roles de `NAV` (`core/constants/nav.ts`)
+y el sidebar filtra con la misma matriz. Un rol rechazado vuelve a `ROLE_HOME[rol]` con aviso.
 
 ## 3. Menú del sidebar (agrupado, con roles)
 
 Fuente única: `core/constants/nav.ts` → `NavItem { label, route, icon, roles, children? }`.
 El sidebar actual (`layouts/admin/components/sidebar`) se extiende: grupos colapsables
-(uno abierto a la vez), badge opcional (p. ej. alertas DPI en Dashboard), mismo estilo.
+(todos abiertos por defecto y plegables a mano), badge opcional (p. ej. alertas DPI en Dashboard), mismo estilo.
+«Mi perfil» vive en el menú de usuario del pie del sidebar para todos los roles.
 
 **ADMIN ve:**
 
@@ -98,7 +103,8 @@ El sidebar actual (`layouts/admin/components/sidebar`) se extiende: grupos colap
 |---|---|---|
 | — | Dashboard (`/dashboard`) | `material-symbols:dashboard-outline` |
 | — | Asistencias (`/attendance`) | `material-symbols:fact-check-outline` |
-| Académico ▾ | Cursos y grupos (`/courses`) | `material-symbols:menu-book-outline` |
+| Académico ▾ | Cursos y grupos (`/courses`) | `material-symbols:auto-stories-outline` |
+| | Horario general (`/schedule`) | `material-symbols:calendar-view-week` |
 | | Matrículas (`/enrollments`) | `material-symbols:how-to-reg-outline` |
 | Catálogo ▾ | Docentes (`/teachers`) | `material-symbols:person-outline` |
 | | Estudiantes (`/students`) | `material-symbols:school-outline` |
@@ -112,8 +118,12 @@ El sidebar actual (`layouts/admin/components/sidebar`) se extiende: grupos colap
 | | Reportes (`/reports`) | `material-symbols:description-outline` |
 | | Bitácora (`/audit`) | `material-symbols:history-toggle-off-outline` |
 
-**DOCENTE ve:** Dashboard · Asistencias · Académico (Cursos, Matrículas — solo lectura)
-· Calendario (Feriados, Justificaciones — lectura) · Herramientas (Reportes).
+**DOCENTE ve:** Dashboard · Asistencias · Académico (Cursos, Horario general, Matrículas — solo lectura)
+· Catálogo (solo «Estudiantes», lectura y únicamente los matriculados en sus grupos; el backend filtra por
+privacidad de DNI/WhatsApp, Ley 29733) · Calendario (Feriados, Justificaciones — lectura) · Herramientas (Reportes).
+No accede a Enrolamiento facial (biometría: solo admin).
+
+**ESTUDIANTE ve:** únicamente «Mis asistencias» (`/me`) y «Mi perfil»; cualquier otra URL de `/admin` lo devuelve a `/admin/me` con aviso.
 Los botones de creación/edición se ocultan con `@if (auth.isAdmin())` en las vistas
 compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 
@@ -290,7 +300,8 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   y el buscador no se renderizaba; y Justificaciones pedía `page_size=200` cuando el backend
   limita a 100 (422 → el selector de cursos quedaba vacío).
 
-### F3b - "Mis asistencias" del ESTUDIANTE (nuevo, ½ día) - RF-22/RF-24 con vista propia
+### F3b - "Mis asistencias" del ESTUDIANTE (½ día) - RF-22/RF-24 - **✅ LISTO (2026-10-23)**
+> Implementado en `/admin/me` (reutiliza el layout con sidebar y cierre de sesión): tarjetas de inasistencias por curso desde `GET /attendance/me/dpi` (porcentaje, barra, nivel En regla/En riesgo/Límite superado, tardanzas, justificadas y faltas restantes), filtro de fechas `desde/hasta` y tabla de `GET /attendance/me` con badge propio para la falta justificada, método y motivo de rectificación. Archivos: `features/my-attendance/*` (con spec) y `MyAttendance/MyDpi` en `attendance-api.ts`. Los puntos de abajo son el diseño original.
 > Decisión 1 revisada: el estudiante SÍ entra a la app. El backend YA expone
 > `GET /attendance/me` (Bloque 6b del PLAN-BACKEND: solo rol estudiante, filtros
 > ?desde=&hasta=, devuelve curso, grupo, estado, marked_at, method y correct_reason).
@@ -335,24 +346,25 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   `shared/components/ui-input/ui-input.{ts,html}`.
 - **Verificación:** `npm run build` OK y `npm test -- --watch=false` OK.
 
-### F4 - Enrolamiento facial (½-1 día) - RF-04, RF-20
-- [ ] Página `/faces`: buscar estudiante → `GET /students/{id}/faces` muestra estado actual
+### F4 - Enrolamiento facial (½-1 día) - RF-04, RF-20 - **✅ LISTO (2026-10-23)**
+- [x] Página `/faces`: buscar estudiante → `GET /students/{id}/faces` muestra estado actual
   (enrolado sí/no, foto, fecha); flujo de captura: **webcam** (`navigator.mediaDevices.getUserMedia`,
   botón capturar ×N) O **subir archivos** (input multiple); client-side: comprimir a JPEG ~640px,
   convertir a base64 → `POST /students/{id}/faces` con `{photos: [...], consent: true}`.
   **Bloque 11 (R13, Ley 29733):** obligatorio un **checkbox de consentimiento** antes de enviar
   (sin `consent: true` el backend responde 422) y acción "Eliminar rostro" (admin) →
   `DELETE /students/{id}/faces` con dialog de confirmación (borra embeddings y el objeto local/R2).
-- [ ] Manejo de errores del validador facial: 1 rostro por foto, consistencia ≥0.55,
+- [x] Manejo de errores del validador facial: 1 rostro por foto, consistencia ≥0.55,
   duplicado → mensajes claros del backend en toasts.
-- [ ] En `/students`: badge de enrolamiento + acción directa "Enrolar rostro".
+- [x] En `/students`: badge de enrolamiento + acción directa "Enrolar rostro".
+- **Verificación (2026-10-23):** `ng build` OK y `ng test` 11/11 archivos. La captura por webcam quedó implementada, pero no se probó con cámara física (el entorno no expone una); el flujo por archivos y el estado se validaron contra el backend real con un alumno temporal (creado y eliminado después).
 - **Entregable:** enrolar a un alumno desde la webcam y verlo identificado en el video demo
   (`scripts/simulate_camera.py`) sin tocar la BD a mano.
 
 ### F4.1 - Archivos en Cloudflare R2 (transversal, par con Bloque 13)
 > El backend sube y firma; Angular **no** recibe credenciales R2 ni usa el SDK.
-- [ ] **Enrolamiento:** mismas 3–5 fotos base64; `photo_url` sigue siendo el campo que consume
-  `<img>`, ahora con URL firmada de 900 s. Si expira, recargar el estado (no cachear la URL).
+- [x] **Enrolamiento:** mismas 3–5 fotos base64; `photo_url` sigue siendo el campo que consume
+  `<img>`, ahora con URL firmada de 900 s. Si expira, recargar el estado (no cachear la URL). La UI ya lo consume así.
 - [ ] **Justificaciones:** input PDF/JPG/PNG ≤10 MB; después de crear la justificación,
   `POST /justifications/{id}/document` (multipart); "Ver documento" usa la URL firmada;
   eliminar la justificación borra el objeto. Se mantiene el campo URL externo por compatibilidad.
@@ -360,7 +372,12 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 - [ ] **F8:** ninguna variable `R2_*` en Angular; el frontend solo conoce `apiUrl`.
 - **Entregable:** enrolar y adjuntar un documento desde la UI sin que el navegador vea credenciales del bucket.
 
-### F5 - Dashboard en vivo (1 día) - RF-13, RF-35, PLAN §5
+### F5 - Dashboard en vivo (2026-10-23) - **✅ LISTO (falta verificar con cámara real en F7)**
+> Tarjetas, banner y lista se refrescan cada 30 s (`DashboardApi.summary`, `AttendanceApi.today`); gráficos desde `GET /stats/hourly` (Hoy/Ayer, total por hora) y `GET /stats/distribution`; la tarjeta «Cámaras activas» enlaza a `/devices` solo para admin; banner ámbar con `sessions_to_review` que lleva a `/attendance`.
+> Actividad en tiempo real: servicio `core/services/live-feed.ts` (un `EventSource` por componente, token por query, reconexión con backoff 1→30 s y token renovado, estado En vivo / Reconectando) y feed que muestra el último veredicto (`asistio`, `tardanza`, `denegado`, `desconocido`, `sin_registro`; ignora `sin_rostro`), con nombre/código resueltos por `GET /accounts/{id}` y aula por `GET /rooms`. Specs: `live-feed.spec.ts`.
+> **Limitación del backend detectada:** `camaras_activas` cuenta las cámaras con `is_active`, no las que están en línea (`streams_caidos` siempre 0). El SSE solo trae ids y similitud, sin nombre ni curso; el frontend los completa con peticiones extra.
+
+### F5 (diseño original) - Dashboard en vivo (1 día) - RF-13, RF-35, PLAN §5
 - [ ] `DashboardApi`: `GET /dashboard/summary` → las tarjetas reales (asistencias/tardanzas/
   ausencias con %, cámaras activas, alertas DPI) con auto-refresh 30 s. **Bloque 11:** la tarjeta
   DPI distingue `en_riesgo` (≥ 20 %) de `alertas_dpi` (> 30 %, inhabilitación) y hay un
@@ -378,7 +395,11 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 - **Entregable:** el dashboard refleja la BD y el feed muestra los veredictos REALES del
   bucle de cámaras (verificable con `simulate_camera.py` + `simulate_esp32.py` corriendo).
 
-### F6 - Reportes, importación OCR y bitácora (½-1 día; F6b/F6c aparte) - RF-16, RF-07, RF-32
+### F6 - Reportes y bitácora (2026-10-23) - **✅ LISTO**
+> `/reports` (`features/reports`): tres tarjetas — asistencia detallada (rango de fechas + curso opcional, Excel y PDF), registro de asistencia del grupo (matriz A/T/F/FJ; el docente solo ve sus grupos) y riesgo de inasistencia (curso opcional). Descarga con `ReportsApi` (blob + nombre desde `Content-Disposition`, con `expose_headers` añadido al CORS del backend) y `shared/utils/download.ts`; los errores del backend llegan como blob y se leen como JSON para mostrar el motivo.
+> `/audit` (`features/audit`, solo admin): tabla paginada de `GET /audit-log` con filtros acción, entidad, rol de quien actuó y fecha (en la URL) y diálogo con los valores anterior y nuevo en JSON. Specs: `reports-api.spec.ts`.
+
+### F6 (diseño original) - Reportes, importación OCR y bitácora (½-1 día; F6b/F6c aparte) - RF-16, RF-07, RF-32
 - [ ] **Reportes** `/reports`: filtros desde/hasta + curso (opcional) + botones
   "Excel" / "PDF" → `GET /reports/attendance.xlsx|pdf` con `responseType: 'blob'` +
   descarga vía `URL.createObjectURL` (respeta el `filename` del Content-Disposition);
@@ -648,7 +669,7 @@ void loop() {
 | `POST /auth/login` · `GET /auth/me` · `POST /auth/change-password` · `/auth/change-password/otp` + `/otp/verify` · `/auth/recover/*` | Login/recuperación/Mi perfil (YA) | todos |
 | `GET/POST /rooms` · `PATCH /rooms/{id}` | Aulas (F2) | A admin · L docente |
 | `GET/POST /devices` · `PATCH /devices/{id}` · `GET /devices/status` | Dispositivos + Monitoreo RF-35 (F2/F5) | A admin · status público |
-| `GET/POST /teachers` · `GET/POST /students` · `GET/PATCH /accounts/{id}` · `POST /accounts/{id}/send-temp-password` | Catálogo de personas (F2) | A admin · L docente |
+| `GET/POST /teachers` · `GET/POST /students` · `GET/PATCH /accounts/{id}` · `POST /accounts/{id}/send-temp-password` | Catálogo de personas (F2) | A admin · L docente (`/teachers` solo admin; `/students` y `/accounts/{id}` del docente se limitan a sus alumnos) |
 | `GET/POST /courses` · `GET/POST /courses/{id}/groups` · `GET/POST /groups/{id}/blocks` · `PATCH/DELETE /blocks/{id}` · `DELETE /groups/{id}` | Cursos y grupos (F2) | A admin · L docente |
 | `GET/POST/DELETE /groups/{id}/students` · `POST /groups/{id}/students/{sid}/transfer` · `GET /settings/semesters` | Matrículas con reglas R8 (F2) | A admin · L docente |
 | `GET /attendance/today` · `POST /sessions/{id}/manual-mark` · `PATCH /attendance/{id}/rectify` (plazo 7 d al docente) · `POST /sessions/{id}/close` · `GET /attendance/sessions-today` | Asistencias (F3) | A admin · D suyo |
@@ -657,31 +678,96 @@ void loop() {
 | `GET /dpi/at-risk` · `GET /students/{id}/dpi` | Riesgo DPI (F5/F6) | A admin · D sus cursos |
 | `GET/POST/DELETE /holidays` · `POST /holidays/range` · `POST /holidays/national` · `GET/POST/DELETE /justifications` · `GET/PATCH /settings` | Calendario (F3) | A admin · L docente |
 | `POST/DELETE /justifications/{id}/document` (multipart PDF/JPG/PNG ≤10 MB) | Adjunto de justificación (F4.1) | A admin · D suyo |
-| `POST/GET/DELETE /students/{id}/faces` (`consent: true` obligatorio; `photo_url` firmada) | Enrolamiento (F4) | A admin · L docente |
+| `POST/GET/DELETE /students/{id}/faces` (`consent: true` obligatorio; `photo_url` firmada) | Enrolamiento (F4) | solo admin (biometría; el docente solo ve el badge `enrolled` en `/students`) |
 | `GET /dashboard/summary` (+`en_riesgo`, `sessions_to_review`) · `/dashboard/live` (SSE) · `GET /stats/hourly` · `GET /stats/distribution` | Dashboard (F5) | A+D (ambos ya filtrados por grupo si es docente) |
 | `GET /reports/attendance.xlsx|pdf` · `GET /reports/group-matrix.xlsx` · `GET /reports/dpi-risk.xlsx` · `POST /courses/import-pdf(+/confirm)` · `POST /students/import-preview(+/confirm)` · `GET /audit-log` (+`actor_role`) | Reportes/Importación/Bitácora (F6/F6b/F6c) | A admin (reportes: D suyo) |
 | `GET /devices/{id}` | Detalle de cámara con `rtsp_url` COMPLETA (R14: el listado la enmascara; un PATCH reenviando `***` se ignora) | A admin |
 
 `A`=admin escribe, `D`=docente en sus grupos, `L`=solo lectura. El backend YA aplica todo esto;
 la UI solo oculta botones con `@if (auth.isAdmin())`.
+---
 
-## 6. Inconsistencias y avisos detectados al revisar el backend (sin acción urgente)
+## 7. Control de acceso por rol (auditoría 2026-10-23)
 
-1. **~~`GET /attendance/sessions-today` NO existe~~ → RESUELTO** (Bloque 6b del
-   PLAN-BACKEND; el frontend ya lo consume). **Bloque 11 (2026-10-11):** además el backend
-   añadió el ciclo completo de sesiones (apertura por scheduler, `needs_review`,
-   cancelación), justificaciones con efecto, DPI con aviso único por nivel y reportes por
-   grupo — todo documentado arriba en F2/F3/F4/F5/F6 y en PLAN-BACKEND §3 (Bloque 11).
-2. **`app.frontend()` no está implementado** en `main.py` (el plan del backend lo menciona
-   para el Bloque 10) → F8 lo implementa junto con la config de producción.
-3. **~~Rate limit de login SOLO en el cliente~~ → RESUELTO**: el backend ya limita
-   (Bloque 6b: 5 fallos IP/min → 429, login correcto limpia la ventana; con tests).
-4. **`GET /devices/status` es PÚBLICO** (sin token): pensado para el panel RF-35 en un solo
-   origen. Exponer estados en línea de equipos sin credencial es discutible en producción
-   real; opción futura: exigir JWT (1 línea en el endpoint).
-5. **~~El badge "Enrolado" en `/students` requeriría N llamadas~~ → RESUELTO**: el backend ya
-   soporta `GET /students?with_face=1` (UNA query extra por página, no N por alumno) y el
-   frontend ya lo usa para el badge Enrolado/Sin rostro.
-6. **Las vistas SQL (`v_today_attendance`) usan `CURRENT_DATE` del servidor**: asume la zona
-   horaria de Perú en la PC servidor (la del dev ya lo está). No tocar.
-7. **`PersonOut` no expone `photo_url`**: la foto de portada se ve solo en `/faces`; suficiente.
+> Revisión cruzada de `PLAN-BACKEND.md`, `PLAN-FRONTEND.md`, `back-fareas/db/001_schema.sql`,
+> `core/constants/nav.ts`, `layouts/admin/components/sidebar/sidebar.ts`, `app.routes.ts` y
+> `core/guards/auth-guard.ts`. Fuente de verdad del rol: `app_user.role` (enum `user_role`:
+> admin | docente | estudiante), viaja en el JWT (`role`) y en `AuthService.currentUser()`.
+
+### 7.1 Matriz vigente (`nav.ts` + `app.routes.ts`)
+
+| Ruta | Admin | Docente | Estudiante |
+|---|---|---|---|
+| `/dashboard`, `/attendance` | ✅ | ✅ (solo sus grupos, lo filtra el backend) | ❌ (`navGuard` → `/me`) |
+| `/profile` (Mi perfil) | ✅ | ✅ | ✅ (sin guard de rol; correcto) |
+| `/courses`, `/enrollments`, `/schedule` | ✅ CRUD | ✅ lectura | ❌ |
+| `/students` | ✅ CRUD + importar | ✅ lectura, solo alumnos de sus grupos | ❌ |
+| `/teachers`, `/rooms`, `/devices` | ✅ | ❌ | ❌ |
+| `/calendar/holidays` | ✅ CRUD | ✅ lectura | ❌ |
+| `/calendar/justifications` | ✅ | ✅ (curso obligatorio, solo sus grupos) | ❌ |
+| `/calendar/settings`, `/faces`, `/imports`, `/audit` | ✅ | ❌ | ❌ |
+| `/reports` | ✅ | ✅ (solo sus grupos) | ❌ |
+| `/me` (Mis asistencias + DPI) | ❌ | ❌ | ✅ (F3b) |
+
+### 7.2 Pendientes del proyecto
+
+- `photo_url` y `document_url` guardan claves R2 en columnas llamadas «url»: documentarlo en el diccionario de datos.
+
+**Pendientes funcionales ya planeados pero sin construir**
+- `/reports` y `/audit` siguen como placeholder (F6) aunque el backend está listo.
+- Adjunto de justificación en la UI (F4.1) y producción (F8, `app.frontend()` en `main.py`).
+
+---
+
+## 8. Estructura de menús por rol (2026-10-23) - **✅ IMPLEMENTADO**
+
+> Motivo: el estudiante veía una sola entrada y el docente heredaba menús de administración
+> (Cursos, Matrículas, Estudiantes) que no necesita. Cada rol recibe un menú pensado para
+> lo que hace a diario. La matriz vive en `core/constants/nav.ts` (una sola fuente de verdad
+> para el menú y los guards). Las pantallas de administración no cambian.
+
+### 8.1 Estudiante (antes: 1 entrada)
+
+| Menú | Ruta | Para qué sirve | Datos |
+|---|---|---|---|
+| Inicio | `/me` | Clases de hoy, próxima clase y cursos en riesgo de inhabilitación | `GET /me/schedule`, `GET /attendance/me/dpi` |
+| Mi horario | `/my-schedule` | Semana Lun–Vie con curso, grupo, aula y docente | `GET /me/schedule` |
+| Mis cursos | `/my-courses` | Cursos matriculados del periodo: grupo, docente, horario, faltas y faltas restantes | `GET /me/courses` + `GET /attendance/me/dpi` |
+| Mis asistencias | `/my-attendance` | Historial con filtro de fechas y rectificaciones (ya existía, movida desde `/me`) | `GET /attendance/me` |
+| Mis justificaciones | `/my-justifications` | Justificaciones registradas a su nombre, con motivo, cursos y documento | `GET /me/justifications` |
+
+«Mi perfil» sigue en el menú de usuario. **Ideas para después:** feriados del periodo (necesita
+abrir `GET /holidays` al estudiante) y un aviso en pantalla cuando llegue un correo de DPI.
+
+### 8.2 Docente (antes: heredaba Cursos, Horario general, Matrículas y Estudiantes de administración)
+
+| Grupo | Menú | Ruta | Para qué sirve | Datos |
+|---|---|---|---|---|
+| — | Dashboard | `/dashboard` | Resumen del día de sus grupos | existente |
+| — | Asistencias | `/attendance` | Marca manual, rectificación, cierre y revisión | existente |
+| Mi docencia | Mis grupos | `/my-groups` | Grupos que dicta en el periodo: cupo, horario y lista de alumnos con acceso al registro del grupo | `GET /groups?teacher_id=`, `GET /groups/{id}/students`, `GET /reports/group-matrix.xlsx` |
+| | Mi horario | `/my-schedule` | Su semana (misma pantalla del estudiante, con sus clases) | `GET /schedule?teacher_id=` |
+| | Alumnos en riesgo | `/at-risk` | Alumnos en alerta o sobre el límite en sus cursos, con faltas restantes | `GET /dpi/at-risk` |
+| Calendario | Feriados, Justificaciones | existentes | Lectura de feriados y registro de justificaciones | existente |
+| Herramientas | Reportes | `/reports` | Excel/PDF de sus grupos | existente |
+
+Se quitan al docente `Cursos y grupos`, `Horario general`, `Matrículas` y `Estudiantes`
+(son administración y duplican «Mis grupos»); el backend ya los rechaza para escritura.
+`Alumnos en riesgo` también queda disponible para el administrador en Herramientas.
+
+### 8.3 Administrador: sin cambios (los 15 ítems + Alumnos en riesgo en Herramientas).
+
+### 8.4 Backend añadido (`routers/me.py`, solo rol estudiante, con `tests/test_student_portal.py`)
+- `GET /me/schedule?semester=` — bloques de sus matrículas activas (misma forma que `GET /schedule`).
+- `GET /me/courses?semester=` — cursos del periodo con grupo, docente, ciclo y bloques.
+- `GET /me/justifications` — sus justificaciones con documento firmado.
+
+### 8.5 Implementado
+- `nav.ts`: menús por rol, `Mi docencia` para docente, `rolesForRoute` une los roles de las entradas que comparten ruta (`/my-schedule`, `/at-risk`).
+- Rutas y pantallas: `features/student-home`, `my-schedule` (compartida: estudiante vía `/me/schedule`, docente vía `/schedule?teacher_id=`), `my-courses`, `my-attendance` (movida de `/me`), `my-justifications`, `my-groups`, `at-risk`.
+- Tests: `auth-guard.spec.ts` (menús por rol y rutas compartidas), `student-home.spec.ts`, `tests/test_student_portal.py` (7).
+- Esto resuelve las brechas §7.3 #6 (menús del docente) y parte de #7 en el frontend; el filtro de datos sigue pendiente en backend.
+
+### 8.6 Avisos pendientes de backend
+- `GET /dpi/at-risk` filtra al docente por **curso**, no por grupo: ve alumnos de otros grupos del mismo curso. Acotar a sus grupos.
+- `GET /students` sigue devolviendo todos los alumnos al docente (ya anotado en §7.3).

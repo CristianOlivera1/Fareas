@@ -15,7 +15,7 @@ import { filter } from 'rxjs';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { ROLE_LABELS } from '../../../../core/models/user';
 import { AuthService } from '../../../../core/services/auth/auth';
-import { navForRole, type NavEntry } from '../../../../core/constants/nav';
+import { ADMIN_PREFIX, ROLE_HOME, navForRole, type NavEntry } from '../../../../core/constants/nav';
 
 @Component({
   selector: 'app-sidebar',
@@ -41,6 +41,10 @@ export class Sidebar implements OnInit {
   readonly entries = computed<NavEntry[]>(() => navForRole(this.auth.currentUser()?.role));
 
   readonly currentUser = computed(() => this.auth.currentUser());
+  readonly homeRoute = computed(() => {
+    const role = this.currentUser()?.role;
+    return role ? ROLE_HOME[role] : ADMIN_PREFIX;
+  });
   readonly userRoleLabel = computed(() => {
     const role = this.currentUser()?.role;
     return role ? ROLE_LABELS[role] : 'Sin rol';
@@ -52,20 +56,18 @@ export class Sidebar implements OnInit {
     private readonly destroyRef: DestroyRef,
   ) {
     this.currentUrl.set(this.cleanUrl(this.router.url));
+    effect(() => {
+      const groupLabels = this.entries()
+        .filter((entry) => 'children' in entry && entry.children)
+        .map((entry) => entry.label);
+      this.openGroups.set(new Set(groupLabels));
+    });
     this.router.events
       .pipe(
         filter((e): e is NavigationEnd => e instanceof NavigationEnd),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((e) => this.currentUrl.set(this.cleanUrl(e.urlAfterRedirects)));
-    effect(() => {
-      const currentEntries = this.entries();
-      const allGroupLabels = currentEntries
-        .filter(entry => 'children' in entry && entry.children)
-        .map(entry => entry.label);
-
-      this.openGroups.set(new Set(allGroupLabels));
-    }, { allowSignalWrites: true });
   }
 
   ngOnInit(): void {
@@ -87,7 +89,7 @@ export class Sidebar implements OnInit {
   }
 
   isActive(route: string): boolean {
-    const target = `/admin${route}`;
+    const target = `${ADMIN_PREFIX}${route}`;
     const url = this.currentUrl();
     return url === target || url.startsWith(`${target}/`);
   }
@@ -98,19 +100,15 @@ export class Sidebar implements OnInit {
   }
 
   navigateTo(route: string): void {
-    void this.router.navigateByUrl(`/admin${route}`);
+    void this.router.navigateByUrl(`${ADMIN_PREFIX}${route}`);
     this.closeOnMobile();
   }
 
   toggleGroup(label: string): void {
-    this.openGroups.update((currentSet) => {
-      const newSet = new Set(currentSet);
-      if (newSet.has(label)) {
-        newSet.delete(label);
-      } else {
-        newSet.add(label);
-      }
-      return newSet;
+    this.openGroups.update((current) => {
+      const next = new Set(current);
+      if (!next.delete(label)) next.add(label);
+      return next;
     });
   }
 
