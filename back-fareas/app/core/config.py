@@ -33,6 +33,16 @@ class Settings(BaseSettings):
 
     ALLOWED_EMAIL_DOMAIN: str = "unamba.edu.pe"
 
+    R2_ENABLED: bool = False
+    R2_ACCOUNT_ID: str = ""
+    R2_BUCKET_NAME: str = "fareas-assets"
+    R2_ENDPOINT_URL: str = ""
+    R2_REGION: str = "auto"
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_PRESIGN_EXPIRE_SECONDS: int = 900
+    R2_MAX_UPLOAD_MB: int = 10
+
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]

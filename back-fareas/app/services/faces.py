@@ -1,7 +1,6 @@
 import base64
 import binascii
 import os
-import uuid
 
 import cv2
 import numpy as np
@@ -15,6 +14,7 @@ from app.ai.runtime import embedder as get_embedder
 from app.ai.runtime import recargar_galeria
 from app.services import errors
 from app.services.audit import audit
+from app.services.storage import face_key, get_storage
 from app.tables import AppUser, FaceEmbedding, UserRole
 
 MIN_PHOTOS = 3
@@ -79,17 +79,17 @@ async def enrolar(
     promedio = np.mean(embeddings, axis=0)
     promedio /= np.linalg.norm(promedio)
 
-    photo_url = None
+    storage = get_storage()
+    photo_key = None
     try:
         primera = _decode_photo(photos_b64[0])
         fs = det.detect(primera, det_thresh=DETECT_THRESHOLD)
         if fs:
-            os.makedirs("storage", exist_ok=True)
-            fname = f"student_{student_id}_{uuid.uuid4().hex[:8]}.jpg"
-            cv2.imwrite(os.path.join("storage", fname), primera)
-            photo_url = f"storage/{fname}"
+            ok, buf = cv2.imencode(".jpg", primera)
+            if ok:
+                photo_key = await storage.put(face_key(student_id), buf.tobytes(), "image/jpeg")
     except Exception:
-        photo_url = None
+        photo_key = None
 
     viejos = (await db.exec(select(FaceEmbedding).where(FaceEmbedding.student_id == student_id))).all()
     for viejo in viejos:
@@ -99,7 +99,7 @@ async def enrolar(
     fila = FaceEmbedding(
         student_id=student_id,
         vector=[float(x) for x in promedio],
-        photo_url=photo_url,
+        photo_url=photo_key,
         source="promedio",
         is_current=True,
     )
@@ -118,7 +118,7 @@ async def enrolar(
     await audit(
         db, actor, action="enrolamiento_facial", entity="face_embedding", entity_id=fila.id,
         new_value={"student_id": student_id, "fotos": len(embeddings),
-                   "consistencia_min": round(min_sim, 3), "photo_url": photo_url},
+                   "consistencia_min": round(min_sim, 3), "photo_key": photo_key},
         ip_address=ip,
     )
     await db.commit()
@@ -130,7 +130,7 @@ async def enrolar(
         "student_id": student_id,
         "photos": len(embeddings),
         "min_pair_similarity": round(min_sim, 3),
-        "photo_url": photo_url,
+        "photo_url": await storage.url(photo_key),
         "embedding_id": fila.id,
     }
 
@@ -144,6 +144,7 @@ async def eliminar_rostro(
     if student is None or student.role is not UserRole.ESTUDIANTE:
         raise errors.NotFoundError("Estudiante no encontrado")
 
+    storage = get_storage()
     filas = (
         await db.exec(select(FaceEmbedding).where(FaceEmbedding.student_id == student_id))
     ).all()
@@ -152,6 +153,11 @@ async def eliminar_rostro(
             try:
                 os.remove(fila.photo_url)
             except OSError:
+                pass
+        elif fila.photo_url:
+            try:
+                await storage.delete(fila.photo_url)
+            except Exception:
                 pass
         await db.delete(fila)
 

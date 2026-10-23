@@ -5,6 +5,7 @@ from sqlmodel import select
 from app.core.deps import DbSession, RequireRole
 from app.routers.catalog import _client_ip
 from app.services.faces import eliminar_rostro, enrolar
+from app.services.storage import get_storage
 from app.tables import AppUser, FaceEmbedding, UserRole
 
 router = APIRouter(tags=["enrollment"])
@@ -57,10 +58,12 @@ async def enrollment_status(
             .where(FaceEmbedding.student_id == student_id, FaceEmbedding.is_current)
         )
     ).first()
+    storage = get_storage()
+    photo_url = await storage.url(row.photo_url) if row and row.photo_url else None
     return {
         "student_id": student_id,
         "enrolled": row is not None,
-        "photo_url": row.photo_url if row else None,
+        "photo_url": photo_url,
         "source": row.source if row else None,
         "created_at": row.created_at.isoformat(timespec="seconds") if row and row.created_at else None,
     }
