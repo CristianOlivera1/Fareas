@@ -36,7 +36,7 @@
   <ng-template appCell="actions" let-c>
     <div class="flex items-center justify-end gap-1">
       <app-ui-button variant="ghost" size="sm" icon="material-symbols:table-chart-view-outline"
-        [ariaLabel]="'Ver grupos y horario de ' + c.code" (click)="verGrupos(c)">
+        [ariaLabel]="'Ver grupos y horario de ' + c.code" (click)="viewGroups(c)">
         Ver grupos
       </app-ui-button>
       @if (auth.isAdmin()) {

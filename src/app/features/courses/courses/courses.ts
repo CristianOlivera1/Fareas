@@ -141,7 +141,7 @@ export class CoursesPage {
     this.dialogVisible = true;
   }
 
-  verGrupos(course: Course): void {
+  viewGroups(course: Course): void {
     void this.router.navigate([course.id], {
       relativeTo: this.route,
       queryParams: { code: course.code, name: course.name, cycle: course.cycle },
