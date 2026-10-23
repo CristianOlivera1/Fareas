@@ -1,16 +1,35 @@
-"""DTOs del módulo de autenticación (RF-11, RF-12)."""
-from pydantic import BaseModel, EmailStr, Field
+import re
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.services.formats import validar_dominio_email
+
+_PASSWORD_PATTERN = re.compile(r"^(?=.*[A-Za-z])(?=.*\d).{8,}$")
+
+
+def _institutional_email(value: str) -> str:
+    try:
+        return validar_dominio_email(value)
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def _strong_password(value: str) -> str:
+    if not _PASSWORD_PATTERN.fullmatch(value):
+        raise ValueError("La contraseña debe tener al menos 8 caracteres e incluir letras y números")
+    return value
+
+
+class InstitutionalEmailRequest(BaseModel):
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return _institutional_email(value)
 
 
 class LoginRequest(BaseModel):
-    """Cuerpo del login (RF-11).
-
-    ``email`` acepta el correo institucional (p. ej. admin@unamba.edu.pe)
-    O el código de matrícula del estudiante (p. ej. 221181): ambos resuelven
-    a la misma cuenta. El campo se llama ``email`` porque ese es el caso
-    principal (docentes/admin siempre entran por correo).
-    """
-
     email: str = Field(
         min_length=3,
         max_length=160,
@@ -18,69 +37,71 @@ class LoginRequest(BaseModel):
     )
     password: str = Field(min_length=6, max_length=128)
 
-
 class UserOut(BaseModel):
-    """Datos del usuario que viajan al frontend (sin hashes ni metadatos)."""
     id: int
     role: str
     full_name: str
     email: str
     must_change_password: bool
 
-
-class LoginResponse(BaseModel):
+class TokenPairResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
+    expires_in: int
+    refresh_expires_in: int
+
+class LoginResponse(TokenPairResponse):
     user: UserOut
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str = Field(min_length=32, max_length=512)
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=6, max_length=128)
     new_password: str = Field(min_length=8, max_length=128)
 
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return _strong_password(value)
 
 class ChangePasswordOtpRequest(BaseModel):
-    """Paso 1 del cambio voluntario: confirma la contraseña actual."""
-
     current_password: str = Field(min_length=6, max_length=128)
 
-
 class ChangePasswordOtpResponse(BaseModel):
-    """Respuesta del paso 1: correo enmascarado + tiempos del OTP."""
-
     message: str
     email: str
     expires_in: int
     resend_in: int
 
-
 class VerifyChangePasswordOtpRequest(BaseModel):
-    """Paso 2: código de 6 dígitos enviado al correo institucional."""
-
     code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
-
 
 class ChangePasswordResponse(BaseModel):
-    """Respuesta del cambio. Incluye un token nuevo: ``token_version`` cambió
-    y el token usado para la petición queda invalidado (las demás sesiones
-    también), pero la sesión actual sigue viva."""
-
     message: str
     access_token: str | None = None
+    refresh_token: str | None = None
+    token_type: str = "bearer"
+    expires_in: int | None = None
+    refresh_expires_in: int | None = None
 
+class RecoverRequest(InstitutionalEmailRequest):
+    pass
 
-class RecoverRequest(BaseModel):
-    email: EmailStr
-
-
-class VerifyOtpRequest(BaseModel):
-    email: EmailStr
+class VerifyOtpRequest(InstitutionalEmailRequest):
     code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
-
 
 class ResetPasswordRequest(VerifyOtpRequest):
     new_password: str = Field(min_length=8, max_length=128)
 
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return _strong_password(value)
 
 class MessageResponse(BaseModel):
     message: str
+
+class RecoverResponse(MessageResponse):
+    resend_in: int

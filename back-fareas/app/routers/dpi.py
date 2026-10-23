@@ -1,10 +1,3 @@
-"""DPI — R7 (RF-24): endpoints de riesgo de inhabilitación.
-
-- ``GET /dpi/at-risk``: alumno-curso en nivel 'alerta' o 'limite' (admin
-  todos; docente solo sus cursos); alimenta tarjetas y listas del panel.
-- ``GET /students/{id}/dpi``: resumen de UN alumno (admin; docente si el
-  alumno está matriculado en sus grupos).
-"""
 from fastapi import APIRouter, HTTPException, Query
 from sqlmodel import select
 
@@ -23,8 +16,6 @@ async def dpi_at_risk(
     level: str | None = Query(None, pattern="^(alerta|limite)$"),
     course_id: int | None = None,
 ) -> list[dict]:
-    """R7: alumnos en riesgo (≥ dpi_alert_percent). 'limite' = superó el
-    límite de inhabilitación (> dpi_limit_percent); 'alerta' = restante."""
     from sqlalchemy import text as sql_text
 
     cfg = await get_settings_row(db)
@@ -45,9 +36,6 @@ async def dpi_at_risk(
         params["alerta"] = float(cfg.dpi_alert_percent)
         params["limite"] = float(cfg.dpi_limit_percent)
     if user.role is UserRole.DOCENTE:
-        # Solo alumnos matriculados en grupos del docente (y con rostro en
-        # sus cursos: v_student_dpi es por curso, así que filtramos por su
-        # docencia directa).
         sql += (
             " AND v.course_id IN (SELECT cg.course_id FROM course_group cg "
             "WHERE cg.teacher_id = :docente)"
@@ -76,15 +64,12 @@ async def dpi_at_risk(
         for f in filas
     ]
 
-
 @router.get("/students/{student_id}/dpi")
 async def student_dpi(
     student_id: int,
     db: DbSession,
     user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
 ) -> list[dict]:
-    """R7: resumen DPI de un alumno. Docente: solo si el alumno está
-    matriculado (activo) en ALGÚN grupo suyo."""
     student = await db.get(AppUser, student_id)
     if student is None or student.role is not UserRole.ESTUDIANTE:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
@@ -94,9 +79,9 @@ async def student_dpi(
                 select(Enrollment.id)
                 .join(CourseGroup, CourseGroup.id == Enrollment.group_id)
                 .where(
-                    Enrollment.student_id == student_id,  # type: ignore[arg-type]
-                    Enrollment.withdrawn_at.is_(None),  # type: ignore[union-attr]
-                    CourseGroup.teacher_id == user.id,  # type: ignore[arg-type]
+                    Enrollment.student_id == student_id,
+                    Enrollment.withdrawn_at.is_(None),
+                    CourseGroup.teacher_id == user.id,
                 )
                 .limit(1)
             )

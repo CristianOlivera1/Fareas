@@ -13,6 +13,8 @@ Facultad de Informática, UNAMBA (Abancay, Apurímac).
 - **ONNX Runtime (CPU)**: SCRFD `det_10g.onnx` (detección) + ArcFace `w600k_r50.onnx` (embeddings 512-d, pack buffalo_l)
 - **WebSocket** con los ESP32 de las puertas (RF-25 / RF-33)
 - Embeddings en columna `REAL[512]`; similitud de coseno en NumPy (**sin pgvector**: 0.23 ms medidos contra 5000 alumnos)
+- **Cloudflare R2** (bucket privado `fareas-assets`, URLs firmadas) para fotos de enrolamiento y adjuntos (Bloque 13)
+- **OCR local**: RapidOCR (ONNX) + pypdfium2 para PDF escaneado y fotos; no se envían documentos a servicios externos
 
 ## Estructura
 
@@ -26,7 +28,7 @@ back-fareas/
 │   ├── core/deps.py          # DbSession, CurrentUser (Bearer), RequireRole (RF-01)
 │   ├── core/security.py      # argon2 (pwdlib) + JWT (pyjwt)
 │   ├── database.py           # engine asyncpg + SessionLocal (SQLModel)
-│   ├── tables.py             # 15 entidades SQLModel que MAPEAN db/001_schema.sql
+│   ├── tables.py             # 16 entidades SQLModel que MAPEAN db/001_schema.sql
 │   ├── schemas/              # DTOs: auth.py, common.py (Page/Message), …
 │   ├── ai/                   # pipeline de visión (Bloque 5): detector, embedder,
 │   │                         #   recognizer, pipeline (Tabla 8), frame_source, runtime
@@ -35,15 +37,20 @@ back-fareas/
 │   │   ├── audit.py          # bitácora RF-32 dentro de la transacción
 │   │   ├── emailer.py        # credenciales (RF-08), OTP de recuperación/cambio (RF-12) y aviso de clave actualizada
 │   │   ├── notifications.py  # alertas DPI al cierre de sesión (RF-24)
+│   │   ├── refresh_tokens.py # refresh opaco, rotación y revocación por familia
 │   │   ├── errors.py         # DomainError/ConflictError/NotFoundError → handlers HTTP
 │   │   ├── attendance_engine.py  # resolver sesión, marca única, cierre RF-26, DPI RF-24
 │   │   ├── session_scheduler.py  # APScheduler: cierre automático cada 60 s (RF-26)
 │   │   ├── camera_loop.py    # cámaras RTSP → pipeline → marcas → ESP32 (2 fps)
 │   │   ├── schedule.py       # validación de choques de horario (RF-06)
-│   │   ├── ocr_schedule.py   # PDF de matrícula → bloques horarios (RF-07, Bloque 9)
-│   │   └── exports.py        # reportes Excel/PDF con encabezado institucional (RF-16)
+│   │   ├── ocr_extract.py    # PDF texto/escaneado o foto → líneas con coordenadas
+│   │   ├── ocr_schedule.py   # líneas del horario → bloques (RF-07, Bloques 9/14)
+│   │   ├── ocr_roster.py     # nómina impresa → alumnos (Bloque 15)
+│   │   ├── students_import.py # preview y alta masiva de alumnos (Bloque 15)
+│   │   ├── exports.py        # reportes Excel/PDF con encabezado institucional (RF-16)
+│   │   └── storage.py        # Cloudflare R2 (fotos) + URLs firmadas (Bloque 13)
 │   └── routers/
-│       ├── auth.py           # login JWT (campo email), /me, cambio de clave con OTP (RF-11/RF-12)
+│       ├── auth.py           # login JWT + refresh, /me, cambio de clave con OTP (RF-11/RF-12)
 │       ├── audit.py          # GET /audit-log (RF-32, solo admin, paginado)
 │       ├── calendar_admin.py # feriados RF-09, justificaciones RF-10, settings RF-34
 │       ├── catalog.py        # aulas, dispositivos, docentes, estudiantes (RF-02…RF-05, RF-35)
@@ -65,7 +72,7 @@ back-fareas/
 │   ├── pipeline.py           # process_frame() → veredicto Tabla 8
 │   ├── runtime.py            # modelos una vez por proceso + recarga de galería
 │   └── frame_source.py       # RTSP / MP4 / webcam (hilo + buffer de 1 frame)
-├── storage/                  # fotos de enrolamiento en dev (prod: Cloudflare R2)
+├── storage/                  # fallback local de desarrollo/pruebas; el destino normal es R2 (Bloque 13)
 └── scripts/
     ├── test_rtsp.py          # prueba de la cámara Hikvision (RF-17)
     ├── simulate_camera.py    # demo con video en bucle o --save anotado
@@ -97,6 +104,11 @@ fastapi dev          # entrypoint de pyproject.toml (app.main:app)
 - Swagger: <http://localhost:8000/docs>
 - Health: <http://localhost:8000/api/v1/health> →
   `{"status":"ok","database":"ok","users":9}` con el seed cargado
+- **R2:** el bucket `fareas-assets` y el endpoint ya están en `.env`/`.env.example`.
+  Completa `R2_ACCESS_KEY_ID` y `R2_SECRET_ACCESS_KEY` con un token limitado al
+  bucket (`Object Read & Write`). Con `R2_ENABLED=true` y claves, las fotos de
+  enrolamiento van a R2 con URL firmada; sin claves, el sistema cae al
+  `storage/` local (útil para tests y desarrollo offline).
 
 ## Actualizaciones de la base de datos (regla del proyecto)
 
@@ -126,6 +138,7 @@ esquema se mantiene a mano, pero con estas reglas.
    | Archivo borrado | Fecha | Qué consolidó |
    |---|---|---|
    | `005_reglas_negocio.sql`, `006_session_cancelada.sql`, `007_vistas_reglas.sql` | 2026-10-16 | Reglas R1–R13: columnas nuevas, enum `cancelada` y las vistas R5/R6/R7 |
+   | `003_aula_por_bloque.sql`, `004_aula_solo_en_bloque.sql` | 2026-10-22 | Aula por bloque y eliminación de `course_group.room_id`; consolidadas en `001`/`002` |
 
 6. El `ADD VALUE` de un enum no se puede usar en la misma transacción que lo
    agrega: va en su propio archivo (por eso `006` existió como archivo aparte).
@@ -143,14 +156,16 @@ esquema se mantiene a mano, pero con estas reglas.
 Un ALTER **pendiente** (aún no aplicado por todo el equipo) se corre una vez:
 
 ```bash
-psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/003_aula_por_bloque.sql
-psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/004_aula_solo_en_bloque.sql
+psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/003_ciclo_curso.sql
 ```
 
-**Pendientes ahora mismo:** `db/003_aula_por_bloque.sql` (el aula pasa del grupo
-al bloque y la semana lectiva queda Lun–Vie) y `db/004_aula_solo_en_bloque.sql`
-(elimina `course_group.room_id`: el grupo ya no guarda aula). Quien ya los aplicó:
-borra su línea cuando todo el equipo los tenga, junto con el archivo.
+**Pendiente ahora mismo:** `db/003_ciclo_curso.sql` (agrega `course.cycle`
+1–10, rellena los cursos existentes con el ciclo 9 y crea el CHECK),
+`db/004_docente_aula_opcionales.sql` (docente del grupo y aula del bloque
+nullable, más `v_today_attendance` con `LEFT JOIN room`) y
+`db/005_refresh_tokens.sql` (tabla `refresh_token` para las sesiones con
+refresh). Quien ya los aplicó: borra su línea cuando todo el equipo los tenga,
+junto con el archivo.
 
 Lo que se revisa al actualizar: que una BD **vieja + ALTER** y una instalación
 **nueva con `001` + `002`** queden idénticas. Ese es el contrato de la regla.
@@ -162,10 +177,8 @@ git show HEAD:back-fareas/db/002_seed.sql > /tmp/old_002.sql
 createdb -U postgres fareas_mig
 psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f /tmp/old_001.sql
 psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f /tmp/old_002.sql
-psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f db/003_aula_por_bloque.sql
-psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f db/004_aula_solo_en_bloque.sql
-psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f db/003_aula_por_bloque.sql  # 2ª vez: re-ejecutable
-psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f db/004_aula_solo_en_bloque.sql  # 2ª vez: re-ejecutable
+psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f db/003_ciclo_curso.sql
+psql -U postgres -d fareas_mig -v ON_ERROR_STOP=1 -f db/003_ciclo_curso.sql  # 2ª vez: re-ejecutable
 
 # 2) instalación nueva: los 2 scripts ya actualizados
 createdb -U postgres fareas_nueva
@@ -206,7 +219,8 @@ El campo `email` acepta también el código de matrícula (p. ej. `"email": "221
 | `aquino.mario@unamba.edu.pe` | `12345678` | docente |
 | `221181` | `12345678` | estudiante (código) |
 
-Endpoints de auth: `POST /auth/login` · `GET /auth/me` · `POST /auth/change-password`
+Endpoints de auth: `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout`
+· `POST /auth/logout-all` · `GET /auth/me` · `POST /auth/change-password`
 · `POST /auth/recover` → `/verify` → `/reset` (OTP 6 dígitos, RF-12).
 
 **Cambio de contraseña con OTP (2026-10-22, RF-11/RF-12):**
@@ -232,6 +246,30 @@ Reglas del flujo:
 - Se audita `password_change_otp`, `password_changed` y `password_reset`
   (RF-32) y se envía un aviso de seguridad por correo.
 
+### Refresh tokens (2026-10-22)
+
+- `POST /auth/login` devuelve `access_token`, `refresh_token`, `token_type`,
+  `expires_in` (acceso) y `refresh_expires_in` (refresh).
+- `POST /auth/refresh {refresh_token}` rota el token y devuelve un par nuevo.
+  El refresh token es opaco y de alta entropía; en BD solo se guarda su hash
+  SHA-256, nunca el valor original.
+- Cada login crea una **familia** de refresh tokens. Si se reutiliza un token ya
+  rotado, se revoca toda la familia y se audita como `refresh_token_reuse`.
+- `POST /auth/logout {refresh_token}` revoca la familia de forma idempotente
+  (204). `POST /auth/logout-all` revoca todas las sesiones e invalida también
+  los access tokens incrementando `app_user.token_version`.
+- La sesión tiene vencimiento absoluto: `REFRESH_TOKEN_EXPIRE_DAYS` (30 días).
+  Rotar no extiende ese plazo. El access token sigue durando
+  `ACCESS_TOKEN_EXPIRE_MINUTES` (120 min).
+- Cambio/restablecimiento de clave, reenvío de clave temporal y desactivación de
+  cuenta revocan los refresh tokens. El cambio de clave devuelve un par nuevo
+  para no cerrar la sesión actual.
+- BD existente: aplicar `db/005_refresh_tokens.sql`. Una instalación nueva ya
+  incluye la tabla en `db/001_schema.sql`.
+- **Fase frontend pendiente:** persistir el refresh token de forma segura e
+  implementar un refresh *single-flight* ante 401. Por ahora el backend lo
+  entrega en JSON; para producción web conviene moverlo a cookie HttpOnly.
+
 ### Endpoints del Bloque 4 - catálogo académico (RF-02…RF-10, RF-22, RF-32, RF-34, RF-35)
 
 - **Aulas:** `GET/POST /rooms` · `PATCH /rooms/{id}` - paginado con `?page=&page_size=&q=`
@@ -239,13 +277,16 @@ Reglas del flujo:
 - **Docentes:** `GET/POST /teachers` (alta envía clave temporal por correo, RF-08)
 - **Estudiantes:** `GET/POST /students` (`?semester=` para filtrar por ciclo)
 - **Cuentas:** `GET/PATCH /accounts/{id}` · `POST /accounts/{id}/send-temp-password` (reenvía credenciales RF-08)
-- **Cursos/grupos/bloques:** `GET/POST /courses` · `GET /courses/{id}/groups` · `POST /courses/{id}/groups`
+- **Cursos/grupos/bloques:** `GET/POST /courses` · `PATCH/DELETE /courses/{id}` (con `cycle` 1–10; un curso con grupos no se elimina) · `GET /courses/{id}/groups` · `POST /courses/{id}/groups`
   · `GET/POST /groups/{id}/blocks` · `PATCH/DELETE /blocks/{id}` · `DELETE /groups/{id}`
-  · `POST /groups/{id}/activate` (deshace la baja lógica) · `GET /schedule?semester=&course_id=&teacher_id=&room_id=`
-  (semana completa del semestre, una sola consulta) -
+  · `POST /groups/{id}/activate` (deshace la baja lógica) · `GET /schedule?semester=&cycle=&course_id=&teacher_id=&room_id=`
+  (semana completa del periodo, una sola consulta) · `GET /groups?semester=&cycle=`
+  -
   **choques RF-06:** misma aula (la **del bloque**, R9) o mismo docente en rangos que se cruzan → 409;
-  grupos paralelos válidos. Semana lectiva **Lun–Vie** (`weekday` 1..5). El aula va SOLO en el bloque
-  (`room_id` obligatorio): el grupo no guarda aula y su ausencia responde 422
+  se validan entre **todos los ciclos del mismo periodo**. Semana lectiva **Lun–Vie** (`weekday` 1..5). El aula va SOLO en el bloque
+  (`room_id` obligatorio): el grupo no guarda aula y su ausencia responde 422.
+  El **ciclo** (`course.cycle`, 1–10) es la malla del curso: el grupo lo hereda y el periodo sigue siendo
+  `course_group.semester_label` (2026-II).
 - **Matrículas RF-22:** `GET/POST /groups/{id}/students` · `DELETE /groups/{id}/students/{student_id}`
 - **Calendario:** `GET/POST /holidays` · `DELETE /holidays/{id}` · `GET/POST /justifications`
   · `DELETE /justifications/{id}` · `GET/PATCH /settings` (RF-34)
@@ -257,7 +298,8 @@ Toda escritura queda registrada en `audit_log` con actor, IP y valores antes/des
 
 - `POST /students/{id}/faces` - 3–5 fotos **base64** (JSON `{"photos": [...]}`).
   Exige 1 rostro por foto y consistencia intra-alumno (mín. 0.55 por pares);
-  guarda el PROMEDIO normalizado en `face_embedding` y la portada en `storage/`.
+  guarda el PROMEDIO normalizado en `face_embedding` y la portada en R2 con URL
+  firmada (Bloque 13; si R2 está desactivado, cae a `storage/` local).
 - `GET /students/{id}/faces` - estado de enrolamiento (admin y docente).
 - Umbral de reconocimiento RF-20 calibrado: **0.55** (misma persona ≥ 0.55,
   impostores < 0.35); editable por el admin vía `PATCH /settings` (RF-34).
@@ -279,12 +321,14 @@ cd back-fareas
 .venv/Scripts/python -m pytest tests/ -v
 ```
 
-12 tests de autenticación corren contra la BD `fareas` real usando un usuario
+24 tests de autenticación corren contra la BD `fareas` real usando un usuario
 temporal que se crea y elimina solo (no toca los datos del seed). Cubren login
 con clave temporal, rate limit, `/me`, cambio forzado sin OTP, cambio voluntario
 con OTP (cooldown, expiración, máximo de intentos e invalidación del token
-viejo), recuperación completa y reset sin verificar. La suite completa (sin
-`test_vision.py`, que requiere el MP4 demo) queda en **92 passed**.
+viejo), recuperación completa, reset sin verificar y refresh tokens (rotación,
+reuso, expiración, logout, logout-all y revocación por cambio de clave). La
+suite completa (sin `test_vision.py`, que requiere el MP4 demo) se corre con
+`pytest -q`.
 
 ### Bloque 6 — motor de asistencia (RF-21…RF-26)
 
@@ -297,16 +341,14 @@ viejo), recuperación completa y reset sin verificar. La suite completa (sin
   anticipada` y `inicio + tolerancia`; `tardanza` después de eso y hasta el **fin
   del bloque** (55 min tarde en 1 h = tardanza, no falta); `falta` la genera el cierre.
 
-La suite completa es de **101 tests**: auth (7) + catálogo (9) +
-cursos/choques/matrículas (4) + calendario/parámetros/auditoría (5) +
-visión y enrolamiento (15) + motor de asistencia y su API (9) + WebSocket
-de dispositivos (4) + dashboard/SSE/reportes (7) + importación OCR (7) +
-**reglas del Bloque 11 (29)**: ventana R2 y niveles DPI (2), ciclo de vida de
-sesiones R3/R4/R5/R10 (5), justificaciones y rectificación R6/R11 (5),
-matrículas R8/R9 (4), DPI R7 (4), seguridad/biometría R13/R14 (6) y
-dashboard/feriados/reportes con las reglas nuevas (3).
+La suite (sin `test_vision.py`) es de **122 tests**. Cubre auth, catálogo,
+cursos/choques/matrículas, calendario/parámetros/auditoría, motor de asistencia
+y su API, WebSocket de dispositivos, dashboard/SSE/reportes, **importación OCR
+de horarios, imágenes y nóminas (20)**, reglas del Bloque 11 y ciclos
+(curso/filtros, choque entre ciclos y bloque histórico).
 Todos son idempotentes: crean sus propios datos temporales y los limpian.
-Los smokes de visión se saltan solos si faltan los modelos ONNX o el video demo.
+Los smokes de visión y enrolamiento viven en `test_vision.py` y se saltan solos
+si faltan los modelos ONNX o el video demo.
 
 ## Recursos
 
@@ -343,17 +385,38 @@ Protocolo en `ws://localhost:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET>`
 - `GET /reports/attendance.xlsx|pdf?desde=&hasta=&course_id=` — RF-16 con
   encabezado institucional; el docente solo descarga SUS grupos (RF-21).
 
-### Bloque 9 — Importación de horarios por PDF (RF-07)
+### Bloques 9, 14 y 15 — Importación OCR de horarios y nóminas (RF-07)
 
-- `POST /courses/import-pdf` — subes la constancia de matrícula (multipart, solo admin);
-  devuelve bloques horarios CANDIDATOS (curso, grupo, día, horas) con `confiable` y `nota`
-  para lo ambiguo. **No persiste nada**: pantalla de revisión del RF-07.
-- `POST /courses/import-pdf/confirm` — recibe la propuesta corregida + `teacher_id` + `room_id`
-  (aula por defecto: cada bloque puede traer la suya);
-  crea cursos/grupos/bloques con la misma validación de choques RF-06, **todo o nada** (rollback).
-  Un PDF escaneado (sin texto) → 422 con explicación: RF-07 procesa constancias digitales.
+- `POST /courses/import-pdf` — sube un **PDF digital, PDF escaneado o foto**
+  (JPG/PNG/WEBP, ≤10 MB y 10 páginas; multipart, solo admin). Devuelve `tipo`
+  (`pdf_texto`, `pdf_ocr` o `imagen`), páginas y bloques CANDIDATOS (curso,
+  grupo, día, horas) con `confiable`, `nota`, `pagina`, `linea`, y sugerencias
+  ya rellenadas de `teacher_id`, `room_id` y `curso_sugerido` (parecido por
+  código/nombre cuando el curso aún no existe con ese código exacto).
+  **No persiste nada**: es la pantalla de revisión del RF-07.
+- `POST /courses/import-pdf/confirm` — recibe la propuesta corregida,
+  `semester_label` (periodo; por defecto el vigente), `cycle` (1–10),
+  `teacher_id`/`room_id` por defecto y, opcionalmente, `teacher_id`/`room_id`
+  por bloque (ambos pueden quedar en `null` si el horario no los trae). Crea
+  los cursos que no existan, cursos/grupos/bloques con la validación RF-06/R9 y
+  **todo o nada** (rollback ante choque). Reimportar el mismo archivo devuelve
+  `omitidos` en vez de duplicar bloques. Un grupo solo admite un docente; el
+  docente y el aula se completan luego con `PATCH /blocks/{id}`, y la sesión de
+  asistencia solo se abre cuando ambos existen.
+- `POST /students/import-preview` — sube una **nómina impresa en tabla**
+  (PDF/foto) y `default_semester`; devuelve alumnos con código, DNI, nombres,
+  correo (generado como `codigo@unamba.edu.pe` si falta), ciclo, `confiable`,
+  `duplicado`, `errores` y la línea OCR. No crea nada.
+- `POST /students/import-confirm` — recibe las filas corregidas y un
+  `group_id` opcional. Crea las cuentas **fila por fila** (un duplicado no
+  bloquea al resto), con clave temporal y correo RF-08; si se elige grupo,
+  matricula con R8. Devuelve `creados`, `omitidos`, `matriculados` y errores por
+  fila. Solo admin.
 
-  > Los grupos importados toman el **semestre vigente** (R1, Bloque 11).
+  > Límites: 10 MB, 10 páginas y 200 filas. Los grupos importados usan el
+  > periodo indicado (R1, Bloque 11); las matrículas siguen exigiendo el
+  > semestre vigente. OCR local: RapidOCR con modelos incluidos en el paquete;
+  > manuscrito no soportado y las filas dudosas se marcan para corregir.
 
 ### Bloque 11 — reglas de negocio (R1…R15)
 
@@ -390,7 +453,7 @@ el admin con `PATCH /settings`).
   cambiar/restablecer la contraseña, `token_version` invalida los JWT viejos
   (401) y la respuesta entrega uno nuevo.
 - **Biometría (R13, Ley 29733):** `POST /students/{id}/faces` exige `consent: true`;
-  `DELETE /students/{id}/faces` borra embeddings y foto.
+  `DELETE /students/{id}/faces` borra embeddings y el objeto local/R2.
 - **Feriados (R12):** `POST /holidays/range` (rango, omite fines de semana) y
   `POST /holidays/national?year=` (fijos + Semana Santa, ajustables).
 - **Reportes:** `GET /reports/group-matrix.xlsx?group_id=` (alumnos × fechas con

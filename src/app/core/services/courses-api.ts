@@ -1,14 +1,25 @@
 import { Injectable } from '@angular/core';
-import { BaseApi, Page, ListParams } from '../api/api-url';
+import { apiUrl, BaseApi, Page, ListParams } from '../api/api-url';
 import { Block, Course, EnrolledStudent, Group, ScheduleRow } from '../models/catalog';
+import {
+  ScheduleImportConfirmIn,
+  ScheduleImportPreview,
+  ScheduleImportResult,
+} from '../models/imports';
 
 @Injectable({ providedIn: 'root' })
 export class CoursesApi extends BaseApi {
-  courses(params?: ListParams) {
+  courses(params?: ListParams & { cycle?: number }) {
     return this.get<Page<Course>>('/courses', params);
   }
-  createCourse(body: { code: string; name: string }) {
+  createCourse(body: { code: string; name: string; cycle: number }) {
     return this.post<Course>('/courses', body);
+  }
+  updateCourse(id: number, body: { code?: string; name?: string; cycle?: number }) {
+    return this.patch<Course>(`/courses/${id}`, body);
+  }
+  deleteCourse(id: number) {
+    return this.delete<{ message: string }>(`/courses/${id}`);
   }
 
   groups(filters?: {
@@ -16,6 +27,7 @@ export class CoursesApi extends BaseApi {
     teacher_id?: number;
     include_inactive?: boolean;
     semester?: string;
+    cycle?: number;
   }) {
     return this.get<Group[]>('/groups', filters);
   }
@@ -25,7 +37,6 @@ export class CoursesApi extends BaseApi {
       semester ? { semester } : undefined,
     );
   }
-  /** R9: el grupo NO lleva aula; el aula se indica en cada bloque. */
   createGroup(
     courseId: number,
     body: { group_code: string; teacher_id: number; capacity: number },
@@ -35,14 +46,13 @@ export class CoursesApi extends BaseApi {
   deactivateGroup(groupId: number) {
     return this.delete<{ message: string }>(`/groups/${groupId}`);
   }
-  /** La baja del grupo es LÓGICA (sus bloques y su historial quedan): esto lo
-   * devuelve a activo para que vuelva a abrir sesiones. */
   activateGroup(groupId: number) {
     return this.post<{ message: string }>(`/groups/${groupId}/activate`);
   }
 
   schedule(filters: {
     semester?: string;
+    cycle?: number;
     course_id?: number;
     teacher_id?: number;
     room_id?: number;
@@ -54,16 +64,27 @@ export class CoursesApi extends BaseApi {
   blocks(groupId: number) {
     return this.get<Block[]>(`/groups/${groupId}/blocks`);
   }
-  /** R9: `room_id` es obligatorio (el aula es del bloque, no del grupo). */
   createBlock(
     groupId: number,
-    body: { weekday: number; start_time: string; end_time: string; room_id: number },
+    body: {
+      weekday: number;
+      start_time: string;
+      end_time: string;
+      room_id: number | null;
+      teacher_id: number | null;
+    },
   ) {
     return this.post<Block>(`/groups/${groupId}/blocks`, body);
   }
   updateBlock(
     id: number,
-    body: { weekday?: number; start_time?: string; end_time?: string; room_id?: number },
+    body: {
+      weekday?: number;
+      start_time?: string;
+      end_time?: string;
+      room_id?: number | null;
+      teacher_id?: number | null;
+    },
   ) {
     return this.patch<Block>(`/blocks/${id}`, body);
   }
@@ -82,16 +103,22 @@ export class CoursesApi extends BaseApi {
       student_id: studentId,
     });
   }
-  /** R8d: retiro — borra la matrícula si no hay registros; si los hay la
-   * marca con withdrawn_at (el historial del alumno en el curso se conserva). */
   unenroll(groupId: number, studentId: number) {
     return this.delete<{ message: string }>(`/groups/${groupId}/students/${studentId}`);
   }
-  /** R8e: transferencia entre grupos del MISMO curso. */
-  transfer(groupId: number, studentId: number, destinoGroupId: number) {
+  transfer(groupId: number, studentId: number, destinationGroupId: number) {
     return this.post<{ message: string }>(
       `/groups/${groupId}/students/${studentId}/transfer`,
-      { destino_group_id: destinoGroupId },
+      { destino_group_id: destinationGroupId },
     );
+  }
+
+  importSchedule(file: File) {
+    const body = new FormData();
+    body.append('file', file);
+    return this.http.post<ScheduleImportPreview>(apiUrl('/courses/import-pdf'), body);
+  }
+  confirmScheduleImport(body: ScheduleImportConfirmIn) {
+    return this.post<ScheduleImportResult>('/courses/import-pdf/confirm', body);
   }
 }

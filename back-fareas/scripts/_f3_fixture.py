@@ -1,12 +1,3 @@
-"""Fixture TEMPORAL para verificar las acciones de F3 (asistencias) en el navegador.
-
-Crea un curso/grupo/alumnos de prueba (código ZZ*) con 3 bloques y 3 sesiones de HOY:
-  - bloque 1: sesión ABIERTA  → prueba marca manual, rectificación y cierre
-  - bloque 2: sesión CERRADA needs_review → prueba "confirmar faltas"
-  - bloque 3: sesión CERRADA needs_review → prueba "cancelar la clase"
-
-Uso:  python scripts/_f3_fixture.py create   |   python scripts/_f3_fixture.py cleanup
-"""
 import asyncio
 import sys
 from datetime import time
@@ -42,12 +33,9 @@ async def _ctx() -> SQLModelAsyncSession:
     _ = settings
     return maker()
 
-
 async def create() -> None:
     db = await _ctx()
     hoy = _naive_peru(ahora_peru()).date()
-    # Los bloques solo existen de Lunes a Viernes (CHECK de 001_schema.sql): en
-    # fin de semana no hay sesión "de hoy" que verificar.
     assert hoy.isoweekday() <= 5, (
         f"Hoy es {hoy} (día {hoy.isoweekday()}): el fixture crea sesiones DE HOY y la "
         "semana lectiva es Lunes-Viernes. Corre este fixture un día de semana."
@@ -57,7 +45,7 @@ async def create() -> None:
     room = (await db.exec(select(Room).where(Room.is_active))).first()
     assert admin and room, "se necesita un admin y un aula del seed"
 
-    course = Course(code=f"{PREFIX}01", name="Fixture F3 (temporal) — borrar")
+    course = Course(code=f"{PREFIX}01", name="Fixture F3 (temporal) — borrar", cycle=9)
     db.add(course)
     await db.flush()
 
@@ -69,8 +57,6 @@ async def create() -> None:
     await db.flush()
 
     bloques = []
-    # El primer bloque empieza al final del día para que el scheduler NO cierre
-    # la sesión abierta mientras se verifica el cierre manual (RF-26).
     for i, inicio in enumerate([time(22, 0), time(10, 0), time(16, 0)]):
         b = ScheduleBlock(group_id=group.id, room_id=room.id, weekday=hoy.isoweekday(),
                           start_time=inicio, end_time=time(inicio.hour + 1, 0))
@@ -106,44 +92,42 @@ async def create() -> None:
           f"students={[u.id for u in cuentas]} sess_abierta={sesion_abierta.id} "
           f"sess_review_confirm={revision_confirmar.id} sess_review_cancel={revision_cancelar.id}")
 
-
 async def cleanup() -> None:
     db = await _ctx()
     course_ids = [c.id for c in (await db.exec(select(Course).where(Course.code == f"{PREFIX}01"))).all()]
-    users = (await db.exec(select(AppUser).where(AppUser.code.like(f"{PREFIX}%")))).all()  # type: ignore[union-attr]
+    users = (await db.exec(select(AppUser).where(AppUser.code.like(f"{PREFIX}%")))).all()
     user_ids = [u.id for u in users]
-    groups = (await db.exec(select(CourseGroup).where(CourseGroup.course_id.in_(course_ids)))).all()  # type: ignore[attr-defined]
+    groups = (await db.exec(select(CourseGroup).where(CourseGroup.course_id.in_(course_ids)))).all()
     group_ids = [g.id for g in groups]
-    blocks = (await db.exec(select(ScheduleBlock).where(ScheduleBlock.group_id.in_(group_ids)))).all()  # type: ignore[attr-defined]
+    blocks = (await db.exec(select(ScheduleBlock).where(ScheduleBlock.group_id.in_(group_ids)))).all()
     block_ids = [b.id for b in blocks]
-    sessions = (await db.exec(select(AttendanceSession).where(AttendanceSession.block_id.in_(block_ids)))).all()  # type: ignore[attr-defined]
+    sessions = (await db.exec(select(AttendanceSession).where(AttendanceSession.block_id.in_(block_ids)))).all()
     session_ids = [s.id for s in sessions]
 
-    records = (await db.exec(select(AttendanceRecord).where(AttendanceRecord.session_id.in_(session_ids)))).all()  # type: ignore[attr-defined]
+    records = (await db.exec(select(AttendanceRecord).where(AttendanceRecord.session_id.in_(session_ids)))).all()
     for r in records:
         await db.delete(r)
     for s in sessions:
         await db.delete(s)
-    justifs = (await db.exec(select(Justification).where(Justification.student_id.in_(user_ids)))).all()  # type: ignore[attr-defined]
+    justifs = (await db.exec(select(Justification).where(Justification.student_id.in_(user_ids)))).all()
     for j in justifs:
         await db.delete(j)
     for b in blocks:
         await db.delete(b)
-    enrolls = (await db.exec(select(Enrollment).where(Enrollment.group_id.in_(group_ids)))).all()  # type: ignore[attr-defined]
+    enrolls = (await db.exec(select(Enrollment).where(Enrollment.group_id.in_(group_ids)))).all()
     for e in enrolls:
         await db.delete(e)
     for g in groups:
         await db.delete(g)
     for u in users:
         await db.delete(u)
-    courses = (await db.exec(select(Course).where(Course.id.in_(course_ids)))).all()  # type: ignore[attr-defined]
+    courses = (await db.exec(select(Course).where(Course.id.in_(course_ids)))).all()
     for c in courses:
         await db.delete(c)
     await db.commit()
     print(f"OK limpiado: {len(records)} registros, {len(sessions)} sesiones, {len(justifs)} justificaciones, "
           f"{len(blocks)} bloques, {len(enrolls)} matrículas, {len(groups)} grupos, {len(users)} alumnos, "
           f"{len(courses)} cursos")
-
 
 if __name__ == "__main__":
     accion = sys.argv[1] if len(sys.argv) > 1 else "create"

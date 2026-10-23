@@ -1,9 +1,3 @@
-"""Asistencia — RF-15 (rectificación con plazo, R11), RF-21 (marca manual),
-RF-26 (cierre/cancelación R4/R5), R6 (justificación puntual) y consulta del
-día (alimenta app-student-list del dashboard, PLAN §5).
-
-La lógica vive en el motor y los servicios; aquí solo se orquesta y audita.
-"""
 from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -22,7 +16,6 @@ from app.services.attendance_engine import (
     cerrar_sesion,
     registrar_marca,
     resolver_revision,
-    resolver_sesion,
 )
 from app.services.audit import audit
 from app.services.dpi import resumen_alumno
@@ -54,11 +47,9 @@ async def _grupo_de_sesion(db, session: AttendanceSession) -> CourseGroup:
         raise errors.NotFoundError("El grupo del bloque no existe")
     return grupo
 
-
 def _exige_grupo_propio(user, grupo: CourseGroup) -> None:
     if user.role is UserRole.DOCENTE and grupo.teacher_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No es tu grupo")
-
 
 @router.get("/attendance/me")
 async def my_attendance(
@@ -68,10 +59,6 @@ async def my_attendance(
     hasta: date | None = None,
     limit: int = Query(100, ge=1, le=500),
 ) -> list[dict]:
-    """Historial de asistencias del ESTUDIANTE autenticado (rol estudiante).
-
-    Los rangos filtran por fecha de sesión (default: sin límite). Incluye
-    is_justified (R6: la falta justificada es visible para el alumno)."""
     if user.role is not UserRole.ESTUDIANTE:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -79,11 +66,11 @@ async def my_attendance(
         )
     stmt = (
         select(AttendanceRecord, AttendanceSession, ScheduleBlock, Course, CourseGroup)
-        .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id)  # type: ignore[arg-type]
-        .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)  # type: ignore[arg-type]
-        .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)  # type: ignore[arg-type]
-        .join(Course, Course.id == CourseGroup.course_id)  # type: ignore[arg-type]
-        .where(AttendanceRecord.student_id == user.id)  # type: ignore[arg-type]
+        .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id)
+        .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)
+        .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)
+        .join(Course, Course.id == CourseGroup.course_id)
+        .where(AttendanceRecord.student_id == user.id)
         .order_by(AttendanceSession.session_date.desc(), ScheduleBlock.start_time)
     )
     if desde is not None:
@@ -103,7 +90,7 @@ async def my_attendance(
             "course_name": curso.name,
             "group_code": grupo.group_code,
             "status": rec.status.value,
-            "is_justified": rec.is_justified,  # R6
+            "is_justified": rec.is_justified,
             "marked_at": rec.marked_at.isoformat(timespec="seconds") if rec.marked_at else None,
             "method": rec.method,
             "correct_reason": rec.correct_reason,
@@ -111,18 +98,14 @@ async def my_attendance(
         for rec, ses, bloque, curso, grupo in filas
     ]
 
-
 @router.get("/attendance/me/dpi")
 async def my_dpi(db: DbSession, user: CurrentUser) -> list[dict]:
-    """R7: estado DPI del ESTUDIANTE autenticado (por curso: porcentaje,
-    nivel, planificadas, faltas permitidas y restantes)."""
     if user.role is not UserRole.ESTUDIANTE:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Este endpoint es para el rol estudiante",
         )
-    return await resumen_alumno(db, user.id)  # type: ignore[arg-type]
-
+    return await resumen_alumno(db, user.id)
 
 @router.get("/attendance/today")
 async def attendance_today(
@@ -132,10 +115,6 @@ async def attendance_today(
     room: str | None = Query(None, max_length=20, description="Código de aula, p. ej. 'LAB 304'"),
     status_filter: str | None = Query(None, alias="status", pattern="^(asistio|tardanza|falta)$"),
 ) -> list[dict]:
-    """Registros de HOY (vista v_today_attendance) con filtros del dashboard.
-
-    R5/R6: la vista excluye sesiones canceladas y trae is_justified. Un
-    docente solo ve SUS grupos (v_student_dpi/v_today traen teacher_id)."""
     sql = (
         "SELECT record_id, att_date, student_id, student_code, student_name, course_id, "
         "course_code, course_name, group_code, room_code, status, marked_at, method, similarity, "
@@ -178,29 +157,21 @@ async def attendance_today(
         for f in filas
     ]
 
-
 @router.get("/attendance/sessions-today")
 async def sessions_today(
     db: DbSession,
     user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
 ) -> list[dict]:
-    """Sesiones ABIERTAS de hoy (RF-26) con su aula/curso/grupo/bloque.
-
-    Un docente solo ve las sesiones de SUS grupos; el admin las ve todas.
-    Las cerradas se excluyen: las needs_review van por /sessions-review y
-    las cerradas normales se corrigen por rectificación (RF-15).
-    R9: el aula es la DEL BLOQUE de hoy (un grupo puede dictar en labs
-    distintos según el día)."""
     stmt = (
         select(AttendanceSession, ScheduleBlock, CourseGroup, Course, Room, AppUser)
-        .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)  # type: ignore[arg-type]
-        .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)  # type: ignore[arg-type]
-        .join(Course, Course.id == CourseGroup.course_id)  # type: ignore[arg-type]
-        .join(Room, Room.id == ScheduleBlock.room_id)  # type: ignore[arg-type]
-        .join(AppUser, AppUser.id == CourseGroup.teacher_id)  # type: ignore[arg-type]
+        .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)
+        .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)
+        .join(Course, Course.id == CourseGroup.course_id)
+        .outerjoin(Room, Room.id == ScheduleBlock.room_id)
+        .outerjoin(AppUser, AppUser.id == CourseGroup.teacher_id)
         .where(
             AttendanceSession.session_date == _naive_peru(ahora_peru()).date(),
-            AttendanceSession.status == SessionStatus.ABIERTA,  # type: ignore[arg-type]
+            AttendanceSession.status == SessionStatus.ABIERTA,
         )
     )
     if user.role is not UserRole.ADMIN:
@@ -221,32 +192,29 @@ async def sessions_today(
             "course_id": curso.id,
             "course_code": curso.code,
             "course_name": curso.name,
-            "room_id": aula.id,
-            "room_code": aula.code,
-            "teacher_id": docente.id,
-            "teacher_name": docente.full_name,
+            "room_id": aula.id if aula is not None else None,
+            "room_code": aula.code if aula is not None else None,
+            "teacher_id": docente.id if docente is not None else None,
+            "teacher_name": docente.full_name if docente is not None else None,
         }
         for ses, bloque, grupo, curso, aula, docente in filas
     ]
-
 
 @router.get("/attendance/sessions-review")
 async def sessions_review(
     db: DbSession,
     user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
 ) -> list[dict]:
-    """Sesiones CERRADAS con needs_review (cero marcas al cierre, R4): la
-    cámara pudo caerse; el admin/docente confirma faltas o cancela."""
     stmt = (
         select(AttendanceSession, ScheduleBlock, CourseGroup, Course, Room, AppUser)
-        .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)  # type: ignore[arg-type]
-        .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)  # type: ignore[arg-type]
-        .join(Course, Course.id == CourseGroup.course_id)  # type: ignore[arg-type]
-        .join(Room, Room.id == ScheduleBlock.room_id)  # type: ignore[arg-type]
-        .join(AppUser, AppUser.id == CourseGroup.teacher_id)  # type: ignore[arg-type]
+        .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)
+        .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)
+        .join(Course, Course.id == CourseGroup.course_id)
+        .outerjoin(Room, Room.id == ScheduleBlock.room_id)
+        .outerjoin(AppUser, AppUser.id == CourseGroup.teacher_id)
         .where(
-            AttendanceSession.needs_review.is_(True),  # type: ignore[union-attr]
-            AttendanceSession.status == SessionStatus.CERRADA,  # type: ignore[arg-type]
+            AttendanceSession.needs_review.is_(True),
+            AttendanceSession.status == SessionStatus.CERRADA,
         )
         .order_by(AttendanceSession.session_date.desc())
     )
@@ -265,28 +233,23 @@ async def sessions_review(
             "course_id": curso.id,
             "course_code": curso.code,
             "course_name": curso.name,
-            "room_id": aula.id,
-            "room_code": aula.code,
-            "teacher_id": docente.id,
-            "teacher_name": docente.full_name,
+            "room_id": aula.id if aula is not None else None,
+            "room_code": aula.code if aula is not None else None,
+            "teacher_id": docente.id if docente is not None else None,
+            "teacher_name": docente.full_name if docente is not None else None,
         }
         for ses, bloque, grupo, curso, aula, docente in filas
     ]
 
-
 class ResolveReviewIn(BaseModel):
     action: str = Field(pattern="^(confirmar_faltas|cancelar)$")
     reason: str | None = Field(default=None, max_length=200, description="Obligatorio para 'cancelar'")
-
 
 @router.post("/sessions/{session_id}/resolve-review")
 async def resolve_review(
     session_id: int, body: ResolveReviewIn, request: Request, db: DbSession,
     user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
 ) -> dict:
-    """R4: resuelve una sesión needs_review — 'confirmar_faltas' genera las
-    faltas (justificadas si hay justificación, R6) y alertas DPI (R7);
-    'cancelar' la cancela con motivo (R5)."""
     session = await _get_or_404(db, AttendanceSession, session_id, "Sesión")
     grupo = await _grupo_de_sesion(db, session)
     _exige_grupo_propio(user, grupo)
@@ -296,13 +259,9 @@ async def resolve_review(
         db, session, user, body.action, reason=body.reason, ip=_client_ip(request)
     )
 
-
-# Marca manual del docente (RF-21) — permitida en abierta y en
-# cerrada+needs_review (R4); prohibida en cancelada y a retirados (R8)
 class MarcaManualIn(BaseModel):
     student_id: int
     status: AttendanceStatus = Field(description="asistio | tardanza | falta")
-
 
 @router.post("/sessions/{session_id}/manual-mark", status_code=status.HTTP_201_CREATED)
 async def marca_manual(
@@ -312,7 +271,6 @@ async def marca_manual(
     db: DbSession,
     docente: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
 ) -> dict:
-    """RF-21: el docente marca a un alumno a mano (llegó sin recognition)."""
     session = await _get_or_404(db, AttendanceSession, session_id, "Sesión")
     if session.status is SessionStatus.CANCELADA:
         raise errors.DomainError("La sesión está cancelada; no admite marcas (R5)")
@@ -320,12 +278,11 @@ async def marca_manual(
         raise errors.DomainError("La sesión ya está cerrada; usa la rectificación (RF-15)")
     grupo = await _grupo_de_sesion(db, session)
     _exige_grupo_propio(docente, grupo)
-    # R8: solo matriculados ACTIVOS a la fecha de la sesión (ni retirados ni ajenos).
     matricula = (
         await db.exec(
             select(Enrollment).where(
-                Enrollment.student_id == body.student_id,  # type: ignore[arg-type]
-                Enrollment.group_id == grupo.id,  # type: ignore[arg-type]
+                Enrollment.student_id == body.student_id,
+                Enrollment.group_id == grupo.id,
             )
         )
     ).first()
@@ -347,13 +304,9 @@ async def marca_manual(
         "session_id": session_id,
     }
 
-
-# Rectificación (RF-15): cambia el estado con motivo obligatorio.
-# R11: docente solo sesiones de los últimos rectify_days días; admin sin plazo.
 class RectificarIn(BaseModel):
     new_status: AttendanceStatus
     reason: str = Field(min_length=5, max_length=400, description="Justificación presencial obligatoria")
-
 
 @router.patch("/attendance/{record_id}/rectify", response_model=dict)
 async def rectificar(
@@ -363,7 +316,6 @@ async def rectificar(
     db: DbSession,
     docente: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
 ) -> dict:
-    """RF-15: rectifica el estado de una marca (motivo obligatorio, RF-32)."""
     record = await _get_or_404(db, AttendanceRecord, record_id, "Registro")
     session = await db.get(AttendanceSession, record.session_id)
     if session is None:
@@ -383,11 +335,11 @@ async def rectificar(
     old = {"status": str(record.status.value), "corrected_by": record.corrected_by,
            "is_justified": record.is_justified}
     record.status = body.new_status
-    record.corrected_by = docente.id  # type: ignore[arg-type]
-    record.corrected_at = _naive_peru(ahora_peru())  # columna TIMESTAMP (naive)
+    record.corrected_by = docente.id
+    record.corrected_at = _naive_peru(ahora_peru())
     record.correct_reason = body.reason.strip()
     record.method = "manual"
-    if body.new_status is not AttendanceStatus.FALTA:  # R11: dejar de ser falta limpia la justificación
+    if body.new_status is not AttendanceStatus.FALTA:
         record.is_justified = False
         record.justification_id = None
     db.add(record)
@@ -406,20 +358,14 @@ async def rectificar(
         "reason": record.correct_reason,
     }
 
-
-# Justificación puntual de UNA falta (R6): crea una justification de
-# un día/curso y liga el registro (todo justificado tiene justification_id)
 class JustificarIn(BaseModel):
     reason: str = Field(min_length=5, max_length=400)
-
 
 @router.patch("/attendance/{record_id}/justify", response_model=dict)
 async def justificar_falta(
     record_id: int, body: JustificarIn, request: Request, db: DbSession,
     user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
 ) -> dict:
-    """R6: marca UNA falta como justificada creando la justification del día.
-    Solo sobre registros 'falta' no justificados."""
     record = await _get_or_404(db, AttendanceRecord, record_id, "Registro")
     if record.status is not AttendanceStatus.FALTA:
         raise errors.DomainError("Solo se justifica un registro de estado 'falta'")
@@ -437,7 +383,7 @@ async def justificar_falta(
         reason=body.reason, ip=_client_ip(request),
     )
     record.is_justified = True
-    record.justification_id = just.id  # type: ignore[arg-type]
+    record.justification_id = just.id
     db.add(record)
     await audit(
         db, user, action="falta_justificada", entity="attendance_record", entity_id=record.id,
@@ -448,35 +394,27 @@ async def justificar_falta(
     await db.commit()
     return {"record_id": record.id, "is_justified": True, "justification_id": just.id}
 
-
 class CancelarIn(BaseModel):
     reason: str = Field(min_length=5, max_length=200)
 
-
 class CancelarDiaIn(CancelarIn):
     fecha: date | None = Field(default=None, description="Default: hoy (R5 permite cancelar por adelantado)")
-
 
 @router.post("/sessions/{session_id}/cancel")
 async def cancelar_sesion_endpoint(
     session_id: int, body: CancelarIn, request: Request, db: DbSession,
     user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
 ) -> dict:
-    """R5: cancela UNA sesión con motivo (docente: solo abiertas de SUS
-    grupos; admin también cerradas — feriado olvidado)."""
     session = await _get_or_404(db, AttendanceSession, session_id, "Sesión")
     grupo = await _grupo_de_sesion(db, session)
     _exige_grupo_propio(user, grupo)
     return await cancelar_sesion(db, session, user, body.reason, ip=_client_ip(request))
-
 
 @router.post("/blocks/{block_id}/cancel-day")
 async def cancelar_dia_endpoint(
     block_id: int, body: CancelarDiaIn, request: Request, db: DbSession,
     user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
 ) -> dict:
-    """R5: cancela (o pre-cancela, fecha futura) el día de un bloque.
-    Docente: solo bloques de SUS grupos y sesiones ya abiertas."""
     bloque = await _get_or_404(db, ScheduleBlock, block_id, "Bloque horario")
     grupo = await _get_or_404(db, CourseGroup, bloque.group_id, "Grupo")
     _exige_grupo_propio(user, grupo)
@@ -485,7 +423,6 @@ async def cancelar_dia_endpoint(
         db, bloque, fecha, user, body.reason,
         ip=_client_ip(request),
     )
-
 
 @router.post("/sessions/{session_id}/close")
 async def cerrar_sesion_endpoint(

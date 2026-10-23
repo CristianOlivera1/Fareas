@@ -39,6 +39,7 @@ export class UiButton {
   readonly disabled = input(false);
   readonly loading = input(false);
   readonly icon = input<string | null>(null);
+  readonly ariaLabel = input<string | null>(null);
   readonly fullWidth = input(false);
 
   readonly classes = computed(() =>

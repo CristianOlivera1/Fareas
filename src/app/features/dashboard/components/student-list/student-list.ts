@@ -11,11 +11,6 @@ import { DataTableCellDirective } from '../../../../shared/components/data-table
 import { UiButton } from '../../../../shared/components/ui-button/ui-button';
 import { TableColumn } from '../../../../core/models/table-column';
 
-/**
- * Estados en el panel: Asistió/Tardanza/Falta según RF-23.
- * "Sin registro" es un estado transitorio de vista: la sesión del curso
- * sigue abierta, por lo que aún no puede clasificarse como Falta (RF-26).
- */
 type StudentStatus = 'Asistió' | 'Tardanza' | 'Sin registro' | 'Falta';
 
 interface StudentRow {

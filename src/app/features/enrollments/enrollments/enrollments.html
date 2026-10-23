@@ -1,6 +1,6 @@
 <app-page-header title="Matrículas" subtitle="Alumnos por grupo: cupo 40, retiro con historial y transferencia (R8)">
   @if (auth.isAdmin()) {
-    <app-ui-button icon="material-symbols:person-add" [disabled]="!group()" (click)="openEnroll()">
+    <app-ui-button icon="material-symbols:person-add" [disabled]="!selectedGroup()" (click)="openEnroll()">
       Matricular alumno
     </app-ui-button>
   }
@@ -8,7 +8,7 @@
 
 <div class="mb-4 grid gap-3 sm:grid-cols-3">
   <label class="space-y-1">
-    <span class="text-xs font-medium text-gray-500">Semestre</span>
+    <span class="text-xs font-medium text-gray-500">Periodo</span>
     <p-select class="w-full" appendTo="body" [options]="semesters()" placeholder="Vigente"
       showClear [ngModel]="semester()" (ngModelChange)="onSemester($event)" />
   </label>
@@ -27,42 +27,42 @@
   </label>
 </div>
 
-@if (group(); as g) {
+@if (selectedGroup(); as selectedGroup) {
   <div class="mb-4 flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white p-4">
     <div class="flex items-center gap-2">
       <span class="grid size-9 place-items-center rounded-lg bg-blue-50 text-sm font-bold text-(--fareas-primary)">
-        {{ g.group_code }}
+        {{ selectedGroup.group_code }}
       </span>
       <div>
         <div class="text-sm font-semibold text-gray-900">
-          {{ g.course_code }} · {{ g.course_name }}
+          {{ selectedGroup.course_code }} · {{ selectedGroup.course_name }}
         </div>
-        <div class="text-xs text-gray-500">{{ g.semester_label }}</div>
+        <div class="text-xs text-gray-500">Ciclo {{ roman(selectedGroup.cycle) }} · {{ selectedGroup.semester_label }}</div>
       </div>
     </div>
     <div class="flex flex-wrap items-center gap-4 text-xs text-gray-600">
       <span class="inline-flex items-center gap-1.5">
         <iconify-icon icon="material-symbols:person-outline" width="15" class="text-gray-400"></iconify-icon>
-        {{ g.teacher_name }}
+        {{ selectedGroup.teacher_name || 'Sin docente' }}
       </span>
     </div>
     <div class="ml-auto min-w-40">
       <div class="mb-1 flex items-center justify-between text-[11px] text-gray-500">
         <span>Cupo</span>
-        <span class="tabular-nums font-medium text-gray-700">{{ activos() }}/{{ g.capacity }}</span>
+        <span class="tabular-nums font-medium text-gray-700">{{ activeEnrollmentCount() }}/{{ selectedGroup.capacity }}</span>
       </div>
       <div class="h-1.5 overflow-hidden rounded-full bg-gray-100">
         <div class="h-full rounded-full transition-all"
-          [class.bg-red-500]="activos() >= g.capacity"
-          [class.bg-amber-500]="activos() < g.capacity && activos() >= g.capacity * 0.8"
-          [class.bg-green-500]="activos() < g.capacity * 0.8"
-          [style.width.%]="g.capacity ? (activos() / g.capacity) * 100 : 0"></div>
+          [class.bg-red-500]="activeEnrollmentCount() >= selectedGroup.capacity"
+          [class.bg-amber-500]="activeEnrollmentCount() < selectedGroup.capacity && activeEnrollmentCount() >= selectedGroup.capacity * 0.8"
+          [class.bg-green-500]="activeEnrollmentCount() < selectedGroup.capacity * 0.8"
+          [style.width.%]="selectedGroup.capacity ? (activeEnrollmentCount() / selectedGroup.capacity) * 100 : 0"></div>
       </div>
     </div>
   </div>
 
-  @if (activos() >= g.capacity) {
-    <app-ui-alert variant="warning" class="mb-4 block" title="El grupo está lleno ({{ activos() }}/{{ g.capacity }})">
+  @if (activeEnrollmentCount() >= selectedGroup.capacity) {
+    <app-ui-alert variant="warning" class="mb-4 block" title="El grupo está lleno ({{ activeEnrollmentCount() }}/{{ selectedGroup.capacity }})">
       Para matricular más alumnos, crea otro grupo del mismo curso en Cursos y grupos: tendrá su
       propio docente y su propia aula.
     </app-ui-alert>
@@ -89,13 +89,13 @@
     <iconify-icon icon="material-symbols:groups-outline" width="36" class="text-gray-300"></iconify-icon>
     <h2 class="mt-3 font-semibold text-gray-900">Selecciona un grupo</h2>
     <p class="mx-auto mt-1 max-w-md text-sm text-gray-500">
-      Este curso tiene {{ groupOptions().length }} grupo(s) en el semestre elegido.
+      Este curso tiene {{ groupOptions().length }} grupo(s) en el periodo elegido.
     </p>
   </div>
 } @else {
   <div class="mb-3 flex items-center justify-between">
     <p class="text-sm text-gray-500">
-      {{ activos() }} alumno(s) activo(s) · cupo libre {{ cupoLibre() }}
+      {{ activeEnrollmentCount() }} alumno(s) activo(s) · cupo libre {{ remainingCapacity() }}
     </p>
     <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh"
       (click)="reloadStudents()">
@@ -121,7 +121,7 @@
         </div>
       </div>
     </ng-template>
-    <ng-template appCell="rostro" let-s>
+    <ng-template appCell="face" let-s>
       @if (s.has_face === true) {
         <span class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
           <iconify-icon icon="material-symbols:face" width="13"></iconify-icon> Enrolado
@@ -137,7 +137,7 @@
     <ng-template appCell="semester" let-s>
       <span class="text-sm text-gray-600">{{ s.semester ? 'Ciclo ' + s.semester : '—' }}</span>
     </ng-template>
-    <ng-template appCell="estado" let-s>
+    <ng-template appCell="status" let-s>
       @if (s.withdrawn_at) {
         <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
           <span class="size-1.5 rounded-full bg-gray-400"></span> Retirado
@@ -154,7 +154,7 @@
           @if (s.withdrawn_at) {
             <button type="button"
               class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-(--fareas-primary) hover:bg-blue-50 transition-colors"
-              title="Reactivar su matrícula en este grupo" (click)="reactivar(s)">
+              title="Reactivar su matrícula en este grupo" (click)="reactivate(s)">
               <iconify-icon icon="material-symbols:restart-alt" width="16"></iconify-icon> Reactivar
             </button>
           } @else {
@@ -165,7 +165,7 @@
             </button>
             <button type="button"
               class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
-              title="Retirar del grupo" (click)="askRetirar(s)">
+              title="Retirar del grupo" (click)="askToWithdraw(s)">
               <iconify-icon icon="material-symbols:person-remove-outline" width="18"></iconify-icon>
             </button>
           }
@@ -185,12 +185,12 @@
         [loading]="searchingStudents()" (onFilter)="onStudentFilter($event)"
         [ngModel]="selectedStudentId()" (ngModelChange)="selectedStudentId.set($event)" />
       <span class="block text-[13px] text-gray-400">
-        El cupo disponible de este grupo es {{ cupoLibre() }}.
+        El cupo disponible de este grupo es {{ remainingCapacity() }}.
       </span>
     </label>
     <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
       Se valida el cupo de 40, que el alumno no tenga otro grupo activo del mismo curso y que su
-      horario no se cruce con otros cursos del semestre.
+      horario no se cruce con otros cursos del periodo.
     </app-ui-alert>
   </div>
   <ng-template pTemplate="footer">
@@ -208,7 +208,7 @@
     </app-ui-alert>
     <label class="block space-y-1">
       <span class="text-sm font-medium text-gray-700">Grupo destino <span class="text-red-500">*</span></span>
-      <p-select class="w-full" appendTo="body" [options]="transferOptions()" optionLabel="label"
+      <p-select class="w-full" appendTo="body" [options]="transferGroupOptions()" optionLabel="label"
         optionValue="value" placeholder="Selecciona el grupo destino"
         emptyMessage="No hay otros grupos con cupo libre"
         [ngModel]="transferTargetId()" (ngModelChange)="transferTargetId.set($event)" />
@@ -222,11 +222,11 @@
 
 <app-modal-delete
   [(visible)]="deleteVisible"
-  [itemLabel]="retirarLabel()"
+  [itemLabel]="withdrawalLabel()"
   entityName="matrícula"
   [softDelete]="false"
   [loading]="deleting()"
   warning="Si el alumno ya tiene registros de asistencia, su matrícula queda retirada y el historial del curso se conserva; las faltas anteriores siguen contando. Podrás reactivarlo después."
-  (confirmed)="confirmRetirar()"
-  (canceled)="cancelRetirar()"
+  (confirmed)="confirmWithdrawal()"
+  (canceled)="cancelWithdrawal()"
 />

@@ -1,12 +1,6 @@
-"""Catálogo académico - RF-02 (docentes), RF-03 (estudiantes), RF-05 (aulas y
-dispositivos), RF-08 (clave temporal por correo), RF-35 (monitoreo).
+from typing import Annotated
 
-Solo admin escribe; docentes pueden LEER el catálogo (necesitan aulas/cursos
-para sus vistas); los endpoints de lectura quedan también disponibles para
-el filtrado del dashboard. Dispositivos: GET /devices/status es público para
-el panel de monitoreo (RF-35).
-"""
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlmodel import func, select
 
@@ -16,6 +10,15 @@ from app.schemas.common import Page
 from app.services.accounts import create_account, resend_credentials
 from app.services.audit import audit
 from app.services.formats import validar_whatsapp
+from app.services.ocr_extract import MAX_PESO_ARCHIVO
+from app.services.refresh_tokens import revoke_all_for_user
+from app.services.students_import import (
+    ImportacionAlumnosIn,
+    ImportacionAlumnosOut,
+    ImportacionAlumnosPreviewOut,
+    confirmar_nomina,
+    preview_nomina,
+)
 from app.tables import AppUser, Device, DeviceType, FaceEmbedding, Room, UserRole
 
 router = APIRouter(tags=["catalog"])
@@ -24,13 +27,11 @@ router = APIRouter(tags=["catalog"])
 def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
-
 async def _get_or_404(db, model, entity_id: int, name: str):
     obj = await db.get(model, entity_id)
     if obj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{name} no encontrado")
     return obj
-
 
 class RoomIn(BaseModel):
     code: str = Field(min_length=1, max_length=20, examples=["LAB 304"])
@@ -38,13 +39,11 @@ class RoomIn(BaseModel):
     building: str | None = Field(default=None, max_length=80)
     capacity: int | None = Field(default=None, gt=0, description="Aforo informativo (R9)")
 
-
 class RoomUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=120)
     building: str | None = Field(default=None, max_length=80)
     capacity: int | None = Field(default=None, gt=0)
     is_active: bool | None = None
-
 
 class RoomOut(BaseModel):
     id: int
@@ -54,13 +53,11 @@ class RoomOut(BaseModel):
     capacity: int | None
     is_active: bool
 
-
 def room_out(r: Room) -> RoomOut:
     return RoomOut(
-        id=r.id, code=r.code, name=r.name, building=r.building,  # type: ignore[arg-type]
+        id=r.id, code=r.code, name=r.name, building=r.building,
         capacity=r.capacity, is_active=r.is_active,
     )
-
 
 @router.get("/rooms", response_model=Page[RoomOut])
 async def list_rooms(
@@ -73,12 +70,11 @@ async def list_rooms(
     count_stmt = select(func.count()).select_from(Room)
     if q:
         like = f"%{q}%"
-        stmt = stmt.where(Room.code.ilike(like) | Room.name.ilike(like))  # type: ignore[union-attr]
-        count_stmt = count_stmt.where(Room.code.ilike(like) | Room.name.ilike(like))  # type: ignore[union-attr]
+        stmt = stmt.where(Room.code.ilike(like) | Room.name.ilike(like))
+        count_stmt = count_stmt.where(Room.code.ilike(like) | Room.name.ilike(like))
     total = (await db.exec(count_stmt)).one()
     rooms = (await db.exec(stmt.order_by(Room.code).offset(page.offset).limit(page.limit))).all()
     return Page(items=[room_out(r) for r in rooms], total=total, page=page.page, page_size=page.page_size)
-
 
 @router.post("/rooms", response_model=RoomOut, status_code=status.HTTP_201_CREATED)
 async def create_room(
@@ -89,13 +85,12 @@ async def create_room(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"El aula '{code}' ya existe")
     room = Room(code=code, name=body.name, building=body.building)
     db.add(room)
-    await db.flush()  # obtiene room.id para la bitácora (RF-32)
+    await db.flush()
     await audit(db, admin, action="aula_creada", entity="room", entity_id=room.id,
                 new_value={"code": code, "name": body.name}, ip_address=_client_ip(request))
     await db.commit()
     await db.refresh(room)
     return room_out(room)
-
 
 @router.patch("/rooms/{room_id}", response_model=RoomOut)
 async def update_room(
@@ -112,7 +107,6 @@ async def update_room(
     await db.refresh(room)
     return room_out(room)
 
-
 class DeviceIn(BaseModel):
     room_id: int
     device_type: DeviceType
@@ -120,12 +114,10 @@ class DeviceIn(BaseModel):
     name: str | None = Field(default=None, max_length=80)
     rtsp_url: str | None = Field(default=None, max_length=255, description="Solo cámaras")
 
-
 class DeviceUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=80)
     rtsp_url: str | None = Field(default=None, max_length=255)
     is_active: bool | None = None
-
 
 class DeviceOut(BaseModel):
     id: int
@@ -138,25 +130,21 @@ class DeviceOut(BaseModel):
     is_online: bool
     last_heartbeat: str | None
     is_active: bool
-    rtsp_url: str | None = None  # R14: enmascarada en listados; completa en GET /devices/{id}
-
+    rtsp_url: str | None = None
 
 _RTSP_MASK = "***"
 
 
 def _rtsp_enmascarada(rtsp_url: str | None) -> str | None:
-    """R14: oculta la contraseña embebida del RTSP en los listados.
-    'rtsp://admin:secreta@10.14.5.11:554/...' → 'rtsp://admin:***@10.14.5.11:554/...'"""
     if not rtsp_url:
         return None
     import re as _re
 
     return _re.sub(r"(://[^:/@]+):([^@]+)@", rf"\1:{_RTSP_MASK}@", rtsp_url)
 
-
 def device_out(d: Device, room_code: str | None, *, mask_rtsp: bool = True) -> DeviceOut:
     return DeviceOut(
-        id=d.id,  # type: ignore[arg-type]
+        id=d.id,
         room_id=d.room_id,
         room_code=room_code,
         device_type=d.device_type.value,
@@ -168,7 +156,6 @@ def device_out(d: Device, room_code: str | None, *, mask_rtsp: bool = True) -> D
         is_active=d.is_active,
         rtsp_url=_rtsp_enmascarada(d.rtsp_url) if mask_rtsp else d.rtsp_url,
     )
-
 
 @router.get("/devices", response_model=Page[DeviceOut])
 async def list_devices(
@@ -192,31 +179,25 @@ async def list_devices(
         items=[device_out(d, rc) for d, rc in rows], total=total, page=page.page, page_size=page.page_size
     )
 
-
 @router.get("/devices/status", response_model=list[DeviceOut])
 async def devices_status(db: DbSession) -> list[DeviceOut]:
-    """RF-35: resumen público para el panel de monitoreo (en línea / fuera de línea)."""
     rows = (
         await db.exec(
             select(Device, Room.code)
             .join(Room, Room.id == Device.room_id)
             .where(Device.is_active)
-            .order_by(Device.is_online.desc(), Device.device_key)  # type: ignore[union-attr]
+            .order_by(Device.is_online.desc(), Device.device_key)
         )
     ).all()
     return [device_out(d, rc) for d, rc in rows]
-
 
 @router.get("/devices/{device_id}", response_model=DeviceOut)
 async def get_device(
     device_id: int, db: DbSession, _admin: RequireRole(UserRole.ADMIN)
 ) -> DeviceOut:
-    """Detalle completo de un dispositivo (solo admin): aquí SÍ va la
-    rtsp_url sin enmascarar, para configurar la cámara (R14)."""
     device = await _get_or_404(db, Device, device_id, "Dispositivo")
     room = await db.get(Room, device.room_id)
     return device_out(device, room.code if room else None, mask_rtsp=False)
-
 
 @router.post("/devices", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
 async def create_device(
@@ -243,7 +224,6 @@ async def create_device(
     room = await db.get(Room, device.room_id)
     return device_out(device, room.code if room else None)
 
-
 @router.patch("/devices/{device_id}", response_model=DeviceOut)
 async def update_device(
     device_id: int, body: DeviceUpdate, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
@@ -251,8 +231,7 @@ async def update_device(
     device = await _get_or_404(db, Device, device_id, "Dispositivo")
     old = {"name": device.name, "rtsp_url": _rtsp_enmascarada(device.rtsp_url), "is_active": device.is_active}
     data = body.model_dump(exclude_unset=True)
-    # R14: un rtsp_url que llega con la MÁSCARA se ignora (el cliente estaba
-    # reenviando el listado enmascarado; no hay que pisar la clave real).
+
     if "rtsp_url" in data and data["rtsp_url"] and _RTSP_MASK in data["rtsp_url"]:
         data.pop("rtsp_url")
     for field, value in data.items():
@@ -264,7 +243,6 @@ async def update_device(
     await db.refresh(device)
     room = await db.get(Room, device.room_id)
     return device_out(device, room.code if room else None)
-
 
 class TeacherIn(BaseModel):
     full_name: str = Field(min_length=3, max_length=160, examples=["Aquino Cruz, Mario (Mag.)"])
@@ -280,7 +258,6 @@ class TeacherIn(BaseModel):
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
 
-
 class PersonUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=3, max_length=160)
     whatsapp: str | None = Field(default=None, max_length=20)
@@ -295,7 +272,6 @@ class PersonUpdate(BaseModel):
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
 
-
 class PersonOut(BaseModel):
     id: int
     role: str
@@ -307,12 +283,11 @@ class PersonOut(BaseModel):
     semester: int | None
     is_active: bool
     must_change_password: bool
-    enrolled: bool | None = None  # solo con ?with_face=1 (RF-04)
-
+    enrolled: bool | None = None
 
 def person_out(u: AppUser) -> PersonOut:
     return PersonOut(
-        id=u.id,  # type: ignore[arg-type]
+        id=u.id,
         role=u.role.value,
         full_name=u.full_name,
         email=u.email,
@@ -324,19 +299,17 @@ def person_out(u: AppUser) -> PersonOut:
         must_change_password=u.must_change_password,
     )
 
-
 def _people_stmt(role: UserRole, q: str | None):
     stmt = select(AppUser).where(AppUser.role == role)
     count_stmt = select(func.count()).select_from(AppUser).where(AppUser.role == role)
     if q:
         like = f"%{q}%"
-        cond = AppUser.full_name.ilike(like) | AppUser.email.ilike(like)  # type: ignore[union-attr]
+        cond = AppUser.full_name.ilike(like) | AppUser.email.ilike(like)
         if role is UserRole.ESTUDIANTE:
-            cond = cond | AppUser.code.ilike(like)  # type: ignore[union-attr]
+            cond = cond | AppUser.code.ilike(like)
         stmt = stmt.where(cond)
         count_stmt = count_stmt.where(cond)
     return stmt, count_stmt
-
 
 async def _paged_people(db, role: UserRole, page: PageParams, q: str | None) -> Page[PersonOut]:
     stmt, count_stmt = _people_stmt(role, q)
@@ -345,7 +318,6 @@ async def _paged_people(db, role: UserRole, page: PageParams, q: str | None) -> 
         await db.exec(stmt.order_by(AppUser.full_name).offset(page.offset).limit(page.limit))
     ).all()
     return Page(items=[person_out(p) for p in people], total=total, page=page.page, page_size=page.page_size)
-
 
 @router.get("/teachers", response_model=Page[PersonOut])
 async def list_teachers(
@@ -356,18 +328,15 @@ async def list_teachers(
 ) -> Page[PersonOut]:
     return await _paged_people(db, UserRole.DOCENTE, page, q)
 
-
 @router.post("/teachers", response_model=PersonOut, status_code=status.HTTP_201_CREATED)
 async def create_teacher(
     body: TeacherIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> PersonOut:
-    """RF-02 + RF-08: crea el docente y le envía su clave temporal por correo."""
     user = await create_account(
         db, admin, role=UserRole.DOCENTE, full_name=body.full_name, email=body.email.lower(),
         dni=body.dni, whatsapp=body.whatsapp, ip=_client_ip(request),
     )
     return person_out(user)
-
 
 class StudentIn(BaseModel):
     full_name: str = Field(min_length=3, max_length=160)
@@ -384,7 +353,6 @@ class StudentIn(BaseModel):
             return validar_whatsapp(v)
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
-
 
 @router.get("/students", response_model=Page[PersonOut])
 async def list_students(
@@ -403,23 +371,21 @@ async def list_students(
     students = (
         await db.exec(stmt.order_by(AppUser.full_name).offset(page.offset).limit(page.limit))
     ).all()
-    # with_face=1: UNA query extra por página (no N por alumno) para el badge
-    # 'Enrolado/Sin rostro' del directorio (RF-04).
     enrolled_ids: set[int] = set()
     if with_face and students:
         ids = [s.id for s in students]
         filas = (
             await db.exec(
                 select(FaceEmbedding.student_id).where(
-                    FaceEmbedding.student_id.in_(ids),  # type: ignore[attr-defined]
-                    FaceEmbedding.is_current,  # type: ignore[arg-type]
+                    FaceEmbedding.student_id.in_(ids),
+                    FaceEmbedding.is_current,
                 )
             )
         ).all()
         enrolled_ids = {r[0] if isinstance(r, tuple) else r for r in filas}
     items = [
         PersonOut(
-            id=s.id,  # type: ignore[arg-type]
+            id=s.id,
             role=s.role.value,
             full_name=s.full_name,
             email=s.email,
@@ -435,12 +401,10 @@ async def list_students(
     ]
     return Page(items=items, total=total, page=page.page, page_size=page.page_size)
 
-
 @router.post("/students", response_model=PersonOut, status_code=status.HTTP_201_CREATED)
 async def create_student(
     body: StudentIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> PersonOut:
-    """RF-03 + RF-08: crea el estudiante y le envía su clave temporal por correo."""
     user = await create_account(
         db, admin, role=UserRole.ESTUDIANTE, full_name=body.full_name, email=body.email.lower(),
         dni=body.dni, code=body.code, semester=body.semester, whatsapp=body.whatsapp,
@@ -448,13 +412,66 @@ async def create_student(
     )
     return person_out(user)
 
+@router.post("/students/import-preview", response_model=ImportacionAlumnosPreviewOut)
+async def students_import_preview(
+    request: Request,
+    db: DbSession,
+    admin: RequireRole(UserRole.ADMIN),
+    file: Annotated[UploadFile, File(description="Nómina en PDF, JPG, PNG o WEBP")],
+    default_semester: Annotated[int, Form(ge=1, le=12)] = 1,
+) -> ImportacionAlumnosPreviewOut:
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            detail="El archivo está vacío")
+    if len(raw) > MAX_PESO_ARCHIVO:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                            detail="El archivo supera el máximo de 10 MB")
+    try:
+        documento, alumnos = await preview_nomina(db, raw, file.filename, default_semester)
+    except ValueError as exc:
+        detalle = str(exc)
+        codigo = (status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+                  if detalle.startswith("Formato no soportado") else
+                  status.HTTP_422_UNPROCESSABLE_CONTENT)
+        raise HTTPException(status_code=codigo, detail=detalle) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            detail="No se pudo leer la nómina; ¿es una tabla impresa válida?") from exc
+    if not alumnos:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=("No se detectaron filas con código y nombre. Revisa que sea una nómina "
+                    "impresa en tabla, derecha y con buena luz, o registra a los alumnos a mano."),
+        )
+    await audit(db, admin, action="importacion_alumnos_preview", entity="app_user",
+                new_value={"archivo": file.filename, "tipo": documento.tipo,
+                           "paginas": documento.paginas, "filas": len(alumnos)},
+                ip_address=_client_ip(request))
+    await db.commit()
+    listos = sum(1 for alumno in alumnos if alumno.confiable and not alumno.errores)
+    con_error = sum(1 for alumno in alumnos if alumno.errores)
+    return ImportacionAlumnosPreviewOut(
+        tipo=documento.tipo,
+        paginas=documento.paginas,
+        total=len(alumnos),
+        listos=listos,
+        con_error=con_error,
+        alumnos=alumnos,
+    )
+
+@router.post("/students/import-confirm", response_model=ImportacionAlumnosOut)
+async def students_import_confirm(
+    body: ImportacionAlumnosIn, request: Request, db: DbSession,
+    admin: RequireRole(UserRole.ADMIN),
+) -> ImportacionAlumnosOut:
+    return await confirmar_nomina(db, admin, body, ip=_client_ip(request))
 
 @router.get("/accounts/{user_id}", response_model=PersonOut)
 async def get_account(
     user_id: int, db: DbSession, _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE)
 ) -> PersonOut:
     return person_out(await _get_or_404(db, AppUser, user_id, "Cuenta"))
-
 
 @router.patch("/accounts/{user_id}", response_model=PersonOut)
 async def update_account(
@@ -465,8 +482,12 @@ async def update_account(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="La cuenta admin se gestiona por BD")
     old = {"full_name": user.full_name, "whatsapp": user.whatsapp, "is_active": user.is_active,
            "semester": user.semester}
+    was_active = user.is_active
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(user, field, value)
+    if was_active and not user.is_active:
+        user.token_version += 1
+        await revoke_all_for_user(db, user.id, "account_deactivated", commit=False)
     db.add(user)
     await audit(db, admin, action="cuenta_actualizada", entity="app_user", entity_id=user.id,
                 old_value=old, ip_address=_client_ip(request))
@@ -474,11 +495,9 @@ async def update_account(
     await db.refresh(user)
     return person_out(user)
 
-
 @router.post("/accounts/{user_id}/send-temp-password")
 async def account_send_temp_password(
     user_id: int, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> dict:
-    """RF-08: genera una NUEVA clave temporal y la envía por correo."""
     result = await resend_credentials(db, admin, user_id, ip=_client_ip(request))
     return {"message": result.message}

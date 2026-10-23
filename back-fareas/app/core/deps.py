@@ -1,9 +1,3 @@
-"""Dependencias compartidas de la API - estilo Annotated (skill oficial FastAPI).
-
-- DbSession: sesión async de BD.
-- CurrentUser: usuario autenticado por Bearer JWT (RF-11).
-- RequireRole: guard de roles a nivel router/endpoint (RF-01).
-"""
 from collections.abc import Awaitable, Callable
 from typing import Annotated
 
@@ -34,7 +28,7 @@ async def get_current_user(
         )
     try:
         payload = decode_access_token(credentials.credentials)
-    except Exception as exc:  # expirada o inválida
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido o expirado. Inicia sesión nuevamente.",
@@ -53,10 +47,7 @@ async def get_current_user(
     request.state.user = user
     return user
 
-
 async def get_current_user_active(user: Annotated[AppUser, Depends(get_current_user)]) -> AppUser:
-    """R14: con clave temporal pendiente TODO responde 403 (code
-    must_change_password) salvo los endpoints que usan CurrentUserPending."""
     if user.must_change_password:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -67,20 +58,13 @@ async def get_current_user_active(user: Annotated[AppUser, Depends(get_current_u
         )
     return user
 
-
 CurrentUser = Annotated[AppUser, Depends(get_current_user_active)]
 
-# Exclusivo de GET /auth/me y POST /auth/change-password (RF-11): entran
-# incluso con must_change_password=True (de lo contrario sería un callejón).
+
 CurrentUserPending = Annotated[AppUser, Depends(get_current_user)]
 
 
 def require_role(*allowed: UserRole) -> Callable[[AppUser], Awaitable[AppUser]]:
-    """RF-01: guard de roles. Uso:
-        router = APIRouter(dependencies=[Depends(require_role(UserRole.ADMIN))])
-    o por endpoint con:  user: RequireRole(UserRole.ADMIN)
-    """
-
     async def guard(user: CurrentUser) -> AppUser:
         if user.role not in allowed:
             raise HTTPException(
@@ -91,7 +75,5 @@ def require_role(*allowed: UserRole) -> Callable[[AppUser], Awaitable[AppUser]]:
 
     return guard
 
-
-def RequireRole(*allowed: UserRole) -> type:  # noqa: N802 - PascalCase intencional (anotación)
-    """Anotación de endpoint:  user: RequireRole(UserRole.ADMIN)."""
-    return Annotated[AppUser, Depends(require_role(*allowed))]  # type: ignore[return-value]
+def RequireRole(*allowed: UserRole) -> type:
+    return Annotated[AppUser, Depends(require_role(*allowed))]

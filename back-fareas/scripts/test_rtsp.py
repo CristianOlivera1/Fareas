@@ -1,17 +1,7 @@
-"""Prueba rápida de la cámara Hikvision por RTSP (RF-17) - PLAN §4.1.
-
-Uso:
-    cd back-fareas
-    .venv/Scripts/python scripts/test_rtsp.py "rtsp://admin:CONTRASEÑA@10.14.5.11:554/Streaming/Channels/102"
-    .venv/Scripts/python scripts/test_rtsp.py --list   # URLs de ejemplo del seed
-
-Muestra resolución/fps y guarda el primer frame en storage/test_rtsp.jpg.
-Recomendación: usar el SUB-STREAM (Channels/102) para el pipeline: menos CPU.
-"""
 import sys
 from pathlib import Path
 
-import cv2  # type: ignore[import-untyped]
+import cv2
 
 STORAGE = Path(__file__).resolve().parent.parent / "storage"
 
@@ -44,7 +34,6 @@ def main() -> None:
     print(f"🖼️  Primer frame guardado en: {out}")
 
     cap.release()
-
 
 if __name__ == "__main__":
     main()

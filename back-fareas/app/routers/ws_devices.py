@@ -1,22 +1,3 @@
-"""Canal WebSocket para nodos ESP32 en las puertas de las aulas.
-
-RF-25 (feedback LED/buzzer) + RF-33 (identidad y latido) + RF-35 (monitoreo).
-
-Protocolo (contrato con el firmware, guía en PLAN §4.2):
-
-1. Conexión:  ``ws://host:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET>``
-   Token incorrecto → close 4401.
-2. Presentación:  ``{"type": "hello", "device_id": "esp32-lab305", "mac": "..."}``
-   El ``device_id`` DEBE existir como ``device.device_key`` (tipo esp32, activo)
-   en la BD; si no, close 4404. Al validarse: ``is_online=TRUE`` y
-   ``last_heartbeat=NOW()`` (RF-33/RF-35) — visible en GET /devices/status.
-3. Latido cada 30 s:  ``{"type": "heartbeat"}`` → actualiza last_heartbeat.
-   La tarea ``expirar_nodos`` marca is_online=FALSE si no llega latido en 90 s.
-4. El backend despacha veredictos Tabla 8 al device_key:
-   ``{"type": "verdict", "status": "asistio", "color": "verde", "buzzer": "beep_1",
-      "seconds": 3, "message": "Registro correcto"}``
-   (los envía ``services/camera_loop.py`` usando ``conexiones()``).
-"""
 import contextlib
 import json
 import logging
@@ -33,31 +14,25 @@ from app.tables import Device, DeviceType
 logger = logging.getLogger("fareas.ws")
 router = APIRouter()
 
-# device_key -> WebSocket activo (proceso único; PLAN §7 descarta pub/sub).
 _conexiones: dict[str, WebSocket] = {}
-# device_key -> monotonic del último mensaje recibido (para expirar sin BD extra)
 _ultimo_msj: dict[str, float] = {}
 
-HEARTBEAT_TIMEOUT_S = 90.0  # RF-33: 3 latidos perdidos (30 c/u) → fuera de línea
+HEARTBEAT_TIMEOUT_S = 90.0
 
 
 def conexiones() -> dict[str, WebSocket]:
-    """Mapa device_key → WebSocket para el despacho de veredictos."""
     return _conexiones
 
-
 async def _validar_dispositivo(db: SQLModelAsyncSession, device_id: str) -> Device | None:
-    """El device_key debe ser un ESP32 activo registrado (RF-33)."""
     return (
         await db.exec(
             select(Device).where(
                 Device.device_key == device_id,
-                Device.device_type == DeviceType.ESP32,  # type: ignore[arg-type]
-                Device.is_active,  # type: ignore[arg-type]
+                Device.device_type == DeviceType.ESP32,
+                Device.is_active,
             )
         )
     ).first()
-
 
 async def _marcar_online(db: SQLModelAsyncSession, device_id: str) -> None:
     d = await _validar_dispositivo(db, device_id)
@@ -67,7 +42,6 @@ async def _marcar_online(db: SQLModelAsyncSession, device_id: str) -> None:
         db.add(d)
         await db.commit()
 
-
 async def _marcar_offline(db: SQLModelAsyncSession, device_id: str) -> None:
     d = await _validar_dispositivo(db, device_id)
     if d is not None:
@@ -75,12 +49,7 @@ async def _marcar_offline(db: SQLModelAsyncSession, device_id: str) -> None:
         db.add(d)
         await db.commit()
 
-
 async def expirar_nodos() -> int:
-    """RF-35: marca offline los nodos con latidos vencidos (>90 s).
-
-    La llama el scheduler (lifespan). Devuelve cuántos nodos se apagaron.
-    """
     import time as _time
 
     ahora = _time.monotonic()
@@ -100,7 +69,6 @@ async def expirar_nodos() -> int:
             logger.exception("No se pudo marcar offline el nodo %s", device_id)
     return apagados
 
-
 @router.websocket("/ws/devices")
 async def devices_endpoint(websocket: WebSocket, token: str = Query(...)) -> None:
     settings = get_settings()
@@ -111,7 +79,6 @@ async def devices_endpoint(websocket: WebSocket, token: str = Query(...)) -> Non
     await websocket.accept()
     device_id: str | None = None
     try:
-        # 1) La PRIMERA trama debe ser el hello (RF-33)
         raw = await websocket.receive_text()
         try:
             hello = json.loads(raw)
@@ -129,7 +96,6 @@ async def devices_endpoint(websocket: WebSocket, token: str = Query(...)) -> Non
             await websocket.close(code=4404, reason=f"device_key '{device_id}' no registrado como ESP32 activo")
             return
 
-        # Registrado: online + último latido ahora (RF-33/RF-35)
         import time as _time
 
         _conexiones[device_id] = websocket
@@ -140,7 +106,6 @@ async def devices_endpoint(websocket: WebSocket, token: str = Query(...)) -> Non
                                               "room_id": dispositivo.room_id}))
         logger.info("[RF-33] Nodo ESP32 '%s' conectado (%s)", device_id, hello.get("mac", "sin mac"))
 
-        # 2) Bucle de latidos/comandos
         while True:
             raw = await websocket.receive_text()
             _ultimo_msj[device_id] = _time.monotonic()
@@ -176,9 +141,7 @@ async def devices_endpoint(websocket: WebSocket, token: str = Query(...)) -> Non
                     await _marcar_offline(db, device_id)
             logger.info("[RF-33] Nodo ESP32 '%s' desconectado", device_id)
 
-
 async def enviar_veredicto(device_key: str, comando: dict) -> bool:
-    """Envía un comando al nodo (Tabla 8). False si no está conectado."""
     ws = _conexiones.get(device_key)
     if ws is None:
         return False

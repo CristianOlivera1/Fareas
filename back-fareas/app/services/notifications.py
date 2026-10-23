@@ -1,8 +1,3 @@
-"""Notificaciones de asistencia — RF-24 (alertas DPI al cerrar sesión).
-
-Separado de ``emailer.py`` (concentra lo transaccional de auth) para mantener
-cada módulo pequeño; reutiliza el mismo motor de envío y la misma paleta.
-"""
 from app.services.emailer import send_email
 
 
@@ -16,10 +11,6 @@ async def send_dpi_alert(
     umbral: float,
     nivel: str = "alerta",
 ) -> bool:
-    """R7: aviso al alumno por acumular faltas injustificadas.
-
-    nivel='alerta' (preventivo, ≥ 20 %) o 'limite' (inhabilitación al
-    SUPERAR el 30 % — decisión confirmada 2026-10-11). Un correo por nivel."""
     import html
 
     limite = nivel == "limite"

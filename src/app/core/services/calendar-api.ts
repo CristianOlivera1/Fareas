@@ -15,11 +15,9 @@ export class CalendarApi extends BaseApi {
   holidays(year?: number | null) {
     return this.get<Holiday[]>('/holidays', year ? { year } : undefined);
   }
-  /** R12: registrar la fecha CANCELA las sesiones de ese día (devuelve cuántas). */
   createHoliday(body: { holiday_date: string; description: string }) {
     return this.post<HolidayCreated>('/holidays', body);
   }
-  /** R12: paro/feriado por rango (omite fines de semana por defecto). */
   createHolidayRange(body: {
     desde: string;
     hasta: string;
@@ -28,7 +26,6 @@ export class CalendarApi extends BaseApi {
   }) {
     return this.post<HolidayRangeResult>('/holidays/range', body);
   }
-  /** R12: genera los feriados NACIONALES del año (fijos + Semana Santa). */
   createNationalHolidays(year: number) {
     return this.post<HolidayNationalResult>('/holidays/national', { year });
   }
@@ -39,7 +36,6 @@ export class CalendarApi extends BaseApi {
   justifications(filters?: { student_id?: number; course_id?: number }) {
     return this.get<Justification[]>('/justifications', filters);
   }
-  /** R6: el alta informa faltas_afectadas; el docente DEBE elegir curso. */
   createJustification(body: {
     student_id: number;
     course_id?: number | null;
@@ -50,7 +46,6 @@ export class CalendarApi extends BaseApi {
   }) {
     return this.post<JustificationCreated>('/justifications', body);
   }
-  /** R6: eliminar revierte las faltas que había justificado. */
   deleteJustification(id: number) {
     return this.delete<{ message: string }>(`/justifications/${id}`);
   }
@@ -58,7 +53,6 @@ export class CalendarApi extends BaseApi {
   settings() {
     return this.get<Settings>('/settings');
   }
-  /** R1: etiquetas de semestre que ya tienen grupos (selectores del panel). */
   semesters() {
     return this.get<string[]>('/settings/semesters');
   }

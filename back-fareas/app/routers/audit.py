@@ -1,8 +1,3 @@
-"""Bitácora de acciones sensibles - RF-32 (solo lectura, admin).
-
-La escritura se hace desde ``app/services/audit.py`` dentro de la transacción
-de cada operación; aquí solo se consulta con filtros y paginación.
-"""
 from datetime import datetime
 
 from fastapi import APIRouter, Query
@@ -30,7 +25,6 @@ class AuditEntryOut(BaseModel):
     ip_address: str | None
     created_at: str | None
 
-
 @router.get("/audit-log", response_model=Page[AuditEntryOut])
 async def list_audit_log(
     db: DbSession,
@@ -41,7 +35,7 @@ async def list_audit_log(
     entity_id: int | None = None,
     actor_id: int | None = None,
     actor_role: str | None = Query(None, max_length=20, description="admin | docente | estudiante"),
-    since: datetime | None = Query(None, description="Filtro ISO p. ej. 2026-09-01T00:00:00"),  # noqa: B008
+    since: datetime | None = Query(None, description="Filtro ISO p. ej. 2026-09-01T00:00:00"),
 ) -> Page[AuditEntryOut]:
     stmt = select(AuditLog, AppUser).outerjoin(AppUser, AppUser.id == AuditLog.actor_id)
     count_stmt = select(func.count()).select_from(AuditLog)
@@ -58,13 +52,13 @@ async def list_audit_log(
         stmt = stmt.where(AuditLog.actor_id == actor_id)
         count_stmt = count_stmt.where(AuditLog.actor_id == actor_id)
     if actor_role:
-        stmt = stmt.where(AppUser.role == actor_role)  # type: ignore[arg-type]
+        stmt = stmt.where(AppUser.role == actor_role)
         count_stmt = count_stmt.where(
-            AuditLog.actor_id.in_(select(AppUser.id).where(AppUser.role == actor_role))  # type: ignore[union-attr]
+            AuditLog.actor_id.in_(select(AppUser.id).where(AppUser.role == actor_role))
         )
     if since is not None:
-        stmt = stmt.where(AuditLog.created_at >= since)  # type: ignore[arg-type]
-        count_stmt = count_stmt.where(AuditLog.created_at >= since)  # type: ignore[arg-type]
+        stmt = stmt.where(AuditLog.created_at >= since)
+        count_stmt = count_stmt.where(AuditLog.created_at >= since)
 
     total = (await db.exec(count_stmt)).one()
     rows = (
@@ -72,7 +66,7 @@ async def list_audit_log(
     ).all()
     items = [
         AuditEntryOut(
-            id=log.id,  # type: ignore[arg-type]
+            id=log.id,
             action=log.action,
             entity=log.entity,
             entity_id=log.entity_id,

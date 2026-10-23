@@ -213,7 +213,6 @@
       </app-ui-alert>
     </div>
   }
-  <!-- El footer debe ser hijo DIRECTO de p-dialog: dentro de un @if no se proyecta -->
   <ng-template pTemplate="footer">
     <app-ui-button variant="ghost" (click)="rectifyVisible = false">Cancelar</app-ui-button>
     <app-ui-button [loading]="busy() === 'rectify-' + rectifyTarget()?.record_id" (click)="confirmRectify()">

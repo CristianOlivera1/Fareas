@@ -1,16 +1,3 @@
-"""Demo sin hardware: video en bucle como si fuera la puerta del aula (§4.3).
-
-Uso:
-    python scripts/simulate_camera.py                        # video de defecto
-    python scripts/simulate_camera.py ruta/video.mp4 --thr 0.75
-    python scripts/simulate_camera.py 0                      # webcam
-    python scripts/simulate_camera.py video.mp4 --save out.mp4
-
-La galería se carga de la BD (embeddings vigentes). Muestra cajas coloreadas
-según el veredicto Tabla 8 (verde/amarillo/rojo/azul) con nombre del veredicto
-y similitud. Tecla 'q' para salir. Si pasas --save, además escribe el video
-anotado (útil para adjuntarlo a la tesis).
-"""
 import argparse
 import asyncio
 import sys
@@ -18,12 +5,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import cv2  # noqa: E402
+import cv2
 
-from app.ai.frame_source import draw_face, open_source  # noqa: E402
-from app.ai.pipeline import COLORS, MESSAGES  # noqa: E402
-from app.ai.resources import demo_video  # noqa: E402
-from app.ai.runtime import vision_pipeline  # noqa: E402
+from app.ai.frame_source import draw_face, open_source
+from app.ai.pipeline import COLORS, MESSAGES
+from app.ai.resources import demo_video
+from app.ai.runtime import vision_pipeline
 
 
 async def _galeria_desde_bd() -> int:
@@ -37,7 +24,6 @@ async def _galeria_desde_bd() -> int:
     await engine.dispose()
     return n
 
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Demo de reconocimiento facial Fareas")
     parser.add_argument("source", nargs="?", default=None, help="mp4/avi, rtsp:// o 0 (webcam); defecto: video demo del proyecto")
@@ -47,7 +33,7 @@ def main() -> None:
     parser.add_argument("--max-frames", type=int, default=0, help="tope de frames a grabar (0 = video completo)")
     args = parser.parse_args()
     if args.source is None:
-        args.source = str(demo_video())  # recurso interno del proyecto
+        args.source = str(demo_video())
 
     n_alumnos = asyncio.run(_galeria_desde_bd())
     pipe = vision_pipeline(threshold=args.thr)
@@ -58,7 +44,6 @@ def main() -> None:
     import time
 
     def primer_frame(fuente, intentos: int = 80):
-        """La fuente lee en hilo: el primer frame tarda unos ms en llegar."""
         for _ in range(intentos):
             ok, f = fuente.read()
             if ok and f is not None:
@@ -75,8 +60,6 @@ def main() -> None:
     if args.save:
         writer = cv2.VideoWriter(args.save, cv2.VideoWriter_fourcc(*"mp4v"), 24.0,
                                  (primero.shape[1], primero.shape[0]))
-        # El archivo repite en bucle: al grabar, se detiene tras UNA pasada
-        # completa (o args.max-frames si el usuario pide menos).
         probe = cv2.VideoCapture(str(args.source))
         limite_frames = int(probe.get(cv2.CAP_PROP_FRAME_COUNT) or 0) or 250
         probe.release()
@@ -118,7 +101,6 @@ def main() -> None:
                 cv2.imshow("Fareas - demo puerta (q = salir)", frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
-            # ritmo ~args.fps procesamientos por segundo
             dt = time.monotonic() - t0
             time.sleep(max(0.0, 1.0 / args.fps - dt))
             if ultimo:
@@ -129,7 +111,6 @@ def main() -> None:
             writer.release()
         else:
             cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
     main()

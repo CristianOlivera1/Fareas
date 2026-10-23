@@ -1,21 +1,9 @@
-"""Reconocimiento: similitud de coseno contra la galería de embeddings vigentes.
-
-``FaceGallery`` mantiene en memoria los embeddings con ``is_current=TRUE``
-(caché; se recarga con ``reload()`` tras cada enrolamiento). El pipeline la
-recibe como dependencia; este módulo no toca la BD.
-"""
 import numpy as np
 
 from app.tables import FaceEmbedding
 
 
 def parse_pg_array(value) -> np.ndarray | None:
-    """Valor de la columna REAL[512] → np.ndarray float32.
-
-    Con asyncpg la lectura entrega ``list[float]`` nativo (el modelo mapea la
-    columna con PgRealArray); se conserva el soporte del literal str
-    '{0.1,0.2,...}' por robustez (pgAdmin, dumps, drivers futuros).
-    """
     if value is None:
         return None
     if isinstance(value, list | tuple):
@@ -28,15 +16,11 @@ def parse_pg_array(value) -> np.ndarray | None:
     except ValueError:
         return None
 
-
 class FaceGallery:
-    """Galería de embeddings L2-normalizados (student_id → matriz (n, 512))."""
-
     def __init__(self) -> None:
         self._embs: dict[int, np.ndarray] = {}
 
     def set_student(self, student_id: int, vectors: list[np.ndarray]) -> None:
-        """Inserta/actualiza un alumno (p. ej. tras enrolarlo)."""
         if vectors:
             self._embs[student_id] = np.stack(vectors)
         else:
@@ -53,7 +37,6 @@ class FaceGallery:
         return len(self._embs)
 
     def reload(self, rows: list[FaceEmbedding]) -> None:
-        """Recarga la galería desde filas de face_embedding (is_current)."""
         bucket: dict[int, list[np.ndarray]] = {}
         for r in rows:
             vec = parse_pg_array(r.vector)
@@ -67,10 +50,6 @@ class FaceGallery:
         candidates: set[int] | None = None,
         threshold: float = 0.75,
     ) -> tuple[int | None, float]:
-        """Mejor coincidencia dentro de ``candidates`` (o toda la galería).
-
-        Devuelve (student_id | None, similitud). ``None`` = DESCONOCIDO.
-        """
         if not self._embs:
             return None, 0.0
         pool = self._embs if candidates is None else {sid: m for sid, m in self._embs.items() if sid in candidates}
@@ -78,7 +57,7 @@ class FaceGallery:
             return None, 0.0
         best_sid, best_sim = None, 0.0
         for sid, mat in pool.items():
-            sim = float((mat @ embedding).max())  # máx entre los embeddings del alumno
+            sim = float((mat @ embedding).max())
             if sim > best_sim:
                 best_sid, best_sim = sid, sim
         if best_sid is not None and best_sim >= threshold:

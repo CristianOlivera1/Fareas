@@ -1,18 +1,3 @@
-"""Matrículas con reglas de negocio (R8) — matricular, retirar, reactivar,
-transferir.
-
-R8 en orden de validación al matricular:
-  a) grupo del semestre vigente y activo;
-  b) CUPO: enrolled_count < capacity (40 por defecto; igual para todos los
-     cursos — decisión 2026-10-11) → 409 'Grupo lleno 40/40';
-  c) UN solo grupo ACTIVO por curso y semestre para el alumno;
-  d) el alumno no puede quedar con dos bloques que se cruzan (otros grupos
-     activos del semestre) → 409 con el curso en conflicto;
-  e) retiro = withdrawn_at si ya hay registros de asistencia (si no, DELETE);
-  f) transferencia entre grupos del mismo curso = retirar origen +
-     matricular destino en UNA transacción. Las faltas anteriores se
-     conservan y se suman al curso (decisión confirmada).
-"""
 from datetime import datetime
 
 from sqlmodel import func, select
@@ -38,26 +23,19 @@ async def _cuenta_activos(db, group_id: int) -> int:
         await db.exec(
             select(func.count())
             .select_from(Enrollment)
-            .where(Enrollment.group_id == group_id, Enrollment.withdrawn_at.is_(None))  # type: ignore[union-attr,arg-type]
+            .where(Enrollment.group_id == group_id, Enrollment.withdrawn_at.is_(None))
         )
     ).one()
 
-
 def _solapan(w1: int, i1, f1: datetime, w2: int, i2, f2) -> bool:
-    """Dos bloques se cruzan si comparten día y sus rangos se solapan."""
     return w1 == w2 and i1 < f2 and i2 < f1
-
 
 async def _bloques_del_grupo(db, group_id: int) -> list[ScheduleBlock]:
     return list((await db.exec(select(ScheduleBlock).where(ScheduleBlock.group_id == group_id))).all())
 
-
 async def _conflicto_de_alumno(
     db, student_id: int, grupo_destino: CourseGroup
 ) -> str | None:
-    """R8c: ¿los bloques del grupo destino se cruzan con los de OTRO grupo
-    activo (mismo semestre) donde el alumno ya está matriculado?
-    Devuelve el código del curso en conflicto o None."""
     nuevos = await _bloques_del_grupo(db, grupo_destino.id)
     if not nuevos:
         return None
@@ -66,11 +44,11 @@ async def _conflicto_de_alumno(
             select(CourseGroup, Enrollment)
             .join(Enrollment, Enrollment.group_id == CourseGroup.id)
             .where(
-                Enrollment.student_id == student_id,  # type: ignore[arg-type]
-                Enrollment.withdrawn_at.is_(None),  # type: ignore[union-attr]
-                CourseGroup.id != grupo_destino.id,  # type: ignore[arg-type]
-                CourseGroup.is_active,  # type: ignore[arg-type]
-                CourseGroup.semester_label == grupo_destino.semester_label,  # type: ignore[arg-type]
+                Enrollment.student_id == student_id,
+                Enrollment.withdrawn_at.is_(None),
+                CourseGroup.id != grupo_destino.id,
+                CourseGroup.is_active,
+                CourseGroup.semester_label == grupo_destino.semester_label,
             )
         )
     ).all()
@@ -83,12 +61,9 @@ async def _conflicto_de_alumno(
                     return f"{curso.code if curso else grupo.course_id} (grupo {grupo.group_code})"
     return None
 
-
 async def matricular(
     db: SQLModelAsyncSession, actor, *, group_id: int, student_id: int, ip: str | None = None
 ) -> Enrollment:
-    """R8a-d: valida cupo, grupo único por curso y cruce de horarios; crea la
-    matrícula (o reactiva una retirada en el MISMO grupo)."""
     grupo = await db.get(CourseGroup, group_id)
     if grupo is None:
         raise errors.NotFoundError("Grupo no encontrado")
@@ -102,7 +77,6 @@ async def matricular(
     if student is None or student.role is not UserRole.ESTUDIANTE:
         raise errors.DomainError("Solo se matricula a usuarios con rol estudiante")
 
-    # b) Cupo (40 por defecto, igual para todos los cursos)
     activos = await _cuenta_activos(db, group_id)
     if activos >= grupo.capacity:
         raise errors.ConflictError(f"Grupo lleno ({activos}/{grupo.capacity}); crea otro grupo")
@@ -117,18 +91,17 @@ async def matricular(
     if ya is not None and ya.withdrawn_at is None:
         raise errors.ConflictError("El estudiante ya está matriculado en este grupo")
 
-    # c) Un solo grupo ACTIVO por curso y semestre
     mismo_curso = (
         await db.exec(
             select(CourseGroup, Enrollment)
             .join(Enrollment, Enrollment.group_id == CourseGroup.id)
             .where(
-                Enrollment.student_id == student_id,  # type: ignore[arg-type]
-                Enrollment.withdrawn_at.is_(None),  # type: ignore[union-attr]
-                CourseGroup.course_id == grupo.course_id,  # type: ignore[arg-type]
-                CourseGroup.semester_label == grupo.semester_label,  # type: ignore[arg-type]
-                CourseGroup.is_active,  # type: ignore[arg-type]
-                CourseGroup.id != group_id,  # type: ignore[arg-type]
+                Enrollment.student_id == student_id,
+                Enrollment.withdrawn_at.is_(None),
+                CourseGroup.course_id == grupo.course_id,
+                CourseGroup.semester_label == grupo.semester_label,
+                CourseGroup.is_active,
+                CourseGroup.id != group_id,
             )
         )
     ).first()
@@ -140,14 +113,13 @@ async def matricular(
             f"{curso.code if curso else 'ese curso'}; usa la transferencia"
         )
 
-    # d) Sin bloques cruzados con otros grupos activos del semestre
     choque = await _conflicto_de_alumno(db, student_id, grupo)
     if choque:
         raise errors.ConflictError(
             f"El horario del grupo se cruza con otro curso del alumno: {choque}"
         )
 
-    if ya is not None:  # estaba retirado del MISMO grupo → reactivar
+    if ya is not None:
         ya.withdrawn_at = None
         db.add(ya)
         enrollment = ya
@@ -166,12 +138,9 @@ async def matricular(
     await db.commit()
     return enrollment
 
-
 async def retirar(
     db: SQLModelAsyncSession, actor, *, group_id: int, student_id: int, ip: str | None = None
 ) -> dict:
-    """R8d: retiro — DELETE si no hay registros de asistencia; withdrawn_at
-    si los hay (el historial y las faltas del curso se conservan)."""
     enrollment = (
         await db.exec(
             select(Enrollment).where(
@@ -187,11 +156,11 @@ async def retirar(
     con_registros = (
         await db.exec(
             select(AttendanceRecord.id)
-            .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id)  # type: ignore[arg-type]
-            .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)  # type: ignore[arg-type]
+            .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id)
+            .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)
             .where(
-                AttendanceRecord.student_id == student_id,  # type: ignore[arg-type]
-                ScheduleBlock.group_id == group_id,  # type: ignore[arg-type]
+                AttendanceRecord.student_id == student_id,
+                ScheduleBlock.group_id == group_id,
             )
             .limit(1)
         )
@@ -214,13 +183,10 @@ async def retirar(
     await db.commit()
     return {"modo": modo, "student_id": student_id, "group_id": group_id}
 
-
 async def transferir(
     db: SQLModelAsyncSession, actor, *, group_id: int, student_id: int,
     destino_group_id: int, ip: str | None = None,
 ) -> dict:
-    """R8e: cambia de grupo DENTRO DEL MISMO CURSO en una transacción.
-    Las faltas anteriores se conservan y se suman al curso (decisión #4)."""
     origen = await db.get(CourseGroup, group_id)
     destino = await db.get(CourseGroup, destino_group_id)
     if origen is None or destino is None:
@@ -234,7 +200,6 @@ async def transferir(
     if await semestre_vigente(db) != destino.semester_label:
         raise errors.DomainError("El grupo destino no pertenece al semestre vigente")
 
-    # Cupo del destino (contando al alumno aún en el origen)
     activos = await _cuenta_activos(db, destino_group_id)
     if activos >= destino.capacity:
         raise errors.ConflictError(f"Grupo destino lleno ({activos}/{destino.capacity})")
@@ -252,7 +217,6 @@ async def transferir(
     if enrollment is None or enrollment.withdrawn_at is not None:
         raise errors.NotFoundError("El estudiante no está matriculado (activo) en el grupo origen")
 
-    # Una sola transacción: retirar origen + matricular destino.
     enrollment.withdrawn_at = datetime.now()
     db.add(enrollment)
     nuevo = Enrollment(student_id=student_id, group_id=destino_group_id)

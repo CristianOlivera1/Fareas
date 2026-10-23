@@ -1,10 +1,3 @@
-"""Fixtures de pytest para la API.
-
-Patrón IMPORTANTE (lección del Bloque 3): TODO en un solo event loop.
-Mezclar AsyncClient con TestClient (o sesiones directas en otro loop)
-corrompe el pool de asyncpg ('Event loop is closed'). Aquí la app y las
-consultas de preparación/limpieza corren en el mismo loop de cada test.
-"""
 from collections.abc import AsyncGenerator
 
 import pytest
@@ -15,9 +8,9 @@ from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
 
 from app.core.config import get_settings
-from app.core.security import hash_password
+from app.core.security import hash_password, hash_refresh_token
 from app.main import create_app
-from app.tables import AppUser, AuditLog, UserRole
+from app.tables import AppUser, AuditLog, RefreshToken, UserRole
 
 TEMP_EMAIL = "temp.test.auth@unamba.edu.pe"
 TEMP_STUDENT_EMAIL = "temp.student@unamba.edu.pe"
@@ -27,51 +20,39 @@ DOCENTE_TEMP_EMAIL = "temp.docente.login@unamba.edu.pe"
 
 @pytest.fixture(autouse=True)
 async def _dispose_engine_after_each_test():
-    """pytest-asyncio crea un loop POR TEST: el pool del engine guarda
-    conexiones atadas al loop del test anterior. Dispuesta al terminar cada
-    test (mismo loop en el que se usaron) para que el siguiente arranque limpio."""
     yield
     from app.database import engine
 
     await engine.dispose()
 
-
 @pytest.fixture(autouse=True)
 async def _reset_login_rate_limit():
-    """El rate limit de login (routers/auth.py) es un estado en memoria por
-    proceso: sin este reset, una corrida de tests con IP de prueba única
-    acumularía fallos y bloquearía tests posteriores con 429."""
     from app.routers.auth import _login_attempts
 
     _login_attempts.clear()
     yield
     _login_attempts.clear()
 
-
 @pytest.fixture(autouse=True)
 async def _reset_otp_store():
-    """El store de OTP vive en memoria: cada test arranca sin códigos previos."""
     from app.services import otp
 
     otp.clear()
     yield
     otp.clear()
 
-
 @pytest.fixture(autouse=True)
 def _no_smtp(monkeypatch: pytest.MonkeyPatch):
-    """Los tests no deben depender de un SMTP real ni esperar timeouts."""
     async def _noop(*_args, **_kwargs) -> bool:
         return False
 
     monkeypatch.setattr("app.routers.auth.send_otp", _noop)
     monkeypatch.setattr("app.routers.auth.send_password_changed_notice", _noop)
-
+    monkeypatch.setattr("app.services.accounts.send_temporary_credentials", _noop)
 
 @pytest.fixture
 def app_instance() -> FastAPI:
     return create_app()
-
 
 @pytest.fixture
 async def client(app_instance: FastAPI) -> AsyncGenerator[AsyncClient]:
@@ -79,10 +60,8 @@ async def client(app_instance: FastAPI) -> AsyncGenerator[AsyncClient]:
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
-
 @pytest.fixture
 async def db_session() -> AsyncGenerator[SQLModelAsyncSession]:
-    """Sesión independiente (mismo engine/loop del test) para preparar datos."""
     settings = get_settings()
     engine = create_async_engine(settings.DATABASE_URL)
     maker = async_sessionmaker(engine, expire_on_commit=False, class_=SQLModelAsyncSession)
@@ -90,20 +69,16 @@ async def db_session() -> AsyncGenerator[SQLModelAsyncSession]:
         yield session
     await engine.dispose()
 
-
 async def _cleanup(db: SQLModelAsyncSession) -> None:
-    """Borra el usuario temporal y su auditoría (FK actor_id sin CASCADE)."""
     user = (await db.exec(select(AppUser).where(AppUser.email == TEMP_EMAIL))).first()
     if user is not None:
-        await db.exec(delete(AuditLog).where(AuditLog.actor_id == user.id))  # type: ignore[arg-type]
+        await db.exec(delete(AuditLog).where(AuditLog.actor_id == user.id))
         await db.delete(user)
     await db.commit()
 
-
 @pytest.fixture
 async def temp_user(db_session: SQLModelAsyncSession) -> AsyncGenerator[AppUser]:
-    """Usuario admin temporal con clave temporal (must_change_password=True)."""
-    await _cleanup(db_session)  # por si un test anterior falló
+    await _cleanup(db_session)
     user = AppUser(
         role=UserRole.ADMIN,
         email=TEMP_EMAIL,
@@ -117,20 +92,16 @@ async def temp_user(db_session: SQLModelAsyncSession) -> AsyncGenerator[AppUser]
     yield user
     await _cleanup(db_session)
 
-
 async def _cleanup_student(db: SQLModelAsyncSession) -> None:
-    """Borra el estudiante temporal y su auditoría (FK actor_id sin CASCADE)."""
     user = (await db.exec(select(AppUser).where(AppUser.email == TEMP_STUDENT_EMAIL))).first()
     if user is not None:
-        await db.exec(delete(AuditLog).where(AuditLog.actor_id == user.id))  # type: ignore[arg-type]
+        await db.exec(delete(AuditLog).where(AuditLog.actor_id == user.id))
         await db.delete(user)
     await db.commit()
 
-
 @pytest.fixture
 async def temp_student(db_session: SQLModelAsyncSession) -> AsyncGenerator[AppUser]:
-    """Estudiante temporal (código único 999999, no choca con el seed)."""
-    await _cleanup_student(db_session)  # por si un test anterior falló
+    await _cleanup_student(db_session)
     user = AppUser(
         role=UserRole.ESTUDIANTE,
         email=TEMP_STUDENT_EMAIL,
@@ -146,22 +117,18 @@ async def temp_student(db_session: SQLModelAsyncSession) -> AsyncGenerator[AppUs
     yield user
     await _cleanup_student(db_session)
 
-
 @pytest.fixture
 async def docente_headers(
     client: AsyncClient, admin_headers: dict, db_session: SQLModelAsyncSession
 ) -> AsyncGenerator[dict[str, str]]:
-    """Docente de PRUEBA con clave conocida (independiente del seed: la BD
-    demo puede ser editada por el usuario mientras se desarrolla).
-    Se crea vía API, se le fija la clave en BD y se elimina al terminar."""
     async def _purge_docente() -> None:
         old = (await db_session.exec(select(AppUser).where(AppUser.email == DOCENTE_TEMP_EMAIL))).first()
         if old is not None:
-            await db_session.exec(delete(AuditLog).where(AuditLog.actor_id == old.id))  # type: ignore[attr-defined,arg-type]
+            await db_session.exec(delete(AuditLog).where(AuditLog.actor_id == old.id))
             await db_session.delete(old)
             await db_session.commit()
 
-    await _purge_docente()  # residuo de una corrida anterior
+    await _purge_docente()
     r = await client.post(
         "/api/v1/teachers",
         headers=admin_headers,
@@ -180,15 +147,17 @@ async def docente_headers(
     yield headers
     await _purge_docente()
 
-
 @pytest.fixture
-async def admin_login(client: AsyncClient) -> dict:
-    """Login con el admin del seed (auth RF-11 ya verificada en test_auth)."""
+async def admin_login(client: AsyncClient, db_session: SQLModelAsyncSession) -> dict:
     r = await client.post("/api/v1/auth/login", json={"email": "admin@unamba.edu.pe", "password": "12345678"})
     assert r.status_code == 200, r.text
     data = r.json()
+    # La suite usa el access token; no dejes refresh tokens del admin acumulándose.
+    await db_session.exec(
+        delete(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(data["refresh_token"]))
+    )
+    await db_session.commit()
     return {"headers": {"Authorization": f"Bearer {data['access_token']}"}, "user": data["user"]}
-
 
 @pytest.fixture
 async def admin_headers(admin_login: dict) -> dict[str, str]:

@@ -1,9 +1,3 @@
-"""Reportes de asistencia — RF-16: descarga Excel/PDF con encabezado institucional.
-
-Docentes: solo grupos PROPIOS (igual que RF-21). Admin: todo, con filtros
-opcionales por curso. La consulta replica las columnas de v_today_attendance
-pero sobre un RANGO de fechas (la vista solo cubre CURRENT_DATE).
-"""
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -45,11 +39,11 @@ SQL_BASE = (
     "JOIN schedule_block  sb ON sb.id = s.block_id "
     "JOIN course_group    cg ON cg.id = sb.group_id "
     "JOIN course          c  ON c.id  = cg.course_id "
-    "JOIN room            r  ON r.id  = sb.room_id "  # R9: aula DEL BLOQUE, no del grupo
+    "LEFT JOIN room       r  ON r.id  = sb.room_id "
     "JOIN app_user        st ON st.id = ar.student_id "
     "WHERE s.session_date BETWEEN :d1 AND :d2 "
     "AND cg.is_active "
-    "AND s.status <> 'cancelada' AND s.needs_review = FALSE "  # R4/R5: no cuentan
+    "AND s.status <> 'cancelada' AND s.needs_review = FALSE "
 )
 
 
@@ -82,18 +76,16 @@ async def _consultar(
             "marked_at": f.marked_at.isoformat(timespec="seconds") if f.marked_at else None,
             "method": f.method,
             "similarity": float(f.similarity) if f.similarity is not None else None,
-            "is_justified": bool(f.is_justified),  # R6: 'Falta justificada' en los reportes
+            "is_justified": bool(f.is_justified),
         }
         for f in filas
     ]
 
-
 def _rango(desde: date | None, hasta: date | None) -> tuple[date, date]:
     hoy = date.today()
     d2 = hasta or hoy
-    d1 = desde or (d2 - timedelta(days=30))  # default: último mes
+    d1 = desde or (d2 - timedelta(days=30))
     return d1, d2
-
 
 def _respuesta(contenido: bytes, filename: str, media_type: str) -> StreamingResponse:
     return StreamingResponse(
@@ -101,7 +93,6 @@ def _respuesta(contenido: bytes, filename: str, media_type: str) -> StreamingRes
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
 
 @router.get("/reports/attendance.xlsx")
 async def reporte_excel(
@@ -111,7 +102,6 @@ async def reporte_excel(
     hasta: date | None = Query(None),
     course_id: int | None = Query(None),
 ) -> StreamingResponse:
-    """RF-16: Excel con la asistencia del rango (encabezado institucional)."""
     d1, d2 = _rango(desde, hasta)
     filas = await _consultar(db, user, d1, d2, course_id)
     titulo = f"del {d1:%d/%m/%Y} al {d2:%d/%m/%Y}"
@@ -121,7 +111,6 @@ async def reporte_excel(
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
-
 @router.get("/reports/attendance.pdf")
 async def reporte_pdf(
     db: DbSession,
@@ -130,7 +119,6 @@ async def reporte_pdf(
     hasta: date | None = Query(None),
     course_id: int | None = Query(None),
 ) -> StreamingResponse:
-    """RF-16: PDF horizontal con la asistencia del rango."""
     d1, d2 = _rango(desde, hasta)
     filas = await _consultar(db, user, d1, d2, course_id)
     titulo = f"del {d1:%d/%m/%Y} al {d2:%d/%m/%Y}"
@@ -139,7 +127,6 @@ async def reporte_pdf(
         nombre_pdf(d1, d2, datetime.now()),
         "application/pdf",
     )
-
 
 async def _grupo_y_curso(db, group_id: int) -> tuple[CourseGroup, Course]:
     grupo = await db.get(CourseGroup, group_id)
@@ -150,11 +137,9 @@ async def _grupo_y_curso(db, group_id: int) -> tuple[CourseGroup, Course]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Curso no encontrado")
     return grupo, curso
 
-
 def _exige_docente_propio(user, grupo: CourseGroup) -> None:
     if user.role is UserRole.DOCENTE and grupo.teacher_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No es tu grupo")
-
 
 @router.get("/reports/group-matrix.xlsx")
 async def reporte_matriz_grupo(
@@ -162,26 +147,23 @@ async def reporte_matriz_grupo(
     user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
     group_id: int = Query(..., description="Grupo a exportar"),
 ) -> StreamingResponse:
-    """El 'registro de asistencia' del docente: una columna por fecha de
-    sesión VÁLIDA (cerrada, no cancelada, sin needs_review — R4/R5)."""
     grupo, curso = await _grupo_y_curso(db, group_id)
     _exige_docente_propio(user, grupo)
 
     sesiones = (
         await db.exec(
             select(AttendanceSession, ScheduleBlock)
-            .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)  # type: ignore[arg-type]
+            .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)
             .where(
-                ScheduleBlock.group_id == group_id,  # type: ignore[arg-type]
-                AttendanceSession.status == "cerrada",  # type: ignore[arg-type]
-                AttendanceSession.needs_review.is_(False),  # type: ignore[union-attr]
+                ScheduleBlock.group_id == group_id,
+                AttendanceSession.status == "cerrada",
+                AttendanceSession.needs_review.is_(False),
             )
             .order_by(AttendanceSession.session_date, ScheduleBlock.start_time)
         )
     ).all()
-    # Una fecha puede tener dos bloques del mismo grupo: se distingue por hora.
     fechas: list[tuple[int, str]] = [
-        (ses.id, f"{ses.session_date:%d/%m} {bloque.start_time:%H:%M}")  # type: ignore[union-attr]
+        (ses.id, f"{ses.session_date:%d/%m} {bloque.start_time:%H:%M}")
         for ses, bloque in sesiones
     ]
 
@@ -190,8 +172,8 @@ async def reporte_matriz_grupo(
             select(AppUser)
             .join(Enrollment, Enrollment.student_id == AppUser.id)
             .where(
-                Enrollment.group_id == group_id,  # type: ignore[arg-type]
-                Enrollment.withdrawn_at.is_(None),  # type: ignore[union-attr]
+                Enrollment.group_id == group_id,
+                Enrollment.withdrawn_at.is_(None),
             )
             .order_by(AppUser.full_name)
         )
@@ -202,7 +184,7 @@ async def reporte_matriz_grupo(
         ids = [ses.id for ses, _b in sesiones]
         registros = (
             await db.exec(
-                select(AttendanceRecord).where(AttendanceRecord.session_id.in_(ids))  # type: ignore[attr-defined]
+                select(AttendanceRecord).where(AttendanceRecord.session_id.in_(ids))
             )
         ).all()
         for r in registros:
@@ -231,15 +213,12 @@ async def reporte_matriz_grupo(
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
-
 @router.get("/reports/dpi-risk.xlsx")
 async def reporte_riesgo_dpi(
     db: DbSession,
     user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
     course_id: int | None = Query(None, description="Solo un curso (opcional)"),
 ) -> StreamingResponse:
-    """Alumnos con absence_percent >= dpi_alert_percent (R7). Docente: solo
-    sus cursos; admin: todos."""
     cfg_sql = "SELECT dpi_alert_percent FROM app_settings WHERE id = 1"
     alerta = (await db.exec(sql_text(cfg_sql))).scalar_one()
     sql = (

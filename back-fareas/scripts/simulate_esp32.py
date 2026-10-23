@@ -1,25 +1,13 @@
-"""Simulador de nodo ESP32 - prueba el protocolo WebSocket desde la PC (PLAN §4.2).
-
-Uso:
-    cd back-fareas
-    .venv/Scripts/python scripts/simulate_esp32.py [device_key] [--intervalo N]
-
-- El device_key DEBE existir como ESP32 activo en la BD (p. ej. 'esp32-lab305'
-  del seed). Con un key inexistente el backend cierra con 4404 (pruébalo).
-- Envía hello + heartbeats (por defecto cada 5 s, acelerado; el real: 30 s)
-  y dibuja en consola los veredictos Tabla 8 que llegan (verde/amarillo/rojo/azul).
-"""
 import argparse
 import asyncio
 import json
 import pathlib
 import sys
 
-import websockets  # type: ignore[import-untyped]
+import websockets
 
 WS_URL = "ws://localhost:8000/api/v1/ws/devices"
 
-# Emulación del anillo NeoPixel + buzzer (Tabla 8) para ver el feedback:
 COLORES = {"verde": "\033[92m", "amarillo": "\033[93m", "rojo": "\033[91m", "azul": "\033[94m"}
 RESET = "\033[0m"
 
@@ -58,9 +46,6 @@ async def main() -> None:
                     msg = json.loads(raw)
                     if msg.get("type") == "verdict":
                         color = COLORES.get(msg.get("color", ""), "")
-                        # Aquí el ESP32 real enciende el anillo y el buzzer.
-                        # Bloque 11: 'azul' (sin clase/desconocido) NO lleva beeps
-                        # (buzzer='ninguno'): solo la animación del anillo.
                         buzzer = msg.get("buzzer", "-")
                         etiqueta = "(sin beeps)" if buzzer == "ninguno" else ""
                         print(f"{color}[LED {msg.get('color', '?').upper():8}] buzzer={buzzer:14} "
@@ -74,7 +59,6 @@ async def main() -> None:
                 hb.cancel()
     except ConnectionRefusedError:
         print("No se pudo conectar: ¿el backend esta corriendo? (fastapi dev)")
-
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -1,5 +1,5 @@
 <app-page-header title="Parámetros del sistema"
-  subtitle="Semestre vigente, ventana de marca, rectificación y umbrales DPI (RF-34)">
+  subtitle="Periodo vigente, ventana de marca, rectificación y umbrales DPI (RF-34)">
   @if (changed().length > 0) {
     <app-ui-button variant="ghost" icon="material-symbols:undo" [disabled]="saving()" (click)="restore()">
       Descartar
@@ -47,33 +47,33 @@
   <app-ui-alert variant="info" [inline]="true" icon="material-symbols:schedule"
     class="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
     Los cambios se aplican a las sesiones <strong>siguientes</strong>: nunca modifican asistencias ya
-    registradas. Cambiar el semestre no altera los grupos existentes (conservan su etiqueta histórica).
+    registradas. Cambiar el periodo no altera los grupos existentes (conservan su etiqueta histórica).
   </app-ui-alert>
 
   <div class="space-y-4">
     <section class="rounded-xl border border-gray-200 bg-white p-5">
       <header class="mb-4 flex items-center gap-2">
         <iconify-icon icon="material-symbols:calendar-month-outline" width="20" class="text-(--fareas-primary)"></iconify-icon>
-        <h2 class="text-sm font-semibold text-gray-900">Semestre vigente</h2>
+        <h2 class="text-sm font-semibold text-gray-900">Periodo académico vigente</h2>
         <span class="ml-auto text-xs text-gray-400">{{ changed().length }} cambio(s) sin guardar</span>
       </header>
       <div class="grid gap-4 sm:grid-cols-3">
-        <app-ui-input label="Etiqueta del semestre" placeholder="2026-II" icon="material-symbols:badge"
+        <app-ui-input label="Etiqueta del periodo" placeholder="2026-II" icon="material-symbols:badge"
           hint="Formato AAAA-I / AAAA-II" [ngModel]="form().semester_label"
           (ngModelChange)="patch({ semester_label: $event })" />
         <label class="block space-y-1">
-          <span class="text-sm font-medium text-gray-700">Inicio del semestre</span>
+          <span class="text-sm font-medium text-gray-700">Inicio del periodo</span>
           <input type="date" [ngModel]="form().semester_start"
             (ngModelChange)="patch({ semester_start: $event })"
             class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
           <span class="block text-[13px] text-gray-400">Antes de esta fecha el scheduler no abre sesiones.</span>
         </label>
         <label class="block space-y-1">
-          <span class="text-sm font-medium text-gray-700">Fin del semestre</span>
+          <span class="text-sm font-medium text-gray-700">Fin del periodo</span>
           <input type="date" [ngModel]="form().semester_end"
             (ngModelChange)="patch({ semester_end: $event })"
             class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
-          <span class="block text-[13px] text-gray-400">Déjalo vacío para no limitar el semestre.</span>
+          <span class="block text-[13px] text-gray-400">Déjalo vacío para no limitar el periodo.</span>
         </label>
       </div>
     </section>

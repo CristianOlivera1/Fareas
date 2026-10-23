@@ -14,10 +14,20 @@ export interface UserOut {
   readonly must_change_password: boolean;
 }
 
-export interface LoginResponse {
+export interface TokenPairResponse {
   readonly access_token: string;
+  readonly refresh_token: string;
   readonly token_type: string;
+  readonly expires_in: number;
+  readonly refresh_expires_in: number;
+}
+
+export interface LoginResponse extends TokenPairResponse {
   readonly user: UserOut;
+}
+
+export interface RefreshTokenRequest {
+  readonly refresh_token: string;
 }
 
 export interface LoginRequest {
@@ -47,6 +57,10 @@ export interface VerifyChangePasswordOtpRequest {
 
 export interface ChangePasswordResponse extends MessageResponse {
   readonly access_token?: string;
+  readonly refresh_token?: string;
+  readonly token_type?: string;
+  readonly expires_in?: number;
+  readonly refresh_expires_in?: number;
 }
 
 export interface RecoverRequest {
@@ -66,6 +80,10 @@ export interface ResetPasswordRequest {
 
 export interface MessageResponse {
   readonly message: string;
+}
+
+export interface RecoverResponse extends MessageResponse {
+  readonly resend_in: number;
 }
 
 export interface SessionUser {

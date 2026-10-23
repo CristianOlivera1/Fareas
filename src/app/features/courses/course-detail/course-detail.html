@@ -1,31 +1,19 @@
-<app-page-header [title]="title()" subtitle="Grupos, cupo y horario semanal (RF-06)">
-  <app-ui-button variant="ghost" icon="material-symbols:arrow-back" (click)="goBack()">
+<nav class="mb-3" aria-label="Volver">
+  <button type="button"
+    class="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--fareas-primary)"
+    (click)="goBack()">
+    <iconify-icon icon="material-symbols:arrow-back" width="16"></iconify-icon>
     Cursos
-  </app-ui-button>
-  @if (selectedGroup(); as g) {
-    @if (auth.isAdmin()) {
-      <app-ui-button icon="material-symbols:add" (click)="openCreateBlock()">
-        Bloque en {{ g.group_code }}
-      </app-ui-button>
-    }
-  }
-</app-page-header>
+  </button>
+</nav>
 
-<div class="mb-4 flex flex-wrap items-center gap-3">
-  <label class="flex items-center gap-2 text-sm text-gray-500">
-    <span>Semestre</span>
-    <p-select class="w-40" appendTo="body" [options]="semesters()" placeholder="Vigente"
-      showClear [ngModel]="semester()" (ngModelChange)="onSemester($event)" />
-  </label>
-  <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="reloadGroups()">
-    Actualizar
-  </app-ui-button>
-  @if (auth.isAdmin()) {
-    <app-ui-button variant="outline" size="sm" icon="material-symbols:add" (click)="openCreateGroup()">
+<app-page-header [title]="title()" [subtitle]="subtitle()">
+  @if (auth.isAdmin() && isCurrentPeriod()) {
+    <app-ui-button icon="material-symbols:add" (click)="openCreateGroup()">
       Nuevo grupo
     </app-ui-button>
   }
-</div>
+</app-page-header>
 
 @if (error(); as msg) {
   <app-ui-alert variant="danger" title="No se pudieron cargar los grupos" class="mb-4 block">
@@ -33,152 +21,200 @@
   </app-ui-alert>
 }
 
-@if (loading()) {
-  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-    @for (i of [1, 2, 3]; track i) {
-      <div class="h-36 rounded-xl border border-gray-200 bg-white p-4">
-        <div class="h-4 w-1/3 rounded bg-gray-100 animate-pulse"></div>
-        <div class="mt-4 h-3 w-2/3 rounded bg-gray-50 animate-pulse"></div>
-        <div class="mt-3 h-2 w-full rounded bg-gray-50 animate-pulse"></div>
+<section class="space-y-3" aria-labelledby="groups-title">
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <div class="flex flex-wrap items-center gap-2">
+        <h2 id="groups-title" class="text-sm font-semibold text-gray-900">Grupos</h2>
+        @if (semesters().length <= 1) {
+          <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+            {{ semester() || currentSemester() || 'Periodo vigente' }}
+          </span>
+        }
+        @if (!isCurrentPeriod()) {
+          <span class="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+            Histórico
+          </span>
+        }
       </div>
-    }
-  </div>
-} @else if (groups().length === 0) {
-  <div class="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center">
-    <iconify-icon icon="material-symbols:groups-outline" width="36" class="text-gray-300"></iconify-icon>
-    <h2 class="mt-3 font-semibold text-gray-900">Este curso aún no tiene grupos</h2>
-    <p class="mx-auto mt-1 max-w-md text-sm text-gray-500">
-      Un curso se divide en grupos (A, B, C…) cuando se llena el cupo de 40. Cada grupo tiene su
-      docente y su horario; el aula se elige en cada bloque (puede cambiar según el día).
-    </p>
-    @if (auth.isAdmin()) {
-      <div class="mt-4 flex justify-center">
-        <app-ui-button icon="material-symbols:add" (click)="openCreateGroup()">Crear grupo</app-ui-button>
-      </div>
-    }
-  </div>
-} @else {
-  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-    @for (g of groups(); track g.id) {
-      <div
-        role="button" tabindex="0"
-        class="cursor-pointer rounded-xl border bg-white p-4 transition shadow-xs hover:shadow-sm"
-        [class]="cardClass(g)"
-        (click)="selectGroup(g)"
-        (keydown.enter)="selectGroup(g)"
-      >
-        <div class="flex items-start justify-between gap-2">
-          <div class="flex items-center gap-2">
-            <span class="grid size-9 place-items-center rounded-lg bg-blue-50 text-sm font-bold text-(--fareas-primary)">
-              {{ g.group_code }}
-            </span>
-            <div class="min-w-0">
-              <div class="truncate text-sm font-semibold text-gray-900">
-                Grupo {{ g.group_code }}
-              </div>
-              <div class="text-xs text-gray-500">{{ g.semester_label }}</div>
-            </div>
-          </div>
-          <div class="flex items-center gap-1">
-            @if (!g.is_active) {
-              <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
-                Inactivo
-              </span>
-            }
-            @if (auth.isAdmin()) {
-              @if (g.is_active) {
-                <button type="button"
-                  class="grid size-7 place-items-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                  title="Desactivar grupo"
-                  (click)="$event.stopPropagation(); askDeleteGroup(g)">
-                  <iconify-icon icon="material-symbols:delete-outline" width="16"></iconify-icon>
-                </button>
-              } @else {
-                <button type="button"
-                  class="grid size-7 place-items-center rounded-lg text-gray-400 hover:bg-green-50 hover:text-green-600 transition-colors"
-                  title="Reactivar grupo"
-                  (click)="$event.stopPropagation(); reactivateGroup(g)">
-                  <iconify-icon icon="material-symbols:settings-backup-restore" width="16"></iconify-icon>
-                </button>
-              }
-            }
-          </div>
-        </div>
-
-        <dl class="mt-3 space-y-1.5 text-xs text-gray-600">
-          <div class="flex items-center gap-1.5">
-            <iconify-icon icon="material-symbols:person-outline" width="15" class="text-gray-400"></iconify-icon>
-            <span class="truncate">{{ g.teacher_name }}</span>
-          </div>
-        </dl>
-
-        <div class="mt-3">
-          <div class="mb-1 flex items-center justify-between text-[11px] text-gray-500">
-            <span>Cupo</span>
-            <span class="tabular-nums font-medium text-gray-700">
-              {{ g.enrolled_count }}/{{ g.capacity }}
-            </span>
-          </div>
-          <div class="h-1.5 overflow-hidden rounded-full bg-gray-100">
-            <div class="h-full rounded-full" [class]="cupoClass(g)" [style.width.%]="cupoPercent(g)"></div>
-          </div>
-        </div>
-      </div>
-    }
-  </div>
-}
-
-@if (selectedGroup(); as g) {
-  <section class="mt-6">
-    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-      <h2 class="text-sm font-semibold text-gray-900">
-        Horario del grupo {{ g.group_code }}
-        <span class="ml-1 font-normal text-gray-500">· {{ g.teacher_name }}</span>
-      </h2>
-      @if (blocksLoading()) {
-        <span class="text-xs text-gray-400">Cargando horario…</span>
-      }
+      <p class="mt-0.5 text-xs text-gray-500">
+        @if (isCurrentPeriod()) {
+          Selecciona un grupo para revisar su horario.
+        } @else {
+          Consultando grupos de un periodo anterior.
+        }
+      </p>
     </div>
 
-    <app-schedule-table
-      [entries]="scheduleEntries()"
-      [hourFrom]="franja().from"
-      [hourTo]="franja().to"
-      [canEdit]="auth.isAdmin()"
-      (blockAdd)="onBlockAdd($event)"
-      (blockRemove)="onBlockRemove($event)"
-    />
+    <div class="flex flex-wrap items-end gap-2">
+      @if (semesters().length > 1) {
+        <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
+          <span>Periodo</span>
+          <p-select class="w-44" appendTo="body" [options]="semesters()" placeholder="Vigente" showClear
+            [ngModel]="semester()" (ngModelChange)="onSemester($event)" />
+        </label>
+      }
+      <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh"
+        ariaLabel="Actualizar grupos y horario" (click)="reloadGroups()">
+        Actualizar
+      </app-ui-button>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      @for (i of [1, 2, 3]; track i) {
+        <div class="h-40 rounded-xl border border-gray-200 bg-white p-4">
+          <div class="h-4 w-1/3 rounded bg-gray-100 animate-pulse"></div>
+          <div class="mt-4 h-3 w-2/3 rounded bg-gray-50 animate-pulse"></div>
+          <div class="mt-3 h-2 w-full rounded bg-gray-50 animate-pulse"></div>
+        </div>
+      }
+    </div>
+  } @else if (groups().length === 0) {
+    <div class="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center">
+      <iconify-icon icon="material-symbols:groups-outline" width="36" class="text-gray-300"></iconify-icon>
+      <h3 class="mt-3 font-semibold text-gray-900">
+        {{ isCurrentPeriod() ? 'Este curso aún no tiene grupos' : 'Sin grupos en este periodo' }}
+      </h3>
+      <p class="mx-auto mt-1 max-w-md text-sm text-gray-500">
+        @if (isCurrentPeriod()) {
+          Un curso se divide en grupos (A, B, C…) cuando se llena el cupo de 40. Cada grupo tiene su
+          docente y su horario; el aula se elige en cada bloque (puede cambiar según el día).
+        } @else {
+          No hay grupos registrados para {{ semester() || 'el periodo seleccionado' }}.
+        }
+      </p>
+      @if (auth.isAdmin() && isCurrentPeriod()) {
+        <div class="mt-4 flex justify-center">
+          <app-ui-button icon="material-symbols:add" (click)="openCreateGroup()">Crear primer grupo</app-ui-button>
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      @for (g of groups(); track g.id) {
+        <div class="overflow-hidden rounded-xl border bg-white shadow-xs transition hover:shadow-sm" [class]="cardClass(g)">
+          <button type="button"
+            class="block w-full p-4 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-(--fareas-primary)"
+            [attr.aria-pressed]="g.id === selectedGroupId()" aria-controls="schedule-title"
+            (click)="selectGroup(g)">
+            <span class="flex items-start gap-2">
+              <span class="grid size-9 place-items-center rounded-lg bg-blue-50 text-sm font-bold text-(--fareas-primary)">
+                {{ g.group_code }}
+              </span>
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-semibold text-gray-900">Grupo {{ g.group_code }}</span>
+                <span class="block text-xs text-gray-500">Ciclo {{ roman(g.cycle) }} · {{ g.semester_label }}</span>
+              </span>
+            </span>
+
+            <span class="mt-3 flex items-center gap-1.5 text-xs text-gray-600">
+              <iconify-icon icon="material-symbols:person-outline" width="15" class="shrink-0 text-gray-400"></iconify-icon>
+              <span class="truncate">{{ g.teacher_name || 'Sin docente' }}</span>
+            </span>
+
+            <span class="mt-3 block">
+              <span class="mb-1 flex items-center justify-between text-[11px] text-gray-500">
+                <span>Cupo</span>
+                <span class="tabular-nums font-medium text-gray-700">{{ g.enrolled_count }}/{{ g.capacity }}</span>
+              </span>
+              <span class="block h-1.5 overflow-hidden rounded-full bg-gray-100">
+                <span class="block h-full rounded-full" [class]="capacityClass(g)" [style.width.%]="capacityPercent(g)"></span>
+              </span>
+            </span>
+
+            <span class="mt-3 flex items-center gap-1 text-[11px] font-medium"
+              [class]="g.id === selectedGroupId() ? 'text-(--fareas-primary)' : 'text-gray-500'">
+              <iconify-icon
+                [icon]="g.id === selectedGroupId() ? 'material-symbols:check-circle-outline' : 'material-symbols:calendar-month-outline'"
+                width="14"></iconify-icon>
+              {{ g.id === selectedGroupId() ? 'Horario visible' : 'Ver horario' }}
+            </span>
+          </button>
+
+          <div class="flex items-center justify-between border-t border-gray-100 px-4 py-2">
+            <span class="inline-flex items-center gap-1.5 text-[11px] font-medium"
+              [class]="g.is_active ? 'text-green-700' : 'text-gray-400'">
+              <span class="size-1.5 rounded-full" [class]="g.is_active ? 'bg-green-500' : 'bg-gray-300'"></span>
+              {{ g.is_active ? 'Activo' : 'Inactivo' }}
+            </span>
+
+            @if (auth.isAdmin()) {
+              <div class="flex items-center gap-1">
+                @if (g.is_active) {
+                  <button type="button"
+                    class="grid size-7 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                    [attr.aria-label]="'Desactivar grupo ' + g.group_code" title="Desactivar grupo"
+                    (click)="askDeleteGroup(g)">
+                    <iconify-icon icon="material-symbols:delete-outline" width="16"></iconify-icon>
+                  </button>
+                } @else {
+                  <button type="button"
+                    class="grid size-7 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-green-50 hover:text-green-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                    [attr.aria-label]="'Reactivar grupo ' + g.group_code" title="Reactivar grupo"
+                    (click)="reactivateGroup(g)">
+                    <iconify-icon icon="material-symbols:settings-backup-restore" width="16"></iconify-icon>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</section>
+
+@if (selectedGroup(); as g) {
+  <section class="mt-8" aria-labelledby="schedule-title">
+    <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <h2 id="schedule-title" class="text-sm font-semibold text-gray-900">Horario semanal</h2>
+        <p class="mt-0.5 text-xs text-gray-500">
+          Grupo {{ g.group_code }} · {{ g.teacher_name || 'Sin docente' }} · Ciclo {{ roman(g.cycle) }} · {{ g.semester_label }}
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        @if (blocksLoading()) {
+          <span class="text-xs text-gray-400">Cargando…</span>
+        }
+        @if (auth.isAdmin()) {
+          <app-ui-button size="sm" icon="material-symbols:add" (click)="openCreateBlock()">
+            Nuevo bloque
+          </app-ui-button>
+        }
+      </div>
+    </div>
+
+    <app-schedule-table [entries]="scheduleEntries()" [hourFrom]="scheduleHourRange().from" [hourTo]="scheduleHourRange().to"
+      [canEdit]="auth.isAdmin()" (blockAdd)="onBlockAdd($event)" (blockEdit)="onBlockEdit($event)"
+      (blockRemove)="onBlockRemove($event)" />
 
     <p class="mt-2 text-xs text-gray-400">
-      Franja de clases {{ horaInicio() }}–{{ horaFin() }} (Parámetros), de Lunes a Viernes. Cada
-      bloque lleva su aula y es una sesión independiente: su apertura, su tolerancia y su cierre se
-      calculan con su propia hora de inicio y fin (RF-23/RF-26).
+      Franja de clases {{ attendanceStartTime() }}–{{ attendanceEndTime() }} (Parámetros), de Lunes a Viernes. Cada
+      bloque puede llevar su propia aula y es una sesión independiente: su apertura, su tolerancia
+      y su cierre se calculan con su propia hora de inicio y fin (RF-23/RF-26). Si falta el docente
+      o el aula, el bloque queda pendiente y no abre sesiones.
     </p>
   </section>
 }
 
 <p-dialog header="Nuevo grupo" [(visible)]="groupDialogVisible" [modal]="true"
-  [style]="{ width: '460px' }">
+  [style]="{ width: '92vw', maxWidth: '460px' }">
   <div class="space-y-4 pt-2">
-    <div class="grid grid-cols-2 gap-3">
-      <app-ui-input label="Código del grupo" [required]="true" [mono]="true" placeholder="B"
-        hint="Una letra o número (A, B, C…)"
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <app-ui-input label="Código del grupo" [required]="true" placeholder="B" hint="Una letra o número (A, B, C…)"
         [ngModel]="groupForm().group_code" (ngModelChange)="patch({ group_code: $event })" />
       <app-ui-input label="Cupo" [required]="true" type="number"
-        hint="40 por defecto para todos los cursos"
         [ngModel]="groupForm().capacity" (ngModelChange)="patch({ capacity: +$event })" />
     </div>
     <label class="block space-y-1">
       <span class="text-sm font-medium text-gray-700">Docente <span class="text-red-500">*</span></span>
-      <p-select class="w-full" appendTo="body" [options]="teacherOptions()" optionLabel="label"
-        optionValue="value" placeholder="Selecciona el docente" [filter]="true" filterBy="label"
-        [ngModel]="groupForm().teacher_id" (ngModelChange)="patch({ teacher_id: $event })" />
+      <p-select class="w-full" appendTo="body" [options]="teacherOptions()" optionLabel="label" optionValue="value"
+        placeholder="Selecciona el docente" [filter]="true" filterBy="label" [ngModel]="groupForm().teacher_id"
+        (ngModelChange)="patch({ teacher_id: $event })" />
     </label>
-    <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-      El grupo se crea en el semestre vigente. El <b>aula</b> se elige en cada bloque del horario
-      (un grupo puede dictar en laboratorios distintos según el día) y los choques de aula o de
-      docente se validan al crear el bloque.
-    </app-ui-alert>
   </div>
   <ng-template pTemplate="footer">
     <app-ui-button variant="ghost" (click)="groupDialogVisible = false">Cancelar</app-ui-button>
@@ -186,47 +222,57 @@
   </ng-template>
 </p-dialog>
 
-<p-dialog header="Nuevo bloque de horario" [(visible)]="blockDialogVisible" [modal]="true"
-  [style]="{ width: '440px' }">
+<p-dialog [header]="editingBlockId() !== null ? 'Editar bloque de horario' : 'Nuevo bloque de horario'"
+  [(visible)]="blockDialogVisible" [modal]="true" [style]="{ width: '92vw', maxWidth: '440px' }">
   <div class="space-y-4 pt-2">
     <label class="block space-y-1">
       <span class="text-sm font-medium text-gray-700">Día <span class="text-red-500">*</span></span>
-      <p-select class="w-full" appendTo="body" [options]="dias" optionLabel="label"
-        optionValue="value" [ngModel]="blockForm().weekday"
-        (ngModelChange)="patchBlock({ weekday: $event })" />
+      <p-select class="w-full" appendTo="body" [options]="weekdays" optionLabel="label" optionValue="value"
+        [ngModel]="blockForm().weekday" (ngModelChange)="patchBlock({ weekday: $event })" />
     </label>
-    <div class="grid grid-cols-2 gap-3">
-      <app-ui-input label="Inicio" [required]="true" type="time"
-        [ngModel]="blockForm().start_time" (ngModelChange)="patchBlock({ start_time: $event })" />
-      <app-ui-input label="Fin" [required]="true" type="time"
-        [ngModel]="blockForm().end_time" (ngModelChange)="patchBlock({ end_time: $event })" />
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Inicio <span class="text-red-500">*</span></span>
+        <p-select class="w-full" appendTo="body" [options]="startHours" optionLabel="label"
+          optionValue="value" [ngModel]="blockForm().start_time"
+          (ngModelChange)="onStartTime($event)" />
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Fin <span class="text-red-500">*</span></span>
+        <p-select class="w-full" appendTo="body" [options]="endHours()" optionLabel="label"
+          optionValue="value" [ngModel]="blockForm().end_time"
+          (ngModelChange)="patchBlock({ end_time: $event })" />
+      </label>
     </div>
     <label class="block space-y-1">
-      <span class="text-sm font-medium text-gray-700">Aula <span class="text-red-500">*</span></span>
-      <p-select class="w-full" appendTo="body" [options]="roomOptions()" optionLabel="label"
-        optionValue="value" placeholder="Aula del bloque" [filter]="true" filterBy="label"
+      <span class="text-sm font-medium text-gray-700">Docente (opcional)</span>
+      <p-select class="w-full" appendTo="body" [options]="teacherOptions()" optionLabel="label"
+        optionValue="value" placeholder="Sin asignar" [filter]="true" filterBy="label"
+        [showClear]="true" [ngModel]="blockForm().teacher_id"
+        (ngModelChange)="patchBlock({ teacher_id: $event })" />
+      <span class="text-xs text-gray-400">Se aplica a todo el grupo.</span>
+    </label>
+    <label class="block space-y-1">
+      <span class="text-sm font-medium text-gray-700">Aula (opcional)</span>
+      <p-select class="w-full" appendTo="body" [options]="roomOptions()" optionLabel="label" optionValue="value"
+        placeholder="Sin asignar" [filter]="true" filterBy="label" [showClear]="true"
         [ngModel]="blockForm().room_id" (ngModelChange)="patchBlock({ room_id: $event })" />
       <span class="text-xs text-gray-400">Se prellena con el aula del último bloque del grupo.</span>
     </label>
     <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-      Bloques de 1 h o 2 h (07:00–09:00, 09:00–11:00…) entre las {{ horaInicio() }} y las
-      {{ horaFin() }} y dentro de la semana de Lunes a Viernes. El bloque no puede cruzarse con
-      otro de la misma aula ni con otro del mismo docente.
+      Bloques de 1 h o 2 h, en horas exactas (sin minutos), entre las {{ attendanceStartTime() }} y las
+      {{ attendanceEndTime() }} y dentro de la semana de Lunes a Viernes. Sin docente o sin aula el bloque
+      queda pendiente y no abre sesiones de asistencia.
     </app-ui-alert>
   </div>
   <ng-template pTemplate="footer">
     <app-ui-button variant="ghost" (click)="blockDialogVisible = false">Cancelar</app-ui-button>
-    <app-ui-button [loading]="saving()" (click)="saveBlock()">Añadir bloque</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="saveBlock()">
+      {{ editingBlockId() !== null ? 'Guardar cambios' : 'Añadir bloque' }}
+    </app-ui-button>
   </ng-template>
 </p-dialog>
 
-<app-modal-delete
-  [(visible)]="deleteVisible"
-  [itemLabel]="deleteLabel()"
-  [entityName]="deleteEntity()"
-  [softDelete]="deleteSoft()"
-  [loading]="deleting()"
-  [warning]="deleteWarning()"
-  (confirmed)="confirmDelete()"
-  (canceled)="cancelDelete()"
-/>
+<app-modal-delete [(visible)]="deleteVisible" [itemLabel]="deleteLabel()" [entityName]="deleteEntity()"
+  [softDelete]="deleteSoft()" [loading]="deleting()" [warning]="deleteWarning()" (confirmed)="confirmDelete()"
+  (canceled)="cancelDelete()" />

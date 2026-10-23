@@ -94,9 +94,9 @@ export class SettingsPage {
   readonly problems = computed<string[]>(() => {
     const f = this.form();
     const out: string[] = [];
-    if (f.semester_label.trim().length < 3) out.push('El semestre necesita al menos 3 caracteres (ej. 2026-II)');
+    if (f.semester_label.trim().length < 3) out.push('El periodo necesita al menos 3 caracteres (ej. 2026-II)');
     if (f.semester_start && f.semester_end && f.semester_start >= f.semester_end)
-      out.push('El inicio del semestre debe ser anterior a su fin');
+      out.push('El inicio del periodo debe ser anterior a su fin');
     if (f.attendance_hour_start >= f.attendance_hour_end)
       out.push('La hora de inicio de la ventana de marca debe ser menor que la hora de fin');
     if (f.dpi_alert_percent >= f.dpi_limit_percent)

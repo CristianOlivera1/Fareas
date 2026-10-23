@@ -1,0 +1,280 @@
+<p-dialog header="Importar nómina de estudiantes" [visible]="visible()" (visibleChange)="visible.set($event)"
+  (onShow)="onShow()" (onHide)="onHide()" [modal]="true" [draggable]="false" [resizable]="false"
+  [style]="{ width: '96vw', maxWidth: '1120px' }"
+  [contentStyle]="{ 'max-height': '72vh', 'overflow-y': 'auto' }">
+  <ol class="mb-4 grid gap-2 sm:grid-cols-3" aria-label="Pasos de la importación">
+    @for (item of steps; track item.number) {
+      <li [class]="
+        'flex items-center gap-2 rounded-lg border px-2.5 py-2 ' +
+        (step() === item.number
+          ? 'border-(--fareas-primary) bg-blue-50'
+          : step() > item.number
+            ? 'border-green-200 bg-green-50'
+            : 'border-gray-200 bg-white')
+      ">
+        <span [class]="
+          'grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold ' +
+          (step() === item.number
+            ? 'bg-(--fareas-primary) text-white'
+            : step() > item.number
+              ? 'bg-green-100 text-green-700'
+              : 'bg-gray-100 text-gray-500')
+        ">
+          @if (step() > item.number) {
+            <iconify-icon icon="material-symbols:check" width="14"></iconify-icon>
+          } @else {
+            {{ item.number }}
+          }
+        </span>
+        <span class="truncate text-xs font-medium text-gray-700">{{ item.label }}</span>
+      </li>
+    }
+  </ol>
+
+  @if (step() === 1) {
+    <div class="space-y-4">
+      <app-file-drop [file]="file()" (fileChange)="onFile($event)"
+        (fileError)="onFileError($event)" />
+
+      <label class="block max-w-xs space-y-1">
+        <span class="text-sm font-medium text-gray-700">Ciclo por defecto</span>
+        <p-select class="w-full" appendTo="body" [options]="cycles" optionLabel="label"
+          optionValue="value" [ngModel]="defaultSemester()"
+          (ngModelChange)="defaultSemester.set($event)" />
+        <span class="text-xs text-gray-400">Se usa en las filas que no traen columna CICLO.</span>
+      </label>
+
+      <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
+        Funciona mejor con una nómina impresa en tabla, derecha y con buena luz. El texto manuscrito
+        no se reconoce. La previsualización no crea cuentas: primero corriges y recién después
+        confirmas.
+      </app-ui-alert>
+
+      @if (error(); as message) {
+        <app-ui-alert variant="danger" title="No se pudo leer la nómina">{{ message }}</app-ui-alert>
+      }
+    </div>
+  }
+
+  @if (step() === 2) {
+    @if (preview(); as p) {
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-semibold text-gray-900">Revisa antes de crear las cuentas</h3>
+            <p class="text-xs text-gray-500">
+              {{ typeLabel() }} · {{ p.paginas }} página(s) · {{ p.total }} fila(s)
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2 text-xs">
+            <span class="rounded-full bg-green-50 px-2.5 py-1 font-medium text-green-700">
+              {{ p.listos }} listas
+            </span>
+            <span class="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
+              {{ invalidCount() }} por corregir
+            </span>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-end gap-2 rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+          <label class="block space-y-1">
+            <span class="text-[11px] font-medium text-gray-500">Ciclo para todas</span>
+            <p-select class="w-28" appendTo="body" [options]="cycles" optionLabel="label"
+              optionValue="value" [ngModel]="bulkSemester()"
+              (ngModelChange)="bulkSemester.set($event)" />
+          </label>
+          <app-ui-button variant="outline" size="sm" (click)="applySemesterToAll()">
+            Aplicar
+          </app-ui-button>
+          <app-ui-button variant="ghost" size="sm" icon="material-symbols:filter-list-off"
+            [disabled]="invalidCount() === 0" (click)="removeInvalid()">
+            Quitar filas con error
+          </app-ui-button>
+          <app-ui-button variant="ghost" size="sm" icon="material-symbols:add" (click)="addRow()">
+            Añadir fila
+          </app-ui-button>
+          <label class="ml-auto block min-w-64 space-y-1">
+            <span class="text-[11px] font-medium text-gray-500">Matricular en (opcional)</span>
+            <p-select class="w-full" appendTo="body" [options]="groupOptions()" optionLabel="label"
+              optionValue="value" [filter]="true" filterBy="label" [showClear]="true"
+              placeholder="No matricular ahora" [ngModel]="groupId()"
+              (ngModelChange)="groupId.set($event)" />
+          </label>
+        </div>
+
+        <div class="overflow-hidden rounded-xl border border-gray-200">
+          <div class="max-h-[52vh] overflow-auto">
+            <table class="w-full min-w-[980px] border-collapse text-left text-sm">
+              <thead class="sticky top-0 z-10 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500 shadow-xs">
+                <tr>
+                  <th class="px-2 py-2.5">#</th>
+                  <th class="px-2 py-2.5">Código</th>
+                  <th class="px-2 py-2.5">DNI</th>
+                  <th class="px-2 py-2.5">Apellidos y nombres</th>
+                  <th class="px-2 py-2.5">Correo</th>
+                  <th class="px-2 py-2.5">Ciclo</th>
+                  <th class="px-2 py-2.5">Estado</th>
+                  <th class="px-2 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                @for (row of rows(); track row.key) {
+                  <tr [class]="
+                    'align-top transition-colors hover:bg-gray-50/50 ' +
+                    (rowIssues(row).length > 0 ? 'bg-red-50/40' : '')
+                  ">
+                    <td class="px-2 py-2 text-xs tabular-nums text-gray-400">{{ row.fila }}</td>
+                    <td class="px-2 py-2">
+                      <input [value]="row.code" (input)="onCodeInput(row.key, $event, 'code')"
+                        maxlength="6" inputmode="numeric" aria-label="Código de matrícula"
+                        class="w-20 rounded-md border border-gray-300 px-2 py-1.5 font-mono text-xs focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+                    </td>
+                    <td class="px-2 py-2">
+                      <input [value]="row.dni" (input)="onCodeInput(row.key, $event, 'dni')"
+                        maxlength="8" inputmode="numeric" aria-label="DNI"
+                        class="w-24 rounded-md border border-gray-300 px-2 py-1.5 font-mono text-xs focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+                    </td>
+                    <td class="px-2 py-2">
+                      <input [value]="row.full_name" (input)="onTextInput(row.key, $event, 'full_name')"
+                        maxlength="200" [title]="row.linea" aria-label="Apellidos y nombres"
+                        class="w-56 rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+                      @if (rowIssues(row).length > 0) {
+                        <p class="mt-1 max-w-56 text-[11px] text-red-600" [title]="issuesText(row)">
+                          {{ rowIssues(row)[0] }}
+                        </p>
+                      }
+                    </td>
+                    <td class="px-2 py-2">
+                      <div class="flex items-center gap-1">
+                        <input [value]="row.email" (input)="onTextInput(row.key, $event, 'email')"
+                          maxlength="160" type="email" aria-label="Correo"
+                          class="w-52 rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+                        @if (row.email_generado) {
+                          <span class="shrink-0 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700"
+                            title="El correo se generó a partir del código">
+                            generado
+                          </span>
+                        }
+                      </div>
+                    </td>
+                    <td class="px-2 py-2">
+                      <p-select class="w-24" appendTo="body" [options]="cycles" optionLabel="label"
+                        optionValue="value" [ngModel]="row.semester"
+                        (ngModelChange)="onSemester(row.key, $event)" />
+                    </td>
+                    <td class="px-2 py-2">
+                      @if (rowIssues(row).length > 0) {
+                        <span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700"
+                          [title]="issuesText(row)">
+                          <iconify-icon icon="material-symbols:error-outline" width="13"></iconify-icon>
+                          Corregir
+                        </span>
+                      } @else if (row.nota) {
+                        <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800"
+                          [title]="row.nota">
+                          <iconify-icon icon="material-symbols:warning-outline" width="13"></iconify-icon>
+                          Revisar
+                        </span>
+                      } @else {
+                        <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700">
+                          <iconify-icon icon="material-symbols:check-circle-outline" width="13"></iconify-icon>
+                          Lista
+                        </span>
+                      }
+                    </td>
+                    <td class="px-2 py-2 text-right">
+                      <button type="button" (click)="removeRow(row.key)"
+                        class="grid size-7 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                        [attr.aria-label]="'Eliminar fila ' + row.fila" title="Eliminar fila">
+                        <iconify-icon icon="material-symbols:delete-outline" width="16"></iconify-icon>
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        @if (rows().length === 0) {
+          <p class="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+            No quedan filas. Añade una manual o vuelve a leer el archivo.
+          </p>
+        }
+      </div>
+    }
+  }
+
+  @if (step() === 3) {
+    @if (result(); as r) {
+      <div class="space-y-4">
+        <div class="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4">
+          <span class="grid size-10 shrink-0 place-items-center rounded-full bg-white text-green-600">
+            <iconify-icon icon="material-symbols:check-circle-outline" width="24"></iconify-icon>
+          </span>
+          <div>
+            <h3 class="font-semibold text-green-900">Nómina procesada</h3>
+            <p class="mt-0.5 text-sm text-green-800">
+              {{ r.creados }} cuenta(s) creadas, {{ r.omitidos }} ya existían y
+              {{ r.matriculados }} se matricularon.
+            </p>
+          </div>
+        </div>
+
+        <dl class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div class="rounded-xl bg-gray-50 p-3">
+            <dt class="text-xs text-gray-500">Filas</dt>
+            <dd class="mt-0.5 text-lg font-semibold text-gray-900">{{ r.total }}</dd>
+          </div>
+          <div class="rounded-xl bg-gray-50 p-3">
+            <dt class="text-xs text-gray-500">Creadas</dt>
+            <dd class="mt-0.5 text-lg font-semibold text-gray-900">{{ r.creados }}</dd>
+          </div>
+          <div class="rounded-xl bg-gray-50 p-3">
+            <dt class="text-xs text-gray-500">Omitidas</dt>
+            <dd class="mt-0.5 text-lg font-semibold text-gray-900">{{ r.omitidos }}</dd>
+          </div>
+          <div class="rounded-xl bg-gray-50 p-3">
+            <dt class="text-xs text-gray-500">Matriculadas</dt>
+            <dd class="mt-0.5 text-lg font-semibold text-gray-900">{{ r.matriculados }}</dd>
+          </div>
+        </dl>
+
+        @if (r.errores.length > 0) {
+          <div class="rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <p class="text-sm font-medium text-amber-900">
+              {{ r.errores.length }} fila(s) no se pudieron crear
+            </p>
+            <ul class="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-amber-800">
+              @for (problem of r.errores; track $index) {
+                <li>Fila {{ problem.fila }} · {{ problem.code ?? 'sin código' }} — {{ problem.motivo }}</li>
+              }
+            </ul>
+          </div>
+        }
+      </div>
+    }
+  }
+
+  <ng-template pTemplate="footer">
+    @if (step() === 1) {
+      <app-ui-button variant="ghost" (click)="close()">Cancelar</app-ui-button>
+      <app-ui-button icon="material-symbols:document-scanner-outline" [loading]="loading()"
+        [disabled]="!canRead()" (click)="readRoster()">
+        Leer nómina
+      </app-ui-button>
+    } @else if (step() === 2) {
+      <app-ui-button variant="ghost" (click)="step.set(1)">Atrás</app-ui-button>
+      <app-ui-button icon="material-symbols:person-add" [loading]="confirming()"
+        [disabled]="!canConfirm()" (click)="confirm()">
+        Confirmar importación
+      </app-ui-button>
+    } @else {
+      <app-ui-button variant="outline" icon="material-symbols:upload-file-outline"
+        (click)="restart()">
+        Importar otra
+      </app-ui-button>
+      <app-ui-button (click)="close()">Cerrar</app-ui-button>
+    }
+  </ng-template>
+</p-dialog>

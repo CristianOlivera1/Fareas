@@ -159,7 +159,15 @@ export const routes: Routes = [
       },
 
       { path: 'faces', canActivate: [roleGuard('admin')], ...pendiente('Enrolamiento facial', 'F4 · Herramientas') },
-      { path: 'imports', canActivate: [roleGuard('admin')], ...pendiente('Importar horario (PDF)', 'F6 · Herramientas') },
+      {
+        path: 'imports',
+        canActivate: [roleGuard('admin')],
+        loadComponent: () =>
+          import('./features/imports/schedule-import/schedule-import').then(
+            (m) => m.ScheduleImportPage,
+          ),
+        data: { title: 'Importar horario' },
+      },
       { path: 'reports', canActivate: [roleGuard('admin', 'docente')], ...pendiente('Reportes', 'F6 · Herramientas') },
       { path: 'audit', canActivate: [roleGuard('admin')], ...pendiente('Bitácora', 'F6 · Herramientas') },
     ],

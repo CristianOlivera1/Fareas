@@ -42,7 +42,6 @@ export class AttendanceApi extends BaseApi {
     );
   }
 
-  /** RF-15: rectifica el estado de un registro (motivo obligatorio ≥5). */
   rectify(recordId: number, body: { new_status: AttendanceStatusApi; reason: string }) {
     return this.patch<{ record_id: number; status: string }>(
       `/attendance/${recordId}/rectify`,
@@ -50,12 +49,10 @@ export class AttendanceApi extends BaseApi {
     );
   }
 
-  /** R4: sesiones CERRADAS sin marcas (¿cámara caída?) pendientes de resolver. */
   sessionsReview() {
     return this.get<SessionReview[]>('/attendance/sessions-review');
   }
 
-  /** R4: confirma las faltas de la sesión por revisar o la cancela (motivo obligatorio). */
   resolveReview(sessionId: number, body: { action: 'confirmar_faltas' | 'cancelar'; reason?: string }) {
     return this.post<{ session_id: number; status: string; faltas?: number; alertas?: number }>(
       `/sessions/${sessionId}/resolve-review`,
@@ -76,7 +73,6 @@ export class AttendanceApi extends BaseApi {
     );
   }
 
-  /** R5: cancela (o pre-cancela en fecha futura) el día completo de un bloque. */
   cancelDay(blockId: number, body: { reason: string; fecha?: string }) {
     return this.post<{ session_id: number; status: string; anticipada?: boolean }>(
       `/blocks/${blockId}/cancel-day`,

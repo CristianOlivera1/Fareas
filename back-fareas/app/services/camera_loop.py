@@ -1,17 +1,3 @@
-"""Bucle de ingestión de cámaras (Bloques 6-7) — RF-17/RF-21/RF-25 en vivo.
-
-Para cada aula con cámara activa: mantiene UNA fuente abierta (~2 fps por
-aula, round-robin con un solo task), corre el pipeline de visión y:
-1. resuelve la sesión del aula (la crea si hay clase, RF-26),
-2. persiste la marca ÚNICA si el alumno identificado está matriculado,
-3. envía el veredicto al ESP32 del aula (Tabla 8, Bloque 7),
-4. deja el último veredicto en memoria para el feed SSE del Bloque 8.
-
-Clave de rendimiento: si una fuente de red (RTSP) no alcanza, backoff de 60 s
-(sin eso, VideoCapture bloquea 30 s por intento — y congelaba el event loop:
-era la causa del 'login lento'). Los archivos de video del proyecto siempre
-'alcanzan'. La galería facial se carga al arrancar y se refresca al enrolar.
-"""
 import asyncio
 import contextlib
 import logging
@@ -41,35 +27,24 @@ FPS_POR_AULA = 2.0
 _task: asyncio.Task | None = None
 _stop = asyncio.Event()
 
-# room_id -> último veredicto (lo leerá el feed SSE del Bloque 8)
 _ultimo: dict[int, dict] = {}
-# room_id -> monotonic hasta el cual NO se reintenta una cámara caída (backoff)
 _reintentar_desde: dict[int, float] = {}
 _BACKOFF_CAIDA = 60.0
-# room_id -> fuente abierta (persistente entre ciclos, como una cámara real)
 _fuentes: dict[int, object] = {}
-# room_id -> lecturas consecutivas fallidas (tolera misses transitorios del hilo)
 _fallos: dict[int, int] = {}
 
 
 def ultimo_veredicto(room_id: int) -> dict | None:
     return _ultimo.get(room_id)
 
-
 def todos_los_veredictos() -> list[dict]:
     return list(_ultimo.values())
 
-
 def _rtsp_alcanzable(rtsp_url: str, timeout: float = 2.0) -> bool:
-    """Pre-chequeo TCP: ¿algo escucha en host:puerto del RTSP?
-
-    cv2.VideoCapture con un host caído BLOQUEA ~30 s (medido) y si se llama
-    en el event loop congela TODA la API. Archivos locales siempre 'alcanzan'.
-    """
     from urllib.parse import urlparse
 
     if not rtsp_url.lower().startswith(("rtsp://", "http://", "https://")):
-        return True  # archivo local: VideoFileSource
+        return True
     try:
         p = urlparse(rtsp_url)
         host, port = p.hostname, p.port or 554
@@ -80,14 +55,7 @@ def _rtsp_alcanzable(rtsp_url: str, timeout: float = 2.0) -> bool:
     except OSError:
         return False
 
-
 async def _abrir_fuente(room_id: int, rtsp_url: str):
-    """Abre (o reabre) la fuente del aula y espera su PRIMER frame.
-
-    El hilo lector tarda unos ms en decodificar: sin esta espera, el primer
-    read() llega vacío y el código daría la fuente por muerta en cada ciclo
-    (bug real: la fuente se abría y cerraba indefinidamente).
-    """
     from app.ai.frame_source import open_source
 
     if not await asyncio.to_thread(_rtsp_alcanzable, rtsp_url):
@@ -96,7 +64,6 @@ async def _abrir_fuente(room_id: int, rtsp_url: str):
         src = await asyncio.to_thread(open_source, rtsp_url)
     except FileNotFoundError:
         return None
-    # Calentamiento: hasta 5 s esperando el primer frame del hilo lector
     limite = time.monotonic() + 5.0
     while time.monotonic() < limite:
         ok, frame = await asyncio.to_thread(src.read)
@@ -109,17 +76,14 @@ async def _abrir_fuente(room_id: int, rtsp_url: str):
         await asyncio.to_thread(src.release)
     return None
 
-
 async def _procesar_aula(pipe, room_id: int) -> None:
-    """Un ciclo de UNA aula: frame → pipeline → BD → websocket."""
-
     async with SessionLocal() as db:
         cam = (
             await db.exec(
                 select(Device).where(
                     Device.room_id == room_id,
-                    Device.device_type == DeviceType.CAMARA,  # type: ignore[arg-type]
-                    Device.is_active,  # type: ignore[arg-type]
+                    Device.device_type == DeviceType.CAMARA,
+                    Device.is_active,
                 )
             )
         ).first()
@@ -137,8 +101,6 @@ async def _procesar_aula(pipe, room_id: int) -> None:
 
         ok, frame = await asyncio.to_thread(src.read)
         if not ok or frame is None:
-            # Fallo transitorio (hilo ocupado) vs fuente muerta: tolera 5
-            # fallos seguidos (~2.5 s) antes de reabrir con backoff.
             _fallos[room_id] = _fallos.get(room_id, 0) + 1
             if _fallos[room_id] >= 5:
                 with contextlib.suppress(Exception):
@@ -149,11 +111,6 @@ async def _procesar_aula(pipe, room_id: int) -> None:
             return
         _fallos[room_id] = 0
 
-        # R3/R10: el scheduler abre las sesiones; resolver_sesion localiza la
-        # vigente (respaldo si nadie la abrió). Con bloques CONTIGUOS en el
-        # aula, los candidatos son la UNIÓN de los matriculados de todos los
-        # bloques cuya ventana corre: cada alumno se clasifica con el SUYO
-        # (mapa alumno→bloque) y la marca se registra en SU sesión (abajo).
         cfg = await get_settings_row(db)
         ahora = _naive_peru(ahora_peru())
         hoy = ahora.date()
@@ -166,8 +123,8 @@ async def _procesar_aula(pipe, room_id: int) -> None:
                 ids = (
                     await db.exec(
                         select(Enrollment.student_id).where(
-                            Enrollment.group_id == g.id,  # type: ignore[arg-type]
-                            Enrollment.withdrawn_at.is_(None),  # type: ignore[union-attr]
+                            Enrollment.group_id == g.id,
+                            Enrollment.withdrawn_at.is_(None),
                         )
                     )
                 ).all()
@@ -175,8 +132,6 @@ async def _procesar_aula(pipe, room_id: int) -> None:
                     bloque_de_alumno[sid[0] if isinstance(sid, tuple) else sid] = b
             candidates = set(bloque_de_alumno)
 
-            # R2 en vivo: asistio hasta inicio+tolerancia, tardanza hasta el
-            # fin del bloque del ALUMNO (no del que empezó más tarde).
             def clasificador(sid: int, _t: float) -> str:
                 b = bloque_de_alumno.get(sid)
                 if b is None:
@@ -184,10 +139,8 @@ async def _procesar_aula(pipe, room_id: int) -> None:
                 estado = clasificar(ahora, b, hoy, cfg)
                 return estado or "sin_registro"
 
-        await db.commit()  # persiste la sesión de respaldo (si la hubo)
+        await db.commit()
 
-        # Con clasificador activo el pipeline genera `mark` → persistencia BD;
-        # sin clase, modo demo (solo LED).
         pipe.classifier = clasificador
         resultado = pipe.process_frame(frame, candidates=candidates)
         _ultimo[room_id] = {
@@ -198,8 +151,6 @@ async def _procesar_aula(pipe, room_id: int) -> None:
             "ts": ahora_peru().isoformat(timespec="seconds"),
         }
 
-        # R10: el conocido NO matriculado en ninguna clase del aula recibe
-        # ROJO con el grupo del mismo curso al que SÍ pertenece.
         if resultado.verdict == "denegado" and resultado.student_id is not None and pares:
             from app.tables import CourseGroup as _CG
 
@@ -207,9 +158,9 @@ async def _procesar_aula(pipe, room_id: int) -> None:
             fila = (
                 await db.exec(
                     select(_CG.group_code).join(Enrollment, Enrollment.group_id == _CG.id).where(
-                        Enrollment.student_id == resultado.student_id,  # type: ignore[arg-type]
-                        _CG.course_id.in_(cursos_del_aula),  # type: ignore[attr-defined]
-                        Enrollment.withdrawn_at.is_(None),  # type: ignore[union-attr]
+                        Enrollment.student_id == resultado.student_id,
+                        _CG.course_id.in_(cursos_del_aula),
+                        Enrollment.withdrawn_at.is_(None),
                     )
                 )
             ).first()
@@ -217,8 +168,6 @@ async def _procesar_aula(pipe, room_id: int) -> None:
                 grupo_x = fila[0] if isinstance(fila, tuple) else fila
                 resultado.message = f"{resultado.message} (matriculado en el grupo {grupo_x})"
 
-        # R10: la marca va a la sesión del grupo DONDE EL ALUMNO ESTÁ
-        # MATRICULADO (re-resuelve con student_id; no al bloque tardío).
         if resultado.mark is not None:
             sesion_ok, _bloque_ok = await resolver_sesion(
                 db, room_id, student_id=resultado.mark["student_id"]
@@ -231,15 +180,14 @@ async def _procesar_aula(pipe, room_id: int) -> None:
                     )
                     await db.commit()
                 except errors.ConflictError:
-                    await db.rollback()  # ya marcó en esta sesión (UNIQUE)
+                    await db.rollback()
 
-        # Veredicto al ESP32 del aula (Bloque 7): por device_key registrado
         nodo = (
             await db.exec(
                 select(Device.device_key).where(
                     Device.room_id == room_id,
-                    Device.device_type == DeviceType.ESP32,  # type: ignore[arg-type]
-                    Device.is_active,  # type: ignore[arg-type]
+                    Device.device_type == DeviceType.ESP32,
+                    Device.is_active,
                 )
             )
         ).first()
@@ -251,9 +199,7 @@ async def _procesar_aula(pipe, room_id: int) -> None:
             if not enviado:
                 logger.debug("Nodo %s no conectado; veredicto no entregado", device_key)
 
-
 async def _bucle() -> None:
-    """Task maestro: recorre las aulas con cámara activa en round-robin."""
     pipe = vision_pipeline()
     try:
         from app.ai.runtime import recargar_galeria
@@ -270,8 +216,8 @@ async def _bucle() -> None:
                 filas = (
                     await db.exec(
                         select(Device.room_id).where(
-                            Device.device_type == DeviceType.CAMARA,  # type: ignore[arg-type]
-                            Device.is_active,  # type: ignore[arg-type]
+                            Device.device_type == DeviceType.CAMARA,
+                            Device.is_active,
                         )
                     )
                 ).all()
@@ -291,9 +237,7 @@ async def _bucle() -> None:
             logger.exception("El bucle de cámaras falló; reintenta en 5 s")
             await asyncio.sleep(5.0)
 
-
 def iniciar_bucle_camaras() -> asyncio.Task:
-    """Arranca el bucle (idempotente)."""
     global _task
     if _task is not None and not _task.done():
         return _task
@@ -301,7 +245,6 @@ def iniciar_bucle_camaras() -> asyncio.Task:
     _task = asyncio.create_task(_bucle())
     logger.info("Bucle de cámaras iniciado (%.1f fps por aula)", FPS_POR_AULA)
     return _task
-
 
 async def detener_bucle_camaras() -> None:
     global _task

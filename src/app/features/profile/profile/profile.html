@@ -1,7 +1,4 @@
 <app-page-header title="Mi perfil" subtitle="Información de tu cuenta y seguridad">
-  <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" [loading]="loading()" (click)="refresh()">
-    Actualizar
-  </app-ui-button>
 </app-page-header>
 
 <div class="grid gap-4 xl:grid-cols-2">
@@ -198,7 +195,7 @@
               [error]="fieldError('new_password')" />
 
             <app-ui-input formControlName="confirm_password" label="Confirmar nueva contraseña" type="password"
-              icon="material-symbols:lock-check-outline" placeholder="Repite la nueva contraseña"
+              icon="material-symbols:lock-reset" placeholder="Repite la nueva contraseña"
               autocomplete="new-password" [customId]="'profile-confirm-password'" [showPasswordToggle]="true"
               [error]="fieldError('confirm_password')" />
 

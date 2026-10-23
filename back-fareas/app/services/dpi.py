@@ -1,16 +1,3 @@
-"""DPI — R7 (Deficiencia Personal Injustificada).
-
-- Porcentaje: faltas NO justificadas / sesiones dictadas válidas (vista
-  ``v_student_dpi``: cerradas, no canceladas, sin needs_review, semestre
-  vigente, dentro del rango de matrícula del alumno).
-- Niveles (decisión 2026-10-11: inhabilitación al SUPERAR el límite):
-    * 'limite' cuando absence_percent > dpi_limit_percent (30)
-    * 'alerta' cuando absence_percent >= dpi_alert_percent (20)
-  Las tardanzas NO suman; las justificadas NO cuentan.
-- Correo SOLO si sessions_held >= dpi_min_sessions (4) y UNA vez por nivel
-  y semestre (tabla dpi_alert_sent: INSERT … ON CONFLICT DO NOTHING).
-- 'Faltas restantes' se calcula contra el total PLANIFICADO del semestre.
-"""
 import logging
 from datetime import date, datetime, timedelta
 
@@ -31,37 +18,30 @@ from app.tables import (
 
 logger = logging.getLogger("fareas.dpi")
 
-# ¿Para qué nivel se pregunta primero? Si un salto directo pasa el límite,
-# solo se envía 'limite' (R7: nunca dos correos el mismo día por alumno).
 _NIVELES = ("limite", "alerta")
 
 
 def nivel_de(percent: float, cfg: AppSettings) -> str | None:
-    """Nivel de riesgo de un porcentaje (None = sin alerta)."""
     if percent > float(cfg.dpi_limit_percent):
         return "limite"
     if percent >= float(cfg.dpi_alert_percent):
         return "alerta"
     return None
 
-
 async def _enviado_antes(db, student_id: int, course_id: int, semestre: str, level: str) -> bool:
     ya = (
         await db.exec(
             select(DpiAlertSent).where(
-                DpiAlertSent.student_id == student_id,  # type: ignore[arg-type]
-                DpiAlertSent.course_id == course_id,  # type: ignore[arg-type]
-                DpiAlertSent.semester_label == semestre,  # type: ignore[arg-type]
-                DpiAlertSent.level == level,  # type: ignore[arg-type]
+                DpiAlertSent.student_id == student_id,
+                DpiAlertSent.course_id == course_id,
+                DpiAlertSent.semester_label == semestre,
+                DpiAlertSent.level == level,
             )
         )
     ).first()
     return ya is not None
 
-
 async def marcar_enviado(db, student_id: int, course_id: int, semestre: str, level: str) -> bool:
-    """INSERT de control con dedup (ON CONFLICT DO NOTHING): True solo la
-    PRIMERA vez que se envía ese nivel (alumno, curso, semestre)."""
     from sqlalchemy import text as _sql
 
     fila = (
@@ -74,11 +54,7 @@ async def marcar_enviado(db, student_id: int, course_id: int, semestre: str, lev
     ).first()
     return fila is not None
 
-
 async def procesar_alertas_cierre(db, session) -> int:
-    """R7 tras el cierre: correos de nivel a quienes cruzaron umbrales con
-    esta sesión. Solo alumnos con faltas nuevas en esta sesión (los demás se
-    notificaron cuando cruzaron). Devuelve correos enviados."""
     from sqlalchemy import text as _sql
 
     bloque = await db.get(ScheduleBlock, session.block_id)
@@ -87,7 +63,6 @@ async def procesar_alertas_cierre(db, session) -> int:
         return 0
     cfg = await get_settings_row(db)
 
-    # Faltantes de esta sesión = los que el cierre acaba de marcar 'falta'.
     filas = (
         await db.exec(
             _sql(
@@ -127,15 +102,9 @@ async def procesar_alertas_cierre(db, session) -> int:
         await db.commit()
     return enviadas
 
-
-# Resumen por alumno (R7) — sesiones planificadas y faltas restantes
 async def sesiones_planificadas(
     db: SQLModelAsyncSession, student_id: int, course_id: int, cfg: AppSettings
 ) -> int | None:
-    """Total de sesiones PLANIFICADAS del curso para el alumno en el semestre:
-    fechas entre max(semester_start, enrolled_at) y semester_end con el día
-    de semana de cada bloque del grupo activo, menos feriados.
-    None si el semestre no tiene fechas (la UI muestra '—')."""
     if cfg.semester_start is None or cfg.semester_end is None:
         return None
 
@@ -144,36 +113,34 @@ async def sesiones_planificadas(
             select(CourseGroup)
             .join(Enrollment, Enrollment.group_id == CourseGroup.id)
             .where(
-                CourseGroup.course_id == course_id,  # type: ignore[arg-type]
-                CourseGroup.semester_label == cfg.semester_label,  # type: ignore[arg-type]
-                CourseGroup.is_active,  # type: ignore[arg-type]
-                Enrollment.student_id == student_id,  # type: ignore[arg-type]
-                Enrollment.withdrawn_at.is_(None),  # type: ignore[union-attr]
+                CourseGroup.course_id == course_id,
+                CourseGroup.semester_label == cfg.semester_label,
+                CourseGroup.is_active,
+                Enrollment.student_id == student_id,
+                Enrollment.withdrawn_at.is_(None),
             )
             .limit(1)
         )
     ).first()
     if grupo is None:
         return None
-    # La matrícula más antigua entre los grupos del curso (el alumno pudo
-    # transferirse de grupo: sus faltas anteriores se conservan y se suman).
     enrol = (
         await db.exec(
             select(Enrollment.enrolled_at)
             .where(
-                Enrollment.student_id == student_id,  # type: ignore[arg-type]
-                Enrollment.group_id == grupo.id,  # type: ignore[arg-type]
+                Enrollment.student_id == student_id,
+                Enrollment.group_id == grupo.id,
             )
         )
     ).first()
-    # OJO: una select() de UNA columna devuelve escalares (no tuplas).
+
     enrolled_at = enrol[0] if isinstance(enrol, tuple) else enrol
     desde = cfg.semester_start
     if isinstance(enrolled_at, datetime) and enrolled_at.date() > desde:
         desde = enrolled_at.date()
 
     bloques = (
-        await db.exec(select(ScheduleBlock).where(ScheduleBlock.group_id == grupo.id))  # type: ignore[arg-type]
+        await db.exec(select(ScheduleBlock).where(ScheduleBlock.group_id == grupo.id))
     ).all()
     if not bloques:
         return None
@@ -192,10 +159,7 @@ async def sesiones_planificadas(
         d += timedelta(days=1)
     return total
 
-
 async def resumen_alumno(db, student_id: int) -> list[dict]:
-    """R7: por curso del alumno — sesiones, faltas (y justificadas), tardanzas,
-    porcentaje, nivel, planificadas, permitidas y restantes."""
     cfg = await get_settings_row(db)
     filas = (
         await db.exec(

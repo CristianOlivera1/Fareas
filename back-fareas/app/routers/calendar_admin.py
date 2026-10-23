@@ -1,9 +1,3 @@
-"""Calendario y parámetros - RF-09 (feriados, R12), RF-10 (justificaciones,
-R6) y RF-34 (parámetros del semestre, fila única id=1, R1).
-
-Todas las escrituras quedan en audit_log (RF-32). El EFECTO de las
-justificaciones (marcar/revertir faltas) vive en services/justifications.py.
-"""
 from datetime import date, time
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -27,12 +21,10 @@ class HolidayIn(BaseModel):
     holiday_date: date
     description: str = Field(min_length=3, max_length=160)
 
-
 class HolidayOut(BaseModel):
     id: int
     holiday_date: date
     description: str
-
 
 @router.get("/holidays", response_model=list[HolidayOut])
 async def list_holidays(
@@ -45,17 +37,14 @@ async def list_holidays(
                           Holiday.holiday_date <= date(year, 12, 31))
     holidays = (await db.exec(stmt)).all()
     return [
-        HolidayOut(id=h.id, holiday_date=h.holiday_date, description=h.description)  # type: ignore[arg-type]
+        HolidayOut(id=h.id, holiday_date=h.holiday_date, description=h.description)
         for h in holidays
     ]
-
 
 @router.post("/holidays", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_holiday(
     body: HolidayIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> dict:
-    """RF-09 + R12: registra el feriado y CANCELA las sesiones abiertas o
-    por revisar de esa fecha (motivo 'Feriado'); responde cuántas canceló."""
     if (await db.exec(select(Holiday).where(Holiday.holiday_date == body.holiday_date))).first() is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -63,15 +52,15 @@ async def create_holiday(
         )
     holiday = Holiday(holiday_date=body.holiday_date, description=body.description.strip())
     db.add(holiday)
-    await db.flush()  # obtiene holiday.id para la bitácora (RF-32)
+    await db.flush()
 
     from app.tables import AttendanceSession, SessionStatus
 
     sesiones = (
         await db.exec(
             select(AttendanceSession).where(
-                AttendanceSession.session_date == body.holiday_date,  # type: ignore[arg-type]
-                AttendanceSession.status.in_([  # type: ignore[attr-defined]
+                AttendanceSession.session_date == body.holiday_date,
+                AttendanceSession.status.in_([
                     SessionStatus.ABIERTA, SessionStatus.CERRADA
                 ]),
             )
@@ -81,7 +70,7 @@ async def create_holiday(
     for s in sesiones:
         s.status = SessionStatus.CANCELADA
         s.cancel_reason = "Feriado"
-        s.cancelled_by = admin.id  # type: ignore[arg-type]
+        s.cancelled_by = admin.id
         s.cancelled_at = _now_naive()
         if s.status == SessionStatus.CERRADA:
             s.needs_review = False
@@ -103,31 +92,24 @@ async def create_holiday(
         "sesiones_canceladas": canceladas,
     }
 
-
 def _now_naive():
     from app.services.attendance_engine import _naive_peru, ahora_peru
 
     return _naive_peru(ahora_peru())
 
-
 class HolidayRangeIn(BaseModel):
     desde: date
     hasta: date
-    # Acepta 'description' (convención del proyecto) y 'descripcion' (plan B11)
     description: str = Field(
         min_length=3, max_length=160,
         validation_alias=AliasChoices("description", "descripcion"),
     )
     omitir_fines_de_semana: bool = True
 
-
 @router.post("/holidays/range", status_code=status.HTTP_201_CREATED)
 async def create_holiday_range(
     body: HolidayRangeIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> dict:
-    """R12: alta de feriados POR RANGO (p. ej. un paro de 3 días), omitiendo
-    fines de semana por defecto. Reutiliza create_holiday (idempotente por
-    fecha: las ya registradas se cuentan como omitidas)."""
     if body.hasta < body.desde:
         raise errors.DomainError("La fecha 'hasta' no puede ser anterior a 'desde'")
     creados, omitidos, canceladas = 0, 0, 0
@@ -156,25 +138,18 @@ async def create_holiday_range(
     await db.commit()
     return {"creados": creados, "omitidos": omitidos, "sesiones_canceladas": canceladas}
 
-
 def _un_dia():
     from datetime import timedelta
 
     return timedelta(days=1)
 
-
 class HolidayNationalIn(BaseModel):
     year: int = Field(ge=2000, le=2100)
-
 
 @router.post("/holidays/national", status_code=status.HTTP_201_CREATED)
 async def create_holidays_national(
     body: HolidayNationalIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> dict:
-    """R12: genera los feriados NACIONALES de Perú del año (fijos + Jueves/
-    Viernes Santo por el algoritmo de Pascua). Es una LISTA POR DEFECTO: el
-    admin la contrasta con el calendario oficial vigente (los 'días no
-    laborables' cambian cada año). Las fechas ya registradas se omiten."""
     from app.services.holidays_pe import feriados_nacionales
 
     creados, omitidos = 0, 0
@@ -194,7 +169,6 @@ async def create_holidays_national(
     await db.commit()
     return {"anio": body.year, "creados": creados, "omitidos": omitidos}
 
-
 @router.delete("/holidays/{holiday_id}", response_model=dict)
 async def delete_holiday(
     holiday_id: int, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
@@ -209,9 +183,6 @@ async def delete_holiday(
     await db.commit()
     return {"message": f"Feriado #{holiday_id} eliminado"}
 
-
-# Justificaciones - RF-10 + R6 (docente crea sobre SUS alumnos/cursos;
-# el efecto sobre las faltas vive en services/justifications.py)
 class JustificationIn(BaseModel):
     student_id: int
     course_id: int | None = Field(default=None, description="Docente: OBLIGATORIO (sus cursos). Admin: NULL = todos")
@@ -219,7 +190,6 @@ class JustificationIn(BaseModel):
     end_date: date
     reason: str = Field(min_length=5, max_length=400)
     document_url: str | None = Field(default=None, max_length=500)
-
 
 class JustificationOut(BaseModel):
     id: int
@@ -234,10 +204,9 @@ class JustificationOut(BaseModel):
     created_by: int
     created_by_name: str
 
-
 def _j_out(j: Justification, student: AppUser, course: Course | None, creator: AppUser) -> JustificationOut:
     return JustificationOut(
-        id=j.id,  # type: ignore[arg-type]
+        id=j.id,
         student_id=j.student_id,
         student_name=student.full_name,
         course_id=j.course_id,
@@ -250,7 +219,6 @@ def _j_out(j: Justification, student: AppUser, course: Course | None, creator: A
         created_by_name=creator.full_name,
     )
 
-
 @router.get("/justifications", response_model=list[JustificationOut])
 async def list_justifications(
     db: DbSession,
@@ -258,7 +226,6 @@ async def list_justifications(
     student_id: int | None = None,
     course_id: int | None = None,
 ) -> list[JustificationOut]:
-    """R6: admin ve TODAS; docente solo las suyas (created_by = él)."""
     student_tbl = aliased(AppUser)
     creator_tbl = aliased(AppUser)
     stmt = (
@@ -269,7 +236,7 @@ async def list_justifications(
         .order_by(Justification.start_date.desc())
     )
     if user.role is UserRole.DOCENTE:
-        stmt = stmt.where(Justification.created_by == user.id)  # type: ignore[arg-type]
+        stmt = stmt.where(Justification.created_by == user.id)
     if student_id is not None:
         stmt = stmt.where(Justification.student_id == student_id)
     if course_id is not None:
@@ -277,14 +244,11 @@ async def list_justifications(
     rows = (await db.exec(stmt)).all()
     return [_j_out(j, student, course, creator) for j, student, course, creator in rows]
 
-
 @router.post("/justifications", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_justification(
     body: JustificationIn, request: Request, db: DbSession,
     user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
 ) -> dict:
-    """RF-10/R6: registra la justificación, MARCA las faltas existentes del
-    rango/curso (is_justified) y audita con faltas_afectadas."""
     just, afectadas = await crear_justificacion(
         db, user,
         student_id=body.student_id, course_id=body.course_id,
@@ -302,19 +266,15 @@ async def create_justification(
         "message": f"Justificación registrada; {afectadas} falta(s) marcadas como justificadas",
     }
 
-
 @router.delete("/justifications/{justification_id}", response_model=dict)
 async def delete_justification(
     justification_id: int, request: Request, db: DbSession,
     user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
 ) -> dict:
-    """R6: elimina la justificación REVERTIENDO el efecto sobre las faltas.
-    Docente: solo las que él creó; admin: cualquiera."""
     revertidas = await eliminar_justificacion(
         db, user, justification_id, ip=_client_ip(request)
     )
     return {"message": f"Justificación eliminada; {revertidas} falta(s) volvieron a estado 'falta'"}
-
 
 def _settings_out(s: AppSettings) -> "SettingsOut":
     return SettingsOut(
@@ -334,12 +294,11 @@ def _settings_out(s: AppSettings) -> "SettingsOut":
         updated_at=s.updated_at.isoformat(timespec="seconds") if s.updated_at else None,
     )
 
-
 class SettingsOut(BaseModel):
     semester_label: str
     semester_start: str | None = None
     semester_end: str | None = None
-    block_minutes: int  # informativo: sugerencia para crear bloques (1 h/2 h)
+    block_minutes: int
     late_tolerance_minutes: int
     early_open_minutes: int
     rectify_days: int
@@ -351,14 +310,11 @@ class SettingsOut(BaseModel):
     attendance_hour_end: str
     updated_at: str | None
 
-
 @router.get("/settings/semesters", response_model=list[str])
 async def list_semesters(
     db: DbSession, _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE)
 ) -> list[str]:
-    """Etiquetas de semestre con grupos creados (para selectores del panel)."""
     return await semesters_con_grupos(db)
-
 
 async def _get_settings_or_500(db) -> AppSettings:
     s = await db.get(AppSettings, 1)
@@ -366,13 +322,11 @@ async def _get_settings_or_500(db) -> AppSettings:
         raise HTTPException(status_code=500, detail="Falta la fila app_settings id=1 (ejecutar 002_seed.sql)")
     return s
 
-
 @router.get("/settings", response_model=SettingsOut)
 async def get_settings_endpoint(
     db: DbSession, _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE)
 ) -> SettingsOut:
     return _settings_out(await _get_settings_or_500(db))
-
 
 class SettingsUpdate(BaseModel):
     semester_label: str | None = Field(default=None, max_length=40)
@@ -389,16 +343,10 @@ class SettingsUpdate(BaseModel):
     attendance_hour_start: time | None = None
     attendance_hour_end: time | None = None
 
-
 @router.patch("/settings", response_model=SettingsOut)
 async def update_settings(
     body: SettingsUpdate, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> SettingsOut:
-    """RF-34: ajusta los parámetros del semestre (auditado, RF-32).
-
-    R1: cambiar semester_label NO modifica datos existentes (los grupos
-    conservan su etiqueta histórica). R7: alerta < límite. Cambios aplican a
-    las sesiones siguientes, nunca retroactivamente."""
     s = await _get_settings_or_500(db)
     data = body.model_dump(exclude_unset=True)
     if "attendance_hour_start" in data or "attendance_hour_end" in data:

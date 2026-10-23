@@ -1,0 +1,33 @@
+<div role="button" tabindex="0" [attr.aria-disabled]="disabled()" (click)="picker.click()"
+  (keydown.enter)="picker.click()" (keydown.space)="picker.click(); $event.preventDefault()"
+  (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)" (drop)="onDrop($event)"
+  [class]="
+    'relative flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-(--fareas-primary) ' +
+    (dragging()
+      ? 'border-(--fareas-primary) bg-blue-50/70'
+      : 'border-gray-300 bg-gray-50/50 hover:border-(--fareas-primary) hover:bg-blue-50/40') +
+    (disabled() ? ' cursor-not-allowed opacity-60' : '')
+  ">
+  <input #picker type="file" class="hidden" [accept]="accept()" [disabled]="disabled()"
+    (change)="onPicker($event)" />
+
+  @if (file(); as selected) {
+    <span class="grid size-10 place-items-center rounded-xl bg-white text-(--fareas-primary) shadow-xs">
+      <iconify-icon icon="material-symbols:description-outline" width="24"></iconify-icon>
+    </span>
+    <span class="mt-2 max-w-full truncate text-sm font-medium text-gray-900">{{ selected.name }}</span>
+    <span class="mt-0.5 text-xs text-gray-500">{{ formatSize(selected.size) }} · listo para leer</span>
+    <button type="button" (click)="remove($event)"
+      class="mt-2 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-white hover:text-red-600"
+      aria-label="Quitar archivo">
+      <iconify-icon icon="material-symbols:close" width="14"></iconify-icon>
+      Quitar archivo
+    </button>
+  } @else {
+    <span class="grid size-10 place-items-center rounded-xl bg-white text-gray-400 shadow-xs">
+      <iconify-icon icon="material-symbols:upload-file-outline" width="24"></iconify-icon>
+    </span>
+    <span class="mt-2 text-sm font-medium text-gray-800">Arrastra el archivo o haz clic para elegirlo</span>
+    <span class="mt-0.5 text-xs text-gray-500">{{ hint() }}</span>
+  }
+</div>

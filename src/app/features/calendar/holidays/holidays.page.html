@@ -25,21 +25,21 @@
 
 @if (auth.isAdmin()) {
   <app-ui-alert variant="info" title="Feriados nacionales del Perú" class="mb-4">
-    <div class="mt-2 flex flex-wrap items-end gap-3">
-      <label class="space-y-1">
+    <div class="mt-3 grid gap-3 sm:grid-cols-[10rem_auto] sm:items-end">
+      <label class="flex flex-col gap-1">
         <span class="text-xs font-medium text-blue-800">Año a generar</span>
-        <p-select class="w-32" appendTo="body" [options]="yearOptions" optionLabel="label"
+        <p-select class="w-full" appendTo="body" [options]="yearOptions" optionLabel="label"
           optionValue="value" [ngModel]="nationalYear()"
           (ngModelChange)="nationalYear.set($event)" />
       </label>
       <app-ui-button size="sm" variant="outline" icon="material-symbols:flag"
-        [loading]="saving()" (click)="loadNational()">
+        class="sm:justify-self-start" [loading]="saving()" (click)="loadNational()">
         Cargar feriados nacionales
       </app-ui-button>
-      <span class="max-w-md text-xs text-blue-800">
+      <p class="max-w-2xl text-xs leading-relaxed text-blue-800 sm:col-span-2">
         Carga la lista por defecto (fijos + Jueves y Viernes Santo). Las fechas ya registradas se
         omiten; contrasta el resultado con el calendario oficial vigente.
-      </span>
+      </p>
     </div>
   </app-ui-alert>
 }

@@ -292,12 +292,10 @@ export class HolidaysPage {
       .slice(0, 3);
   }
 
-  /** Feriados del listado actual que caen sábado o domingo (no cancelan clases). */
   countWeekend(): number {
     return this.holidays().filter((h) => this.isWeekend(h.holiday_date)).length;
   }
 
-  /** El feriado cae en fin de semana: no hay clases que cancelar. */
   isWeekend(iso: string): boolean {
     const day = new Date(`${iso}T12:00:00`).getDay();
     return day === 0 || day === 6;
