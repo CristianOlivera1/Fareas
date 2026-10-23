@@ -21,11 +21,19 @@ router = APIRouter(tags=["courses"])
 class CourseIn(BaseModel):
     code: str = Field(min_length=3, max_length=20, examples=["ISA903"])
     name: str = Field(min_length=3, max_length=160, examples=["Inteligencia Artificial I"])
+    cycle: int = Field(ge=1, le=10, description="Ciclo de la malla (1-10)")
+
+class CourseUpdate(BaseModel):
+    code: str | None = Field(default=None, min_length=3, max_length=20, examples=["ISA903"])
+    name: str | None = Field(default=None, min_length=3, max_length=160,
+                             examples=["Inteligencia Artificial I"])
+    cycle: int | None = Field(default=None, ge=1, le=10, description="Ciclo de la malla (1-10)")
 
 class CourseOut(BaseModel):
     id: int
     code: str
     name: str
+    cycle: int
 
 @router.get("/courses", response_model=Page[CourseOut])
 async def list_courses(
@@ -33,6 +41,7 @@ async def list_courses(
     _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
     page: PageParamsDep,
     q: str | None = Query(None, max_length=80, description="Filtra por código o nombre"),
+    cycle: int | None = Query(None, ge=1, le=10, description="Filtra por ciclo (1-10)"),
 ) -> Page[CourseOut]:
     stmt = select(Course)
     count_stmt = select(func.count()).select_from(Course)
@@ -41,23 +50,100 @@ async def list_courses(
         cond = Course.code.ilike(like) | Course.name.ilike(like)
         stmt = stmt.where(cond)
         count_stmt = count_stmt.where(cond)
+    if cycle is not None:
+        stmt = stmt.where(Course.cycle == cycle)
+        count_stmt = count_stmt.where(Course.cycle == cycle)
     total = (await db.exec(count_stmt)).one()
     courses = (await db.exec(stmt.order_by(Course.code).offset(page.offset).limit(page.limit))).all()
     return Page(
-        items=[CourseOut(id=c.id, code=c.code, name=c.name) for c in courses],
+        items=[CourseOut(id=c.id, code=c.code, name=c.name, cycle=c.cycle) for c in courses],
         total=total, page=page.page, page_size=page.page_size,
     )
 
 @router.post("/courses", response_model=CourseOut, status_code=status.HTTP_201_CREATED)
 async def create_course(body: CourseIn, db: DbSession, _admin: RequireRole(UserRole.ADMIN)) -> CourseOut:
     code = body.code.strip().upper()
+    name = body.name.strip()
+    if not code:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            detail="El código del curso no puede quedar vacío")
+    if not name:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            detail="El nombre del curso no puede quedar vacío")
     if (await db.exec(select(Course).where(Course.code == code))).first() is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"El curso '{code}' ya existe")
-    course = Course(code=code, name=body.name.strip())
+    course = Course(code=code, name=name, cycle=body.cycle)
     db.add(course)
     await db.commit()
     await db.refresh(course)
-    return CourseOut(id=course.id, code=course.code, name=course.name)
+    return CourseOut(id=course.id, code=course.code, name=course.name, cycle=course.cycle)
+
+@router.patch("/courses/{course_id}", response_model=CourseOut)
+async def update_course(
+    course_id: int, body: CourseUpdate, request: Request, db: DbSession,
+    admin: RequireRole(UserRole.ADMIN),
+) -> CourseOut:
+    course = await _get_or_404(db, Course, course_id, "Curso")
+    old = {"code": course.code, "name": course.name, "cycle": course.cycle}
+    data = body.model_dump(exclude_unset=True)
+
+    if data.get("code") is not None:
+        code = data["code"].strip().upper()
+        if not code:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail="El código del curso no puede quedar vacío")
+        if code != course.code and (
+            await db.exec(select(Course).where(Course.code == code))
+        ).first() is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail=f"El curso '{code}' ya existe")
+        course.code = code
+
+    if data.get("name") is not None:
+        name = data["name"].strip()
+        if not name:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail="El nombre del curso no puede quedar vacío")
+        course.name = name
+
+    if data.get("cycle") is not None:
+        course.cycle = data["cycle"]
+
+    new = {"code": course.code, "name": course.name, "cycle": course.cycle}
+    if new != old:
+        db.add(course)
+        await audit(db, admin, action="curso_actualizado", entity="course", entity_id=course.id,
+                    old_value=old, new_value=new, ip_address=_client_ip(request))
+        await db.commit()
+        await db.refresh(course)
+
+    return CourseOut(id=course.id, code=course.code, name=course.name, cycle=course.cycle)
+
+@router.delete("/courses/{course_id}", response_model=dict)
+async def delete_course(
+    course_id: int, request: Request, db: DbSession,
+    admin: RequireRole(UserRole.ADMIN),
+) -> dict:
+    course = await _get_or_404(db, Course, course_id, "Curso")
+    groups = (
+        await db.exec(
+            select(func.count()).select_from(CourseGroup)
+            .where(CourseGroup.course_id == course_id)
+        )
+    ).one()
+    if groups:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(f"El curso '{course.code}' tiene {groups} grupo(s) asociado(s) y no se "
+                    "puede eliminar: conserva el historial académico. Desactiva los grupos "
+                    "si ya no se dictan."),
+        )
+    old = {"code": course.code, "name": course.name, "cycle": course.cycle}
+    await db.delete(course)
+    await audit(db, admin, action="curso_eliminado", entity="course", entity_id=course_id,
+                old_value=old, ip_address=_client_ip(request))
+    await db.commit()
+    return {"message": f"Curso '{old['code']}' eliminado"}
 
 class GroupIn(BaseModel):
     group_code: str = Field(min_length=1, max_length=5, examples=["A"])
@@ -73,6 +159,7 @@ class GroupOut(BaseModel):
     teacher_id: int
     teacher_name: str
     semester_label: str
+    cycle: int
     capacity: int
     enrolled_count: int
     is_active: bool
@@ -94,6 +181,7 @@ async def _group_out(db, g: CourseGroup, course: Course, teacher: AppUser) -> Gr
         teacher_id=teacher.id,
         teacher_name=teacher.full_name,
         semester_label=g.semester_label,
+        cycle=course.cycle,
         capacity=g.capacity,
         enrolled_count=activos,
         is_active=g.is_active,
@@ -101,7 +189,7 @@ async def _group_out(db, g: CourseGroup, course: Course, teacher: AppUser) -> Gr
 
 async def _group_rows(db, *, group_id: int | None = None, course_id: int | None = None,
                       teacher_id: int | None = None, active_only: bool = False,
-                      semester: str | None = None):
+                      semester: str | None = None, cycle: int | None = None):
     stmt = (
         select(CourseGroup, Course, AppUser)
         .join(Course, Course.id == CourseGroup.course_id)
@@ -117,7 +205,9 @@ async def _group_rows(db, *, group_id: int | None = None, course_id: int | None 
         stmt = stmt.where(CourseGroup.is_active)
     if semester is not None:
         stmt = stmt.where(CourseGroup.semester_label == semester)
-    return (await db.exec(stmt.order_by(Course.code, CourseGroup.group_code))).all()
+    if cycle is not None:
+        stmt = stmt.where(Course.cycle == cycle)
+    return (await db.exec(stmt.order_by(Course.cycle, Course.code, CourseGroup.group_code))).all()
 
 @router.get("/groups", response_model=list[GroupOut])
 async def list_groups(
@@ -127,9 +217,10 @@ async def list_groups(
     teacher_id: int | None = None,
     include_inactive: bool = False,
     semester: str | None = Query(None, max_length=40, description="Default: todos"),
+    cycle: int | None = Query(None, ge=1, le=10, description="Filtra por ciclo (1-10)"),
 ) -> list[GroupOut]:
     rows = await _group_rows(db, course_id=course_id, teacher_id=teacher_id,
-                             active_only=not include_inactive, semester=semester)
+                             active_only=not include_inactive, semester=semester, cycle=cycle)
     return [await _group_out(db, g, c, t) for g, c, t in rows]
 
 @router.get("/courses/{course_id}/groups", response_model=list[GroupOut])
@@ -292,6 +383,7 @@ class ScheduleRowOut(BaseModel):
     room_id: int
     room_code: str
     semester_label: str
+    cycle: int
     weekday: int
     start_time: time
     end_time: time
@@ -301,6 +393,7 @@ async def general_schedule(
     db: DbSession,
     _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
     semester: str | None = Query(None, max_length=40, description="Default: semestre vigente (R1)"),
+    cycle: int | None = Query(None, ge=1, le=10, description="Filtra por ciclo (1-10)"),
     course_id: int | None = None,
     teacher_id: int | None = None,
     room_id: int | None = None,
@@ -315,10 +408,12 @@ async def general_schedule(
         .join(AppUser, AppUser.id == CourseGroup.teacher_id)
         .join(Room, Room.id == ScheduleBlock.room_id)
         .where(CourseGroup.semester_label == semester)
-        .order_by(ScheduleBlock.weekday, ScheduleBlock.start_time, Course.code)
+        .order_by(Course.cycle, ScheduleBlock.weekday, ScheduleBlock.start_time, Course.code)
     )
     if not include_inactive:
         stmt = stmt.where(CourseGroup.is_active)
+    if cycle is not None:
+        stmt = stmt.where(Course.cycle == cycle)
     if course_id is not None:
         stmt = stmt.where(CourseGroup.course_id == course_id)
     if teacher_id is not None:
@@ -339,6 +434,7 @@ async def general_schedule(
             room_id=r.id,
             room_code=r.code,
             semester_label=g.semester_label,
+            cycle=c.cycle,
             weekday=b.weekday,
             start_time=b.start_time,
             end_time=b.end_time,

@@ -1,14 +1,25 @@
 import { Injectable } from '@angular/core';
-import { BaseApi, Page, ListParams } from '../api/api-url';
+import { apiUrl, BaseApi, Page, ListParams } from '../api/api-url';
 import { Block, Course, EnrolledStudent, Group, ScheduleRow } from '../models/catalog';
+import {
+  ScheduleImportConfirmIn,
+  ScheduleImportPreview,
+  ScheduleImportResult,
+} from '../models/imports';
 
 @Injectable({ providedIn: 'root' })
 export class CoursesApi extends BaseApi {
-  courses(params?: ListParams) {
+  courses(params?: ListParams & { cycle?: number }) {
     return this.get<Page<Course>>('/courses', params);
   }
-  createCourse(body: { code: string; name: string }) {
+  createCourse(body: { code: string; name: string; cycle: number }) {
     return this.post<Course>('/courses', body);
+  }
+  updateCourse(id: number, body: { code?: string; name?: string; cycle?: number }) {
+    return this.patch<Course>(`/courses/${id}`, body);
+  }
+  deleteCourse(id: number) {
+    return this.delete<{ message: string }>(`/courses/${id}`);
   }
 
   groups(filters?: {
@@ -16,6 +27,7 @@ export class CoursesApi extends BaseApi {
     teacher_id?: number;
     include_inactive?: boolean;
     semester?: string;
+    cycle?: number;
   }) {
     return this.get<Group[]>('/groups', filters);
   }
@@ -40,6 +52,7 @@ export class CoursesApi extends BaseApi {
 
   schedule(filters: {
     semester?: string;
+    cycle?: number;
     course_id?: number;
     teacher_id?: number;
     room_id?: number;
@@ -86,5 +99,14 @@ export class CoursesApi extends BaseApi {
       `/groups/${groupId}/students/${studentId}/transfer`,
       { destino_group_id: destinoGroupId },
     );
+  }
+
+  importSchedule(file: File) {
+    const body = new FormData();
+    body.append('file', file);
+    return this.http.post<ScheduleImportPreview>(apiUrl('/courses/import-pdf'), body);
+  }
+  confirmScheduleImport(body: ScheduleImportConfirmIn) {
+    return this.post<ScheduleImportResult>('/courses/import-pdf/confirm', body);
   }
 }

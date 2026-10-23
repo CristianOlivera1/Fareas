@@ -1,64 +1,79 @@
 <app-page-header title="Cursos y grupos" subtitle="Malla académica: cursos → grupos → horario (RF-06)">
   @if (auth.isAdmin()) {
-    <app-ui-button icon="material-symbols:add" (click)="openCreate()">Nuevo curso</app-ui-button>
+  <app-ui-button icon="material-symbols:add" (click)="openCreate()">Nuevo curso</app-ui-button>
   }
 </app-page-header>
 
 <div class="mb-4 flex flex-wrap items-center gap-3">
   <app-ui-input class="w-full sm:w-72" icon="material-symbols:search" placeholder="Buscar por código o nombre…"
     [ngModel]="q()" (ngModelChange)="onSearch($event)" />
+  <p-select class="w-40" appendTo="body" [options]="cycleOptions" optionLabel="label" optionValue="value"
+    placeholder="Todos los ciclos" showClear [ngModel]="cycleNumber() || null" (ngModelChange)="onCycle($event)" />
   <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="reload()">
     Actualizar
   </app-ui-button>
 </div>
 
 @if (error(); as msg) {
-  <app-ui-alert variant="danger" title="No se pudieron cargar los cursos" class="mb-4 block">
-    {{ msg }}
-  </app-ui-alert>
+<app-ui-alert variant="danger" title="No se pudieron cargar los cursos" class="mb-4 block">
+  {{ msg }}
+</app-ui-alert>
 }
 
-<app-data-table
-  [columns]="columns" [data]="courses()" mode="server"
-  [serverPage]="page()" [serverTotal]="total()" [serverPageSize]="pageSize()"
-  [loading]="loading()" [errorMessage]="error()"
-  emptyTitle="Sin cursos" emptyMessage="Crea el primer curso o ajusta la búsqueda."
-  emptyIcon="material-symbols:menu-book-outline"
-  (pageChange)="onPage($event)" (perPageChange)="onPageSize($event)" (retry)="reload()"
->
+<app-data-table [columns]="columns" [data]="courses()" mode="server" [serverPage]="page()" [serverTotal]="total()"
+  [serverPageSize]="pageSize()" [loading]="loading()" [errorMessage]="error()" emptyTitle="Sin cursos"
+  emptyMessage="Crea el primer curso o ajusta la búsqueda." emptyIcon="material-symbols:menu-book-outline"
+  (pageChange)="onPage($event)" (perPageChange)="onPageSize($event)" (retry)="reload()">
   <ng-template appCell="code" let-c>
     <span class="font-mono text-xs font-semibold tracking-wide text-gray-900">{{ c.code }}</span>
   </ng-template>
   <ng-template appCell="name" let-c>
     <span class="text-sm font-medium text-gray-800">{{ c.name }}</span>
   </ng-template>
+  <ng-template appCell="cycle" let-c>
+    <span class="text-sm text-gray-600">Ciclo {{ roman(c.cycle) }}</span>
+  </ng-template>
   <ng-template appCell="actions" let-c>
-    <div class="flex items-center justify-end gap-2">
-      <app-ui-button variant="outline" size="sm" icon="material-symbols:table-chart-view-outline"
-        (click)="verGrupos(c)">
-        Grupos y horario
+    <div class="flex items-center justify-end gap-1">
+      <app-ui-button variant="ghost" size="sm" icon="material-symbols:table-chart-view-outline"
+        [ariaLabel]="'Ver grupos y horario de ' + c.code" (click)="verGrupos(c)">
+        Ver grupos
       </app-ui-button>
+      @if (auth.isAdmin()) {
+      <app-ui-button variant="ghost" size="sm" icon="material-symbols:edit-outline"
+        [ariaLabel]="'Editar curso ' + c.code" (click)="openEdit(c)" />
+      <app-ui-button variant="ghost" size="sm" icon="material-symbols:delete-outline"
+        [ariaLabel]="'Eliminar curso ' + c.code" (click)="askDelete(c)" />
+      }
     </div>
   </ng-template>
 </app-data-table>
 
-<p-dialog header="Nuevo curso" [(visible)]="dialogVisible" [modal]="true"
-  [style]="{ width: '440px' }">
+<p-dialog [header]="dialogTitle()" [(visible)]="dialogVisible" [modal]="true" [style]="{ width: '440px' }">
   <div class="space-y-4 pt-2">
     <div class="grid grid-cols-2 gap-3">
-      <app-ui-input label="Código" [required]="true" [mono]="true" placeholder="ISA903"
-        hint="3 a 20 caracteres" [ngModel]="form().code"
-        (ngModelChange)="patch({ code: $event })" />
-      <app-ui-input label="Nombre" [required]="true" placeholder="Inteligencia Artificial I"
-        [ngModel]="form().name" (ngModelChange)="patch({ name: $event })" />
+      <app-ui-input label="Código" [required]="true" [mono]="true" placeholder="ISA903" hint="3 a 20 caracteres"
+        [ngModel]="form().code" (ngModelChange)="patch({ code: $event })" />
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Ciclo <span class="text-red-500">*</span></span>
+        <p-select class="w-full" appendTo="body" [options]="cycleOptions" optionLabel="label" optionValue="value"
+          placeholder="Ciclo de la malla" [ngModel]="form().cycle" (ngModelChange)="patch({ cycle: $event })" />
+      </label>
     </div>
+    <app-ui-input label="Nombre" [required]="true" placeholder="Inteligencia Artificial I" [ngModel]="form().name"
+      (ngModelChange)="patch({ name: $event })" />
     <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-      El curso se imparte en grupos (A, B, C…), cada uno con su docente, su aula y su cupo.
-      Crea el curso y después sus grupos y bloques de horario.
+      El curso pertenece a un ciclo de la malla (I–X) y se imparte en grupos (A, B, C…),
+      cada uno con su docente y su cupo. Crea el curso y después sus grupos y bloques de horario.
     </app-ui-alert>
   </div>
   <ng-template pTemplate="footer">
     <app-ui-button variant="ghost" (click)="dialogVisible = false">Cancelar</app-ui-button>
-    <app-ui-button [loading]="saving()" (click)="save()">Guardar</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="save()">
+      {{ form().id ? 'Guardar cambios' : 'Crear curso' }}
+    </app-ui-button>
   </ng-template>
 </p-dialog>
+
+<app-modal-delete [(visible)]="deleteVisible" [itemLabel]="deleteLabel()" entityName="curso" [softDelete]="false"
+  [loading]="deleting()" [warning]="deleteWarning()" (confirmed)="confirmDelete()" (canceled)="cancelDelete()" />

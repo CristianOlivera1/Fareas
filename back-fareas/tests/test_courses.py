@@ -8,7 +8,7 @@ pytestmark = pytest.mark.asyncio
 
 API = "/api/v1"
 
-CURSO = {"code": "TST901", "name": "Curso de Pruebas Bloque 4"}
+CURSO = {"code": "TST901", "name": "Curso de Pruebas Bloque 4", "cycle": 9}
 
 
 async def _cleanup_course(db_session) -> None:
@@ -41,13 +41,83 @@ async def test_crear_y_listar_cursos(client: AsyncClient, admin_headers: dict, c
     assert r.status_code == 201, r.text
     course = r.json()
     assert course["code"] == "TST901"
+    assert course["cycle"] == 9
 
     r = await client.post(f"{API}/courses", headers=admin_headers, json=CURSO)
     assert r.status_code == 409
 
+    r = await client.post(f"{API}/courses", headers=admin_headers,
+                          json={"code": "   ", "name": "Curso Vacío", "cycle": 9})
+    assert r.status_code == 422
+
     r = await client.get(f"{API}/courses", headers=admin_headers, params={"q": "TST"})
     assert r.status_code == 200
     assert any(c["id"] == course["id"] for c in r.json()["items"])
+
+async def test_editar_curso(client: AsyncClient, admin_headers: dict, db_session, curso):
+    await _cleanup_course(db_session)
+    course = (await client.post(f"{API}/courses", headers=admin_headers, json=CURSO)).json()
+
+    r = await client.patch(f"{API}/courses/{course['id']}", headers=admin_headers,
+                           json={"name": "Curso de Pruebas Editado", "cycle": 8})
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "Curso de Pruebas Editado"
+    assert r.json()["cycle"] == 8
+    assert r.json()["code"] == CURSO["code"]
+
+    r = await client.patch(f"{API}/courses/{course['id']}", headers=admin_headers,
+                           json={"name": "   "})
+    assert r.status_code == 422
+
+    courses = (
+        await client.get(f"{API}/courses", headers=admin_headers, params={"page_size": 100})
+    ).json()["items"]
+    otro = next(c for c in courses if c["id"] != course["id"])
+    r = await client.patch(f"{API}/courses/{course['id']}", headers=admin_headers,
+                           json={"code": otro["code"]})
+    assert r.status_code == 409
+
+    r = await client.patch(f"{API}/courses/999999", headers=admin_headers,
+                           json={"name": "Curso Inexistente"})
+    assert r.status_code == 404
+
+async def test_eliminar_curso_sin_grupos(client: AsyncClient, admin_headers: dict, db_session, curso):
+    await _cleanup_course(db_session)
+    course = (await client.post(f"{API}/courses", headers=admin_headers, json=CURSO)).json()
+
+    r = await client.delete(f"{API}/courses/{course['id']}", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert "eliminado" in r.json()["message"].lower()
+
+    listado = (
+        await client.get(f"{API}/courses", headers=admin_headers,
+                         params={"q": CURSO["code"]})
+    ).json()
+    assert all(c["id"] != course["id"] for c in listado["items"])
+
+    r = await client.delete(f"{API}/courses/{course['id']}", headers=admin_headers)
+    assert r.status_code == 404
+
+    r = await client.get(f"{API}/audit-log", headers=admin_headers,
+                         params={"action": "curso_eliminado", "page_size": 5})
+    assert r.status_code == 200, r.text
+    assert r.json()["total"] >= 1
+
+async def test_no_eliminar_curso_con_grupos(client: AsyncClient, admin_headers: dict, db_session, curso):
+    await _cleanup_course(db_session)
+    course = (await client.post(f"{API}/courses", headers=admin_headers, json=CURSO)).json()
+    teacher_id, _room_id = await _ids_base(client, admin_headers)
+    group = (await client.post(f"{API}/courses/{course['id']}/groups", headers=admin_headers,
+                               json={"group_code": "A", "teacher_id": teacher_id})).json()
+
+    r = await client.delete(f"{API}/courses/{course['id']}", headers=admin_headers)
+    assert r.status_code == 409
+    assert "grupo" in r.json()["detail"].lower()
+
+    r = await client.delete(f"{API}/groups/{group['id']}", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    r = await client.delete(f"{API}/courses/{course['id']}", headers=admin_headers)
+    assert r.status_code == 409
 
 async def test_grupo_y_docente_invalido(client: AsyncClient, admin_headers: dict, db_session):
     await _cleanup_course(db_session)
@@ -242,6 +312,7 @@ async def test_horario_general_por_semestre_y_filtros(
     filas = (await client.get(f"{API}/schedule", headers=admin_headers)).json()
     propia = next(f for f in filas if f["group_id"] == g_a["id"])
     assert propia["semester_label"] == semestre
+    assert propia["cycle"] == CURSO["cycle"]
     assert propia["room_id"] == room_a and propia["course_code"] == CURSO["code"]
     assert propia["teacher_name"] and propia["group_code"] == "A"
 
@@ -252,6 +323,20 @@ async def test_horario_general_por_semestre_y_filtros(
                              params={"room_id": 999999})).json() == []
     assert (await client.get(f"{API}/schedule", headers=admin_headers,
                              params={"semester": "1900-X"})).json() == []
+    assert any(f["group_id"] == g_a["id"] for f in (
+        await client.get(f"{API}/schedule", headers=admin_headers,
+                         params={"cycle": CURSO["cycle"]})
+    ).json())
+    assert all(f["group_id"] != g_a["id"] for f in (
+        await client.get(f"{API}/schedule", headers=admin_headers, params={"cycle": 1})
+    ).json())
+    assert any(g["id"] == g_a["id"] for g in (
+        await client.get(f"{API}/groups", headers=admin_headers,
+                         params={"cycle": CURSO["cycle"]})
+    ).json())
+    assert all(g["id"] != g_a["id"] for g in (
+        await client.get(f"{API}/groups", headers=admin_headers, params={"cycle": 1})
+    ).json())
 
     r = await client.delete(f"{API}/groups/{g_a['id']}", headers=admin_headers)
     assert r.status_code == 200, r.text

@@ -103,7 +103,7 @@ async def test_un_grupo_activo_por_curso_transferencia_y_retiro(
     fila = next(s for s in r.json() if s["id"] == temp_student.id)
     assert fila["withdrawn_at"] is None
 
-    otro = Course(code=CURSO3, name="Otro curso de prueba B11")
+    otro = Course(code=CURSO3, name="Otro curso de prueba B11", cycle=9)
     db_session.add(otro)
     await db_session.flush()
     grupo_c = CourseGroup(course_id=otro.id, group_code="A", teacher_id=esc["docente_id"],
@@ -140,7 +140,7 @@ async def test_cruce_de_horario_del_alumno(client, admin_headers, db_session, es
                           json={"student_id": temp_student.id})
     assert r.status_code == 201, r.text
 
-    curso2 = Course(code=CURSO2, name="Curso cruzado de prueba B11")
+    curso2 = Course(code=CURSO2, name="Curso cruzado de prueba B11", cycle=9)
     db_session.add(curso2)
     await db_session.flush()
     grupo2 = CourseGroup(course_id=curso2.id, group_code="A", teacher_id=esc["docente_id"],

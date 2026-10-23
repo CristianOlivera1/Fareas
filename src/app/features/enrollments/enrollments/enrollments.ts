@@ -26,6 +26,7 @@ import { DataTable } from '../../../shared/components/data-table/data-table';
 import { DataTableCellDirective } from '../../../shared/components/data-table/data-table-cell.directive';
 import { TableColumn } from '../../../core/models/table-column';
 import { EnrolledStudent, Group } from '../../../core/models/catalog';
+import { toRoman } from '../../../shared/utils/cycles';
 
 interface Option<T> {
   label: string;
@@ -51,6 +52,7 @@ export class EnrollmentsPage {
   private readonly toast = inject(MessageService);
   private readonly deleteModal = viewChild(ModalDelete);
 
+  readonly roman = toRoman;
   readonly semester = this.qp.filter('semester');
   readonly courseId = this.qp.filter('course');
   readonly groupId = this.qp.filter('group');
@@ -100,7 +102,7 @@ export class EnrollmentsPage {
 
   readonly groupOptions = computed<Option<number>[]>(() =>
     this.groups().map((g) => ({
-      label: `Grupo ${g.group_code} · ${g.enrolled_count}/${g.capacity}`,
+      label: `Ciclo ${toRoman(g.cycle)} · Grupo ${g.group_code} · ${g.enrolled_count}/${g.capacity}`,
       value: g.id,
     })),
   );
@@ -120,7 +122,7 @@ export class EnrollmentsPage {
     return this.groups()
       .filter((g) => g.id !== origen.id && g.is_active && g.enrolled_count < g.capacity)
       .map((g) => ({
-        label: `Grupo ${g.group_code} · ${g.enrolled_count}/${g.capacity}`,
+        label: `Ciclo ${toRoman(g.cycle)} · Grupo ${g.group_code} · ${g.enrolled_count}/${g.capacity}`,
         value: g.id,
       }));
   });

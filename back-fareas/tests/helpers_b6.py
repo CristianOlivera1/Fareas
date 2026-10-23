@@ -71,6 +71,14 @@ async def limpiar(db) -> None:
                 )
             ).all()
         }
+    docente = (await db.exec(select(AppUser).where(AppUser.email == DOCENTE))).first()
+    if docente is not None:
+        grupo_ids |= {
+            gid
+            for gid in (
+                await db.exec(select(CourseGroup.id).where(CourseGroup.teacher_id == docente.id))
+            ).all()
+        }
     ids = list(grupo_ids)
     if ids:
         bloque_ids = (
@@ -103,7 +111,7 @@ async def limpiar(db) -> None:
 
 async def crear(db) -> dict:
     aula = Room(code=AULA, name="Aula de pruebas B6")
-    curso = Course(code=CURSO, name="Curso de pruebas B6")
+    curso = Course(code=CURSO, name="Curso de pruebas B6", cycle=9)
     docente = AppUser(role=UserRole.DOCENTE, email=DOCENTE, full_name="Docente B6",
                       password_hash="x" * 20, must_change_password=False, dni="74444000")
     e1 = AppUser(role=UserRole.ESTUDIANTE, email=EST1, code="996001",

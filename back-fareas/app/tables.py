@@ -114,6 +114,7 @@ class Course(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     code: str = Field(max_length=20, unique=True)
     name: str = Field(max_length=160)
+    cycle: int = Field(ge=1, le=10)
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
 
 class CourseGroup(SQLModel, table=True):

@@ -89,7 +89,9 @@ CREATE TABLE course (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     code       VARCHAR(20) NOT NULL UNIQUE,
     name       VARCHAR(160) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    cycle      SMALLINT NOT NULL,
+    CONSTRAINT chk_course_cycle CHECK (cycle BETWEEN 1 AND 10)
 );
 
 CREATE TABLE course_group (

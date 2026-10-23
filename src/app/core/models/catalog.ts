@@ -40,6 +40,7 @@ export interface Course {
   readonly id: number;
   readonly code: string;
   readonly name: string;
+  readonly cycle: number;
 }
 
 export interface Group {
@@ -51,6 +52,7 @@ export interface Group {
   readonly teacher_id: number;
   readonly teacher_name: string;
   readonly semester_label: string;
+  readonly cycle: number;
   readonly capacity: number;
   readonly enrolled_count: number;
   readonly is_active: boolean;
@@ -68,6 +70,7 @@ export interface ScheduleRow {
   readonly room_id: number;
   readonly room_code: string;
   readonly semester_label: string;
+  readonly cycle: number;
   readonly weekday: number;
   readonly start_time: string;
   readonly end_time: string;

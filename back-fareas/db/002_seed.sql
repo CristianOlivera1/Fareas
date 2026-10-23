@@ -40,13 +40,13 @@ SELECT r.id, 'esp32', 'esp32-' || lower(replace(r.code, ' ', '')), 'Nodo puerta 
 FROM room r
 WHERE NOT EXISTS (SELECT 1 FROM device d WHERE d.device_key = 'esp32-' || lower(replace(r.code, ' ', '')));
 
-INSERT INTO course (code, name) VALUES
-  ('ISA901', 'Computación Gráfica'),
-  ('ISA902', 'Sistemas Distribuidos'),
-  ('ISA903', 'Inteligencia Artificial I'),
-  ('ISA904', 'Programación Paralela'),
-  ('ISA905', 'Metodología de la Investigación Científica'),
-  ('ISA906', 'Interacción Humano Computador')
+INSERT INTO course (code, name, cycle) VALUES
+  ('ISA901', 'Computación Gráfica', 9),
+  ('ISA902', 'Sistemas Distribuidos', 9),
+  ('ISA903', 'Inteligencia Artificial I', 9),
+  ('ISA904', 'Programación Paralela', 9),
+  ('ISA905', 'Metodología de la Investigación Científica', 9),
+  ('ISA906', 'Interacción Humano Computador', 9)
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO course_group (course_id, group_code, teacher_id, semester_label)

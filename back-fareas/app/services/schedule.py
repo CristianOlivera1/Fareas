@@ -7,10 +7,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
 from app.services import errors
 from app.services.audit import audit
 from app.services.enrollments import _conflicto_de_alumno
-from app.services.settings import get_settings_row, semestre_vigente
+from app.services.settings import get_settings_row
 from app.tables import CourseGroup, Enrollment, Room, ScheduleBlock
 
 DIAS = {1: "Lunes", 2: "Martes", 3: "Miércoles", 4: "Jueves", 5: "Viernes"}
+MAX_BLOCK_MINUTES = 120
 
 
 def _validar_dia(weekday: int) -> None:
@@ -48,7 +49,6 @@ async def _raise_if_conflict(
     end_time,
     exclude_block_id: int | None = None,
 ) -> None:
-    vigente = await semestre_vigente(db)
     rows = (
         await db.exec(
             select(ScheduleBlock, CourseGroup)
@@ -56,7 +56,7 @@ async def _raise_if_conflict(
             .where(
                 CourseGroup.is_active,
                 ScheduleBlock.group_id != group.id,
-                CourseGroup.semester_label == vigente,
+                CourseGroup.semester_label == group.semester_label,
                 or_(
                     ScheduleBlock.room_id == room.id,
                     CourseGroup.teacher_id == group.teacher_id,
