@@ -277,3 +277,59 @@ async def test_reset_sin_verificar_otp_falla(client: AsyncClient, temp_user: App
         json={"email": email, "code": "123456", "new_password": "Hackeada99"},
     )
     assert r.status_code == 400
+
+async def test_recover_rejects_non_institutional_email(client: AsyncClient):
+    r = await client.post(f"{API}/recover", json={"email": "persona@gmail.com"})
+    assert r.status_code == 422
+    assert "institucional" in r.text
+
+async def test_recover_returns_resend_window_and_does_not_resend_during_cooldown(
+    client: AsyncClient, temp_user: AppUser, monkeypatch: pytest.MonkeyPatch
+):
+    calls: list[tuple[str, str, str]] = []
+
+    async def capture(to: str, code: str, purpose: str = "recover") -> bool:
+        calls.append((to, code, purpose))
+        return True
+
+    monkeypatch.setattr("app.routers.auth.send_otp", capture)
+
+    r = await client.post(f"{API}/recover", json={"email": temp_user.email})
+    assert r.status_code == 200
+    assert r.json()["resend_in"] == otp.OTP_RESEND_SECONDS
+    assert len(calls) == 1
+
+    r = await client.post(f"{API}/recover", json={"email": temp_user.email})
+    assert r.status_code == 200
+    assert r.json()["resend_in"] == otp.OTP_RESEND_SECONDS
+    assert len(calls) == 1
+
+async def test_recover_unknown_email_keeps_generic_response(client: AsyncClient):
+    r = await client.post(f"{API}/recover", json={"email": "nadie@unamba.edu.pe"})
+    assert r.status_code == 200
+    assert r.json()["resend_in"] == otp.OTP_RESEND_SECONDS
+    assert "Si el correo existe" in r.json()["message"]
+
+async def test_recover_survives_email_failure(
+    client: AsyncClient, temp_user: AppUser, monkeypatch: pytest.MonkeyPatch
+):
+    async def fail(*_args, **_kwargs) -> bool:
+        raise RuntimeError("smtp down")
+
+    monkeypatch.setattr("app.routers.auth.send_otp", fail)
+
+    r = await client.post(f"{API}/recover", json={"email": temp_user.email})
+    assert r.status_code == 200
+    assert r.json()["resend_in"] == otp.OTP_RESEND_SECONDS
+
+async def test_reset_rejects_weak_password(client: AsyncClient, temp_user: AppUser):
+    r = await client.post(
+        f"{API}/recover/reset",
+        json={
+            "email": temp_user.email,
+            "code": "123456",
+            "new_password": "sololetras",
+        },
+    )
+    assert r.status_code == 422
+    assert "letras y números" in r.text

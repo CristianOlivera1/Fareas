@@ -15,6 +15,7 @@ from app.schemas.auth import (
     LoginResponse,
     MessageResponse,
     RecoverRequest,
+    RecoverResponse,
     ResetPasswordRequest,
     UserOut,
     VerifyChangePasswordOtpRequest,
@@ -228,17 +229,38 @@ async def change_password(
         access_token=access,
     )
 
-@router.post("/recover", response_model=MessageResponse)
-async def recover(body: RecoverRequest, db: DbSession) -> MessageResponse:
-    user = (await db.exec(select(AppUser).where(AppUser.email == body.email.lower()))).first()
-    if user is not None:
+@router.post("/recover", response_model=RecoverResponse)
+async def recover(body: RecoverRequest, db: DbSession) -> RecoverResponse:
+    email = body.email.lower()
+    user = (await db.exec(select(AppUser).where(AppUser.email == email))).first()
+    if user is None:
+        logger.info("Recuperación solicitada para correo no registrado: %s", otp.mask_email(email))
+    else:
         try:
             code = otp.issue(user.id, otp.OtpPurpose.RECOVER)
-        except otp.OtpCooldownError:
-            pass
+        except otp.OtpCooldownError as exc:
+            logger.info(
+                "Recuperación en espera para %s: %s segundos",
+                otp.mask_email(email),
+                exc.seconds,
+            )
         else:
-            await send_otp(user.email, code, purpose=otp.OtpPurpose.RECOVER)
-    return MessageResponse(message="Si el correo existe, se envió un código de recuperación")
+            try:
+                sent = await send_otp(user.email, code, purpose=otp.OtpPurpose.RECOVER)
+            except Exception:
+                logger.exception(
+                    "Error inesperado al enviar el código de recuperación a %s",
+                    otp.mask_email(email),
+                )
+                sent = False
+            if sent:
+                logger.info("Código de recuperación enviado a %s", otp.mask_email(email))
+            else:
+                logger.error("No se pudo enviar el código de recuperación a %s", otp.mask_email(email))
+    return RecoverResponse(
+        message="Si el correo existe, se envió un código de recuperación",
+        resend_in=otp.OTP_RESEND_SECONDS,
+    )
 
 @router.post("/recover/verify", response_model=MessageResponse)
 async def verify_otp(body: VerifyOtpRequest, db: DbSession) -> MessageResponse:

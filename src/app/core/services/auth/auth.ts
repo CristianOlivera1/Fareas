@@ -12,6 +12,7 @@ import type {
   LoginResponse,
   MessageResponse,
   RecoverRequest,
+  RecoverResponse,
   ResetPasswordRequest,
   SessionUser,
   UserOut,
@@ -133,8 +134,8 @@ export class AuthService {
       );
   }
 
-  recoverRequest(request: RecoverRequest): Observable<MessageResponse> {
-    return this.http.post<MessageResponse>(`${this.api}/auth/recover`, request);
+  recoverRequest(request: RecoverRequest): Observable<RecoverResponse> {
+    return this.http.post<RecoverResponse>(`${this.api}/auth/recover`, request);
   }
 
   verifyOtp(request: VerifyOtpRequest): Observable<MessageResponse> {

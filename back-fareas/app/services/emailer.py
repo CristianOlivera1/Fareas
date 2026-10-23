@@ -3,7 +3,7 @@ import logging
 from email.message import EmailMessage
 from email.utils import formataddr
 
-from aiosmtplib import SMTP, SMTPException
+from aiosmtplib import SMTP
 
 from app.core.config import get_settings
 
@@ -91,7 +91,7 @@ async def send_email(to: str, subject: str, body: str, html_body: str | None = N
             await client.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
             await client.send_message(message)
         return True
-    except SMTPException:
+    except Exception:
         logger.exception("Fallo el envío de correo a %s", to)
         return False
 

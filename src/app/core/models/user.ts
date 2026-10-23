@@ -68,6 +68,10 @@ export interface MessageResponse {
   readonly message: string;
 }
 
+export interface RecoverResponse extends MessageResponse {
+  readonly resend_in: number;
+}
+
 export interface SessionUser {
   readonly id: number;
   readonly full_name: string;

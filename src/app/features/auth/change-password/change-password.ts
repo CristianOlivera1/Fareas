@@ -1,10 +1,25 @@
 import { ChangeDetectionStrategy, Component, CUSTOM_ELEMENTS_SCHEMA, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  AbstractControl,
+  FormBuilder,
+  ReactiveFormsModule,
+  ValidationErrors,
+  Validators,
+} from '@angular/forms';
 import { Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth/auth';
 import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
+
+const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+
+function passwordsMatch(group: AbstractControl): ValidationErrors | null {
+  const newPassword = group.get('new_password')?.value;
+  const confirmPassword = group.get('confirm_password')?.value;
+  if (!confirmPassword) return null;
+  return newPassword === confirmPassword ? null : { mismatch: true };
+}
 
 @Component({
   selector: 'app-change-password',
@@ -22,19 +37,30 @@ export class ChangePassword {
   readonly errorMessage = signal('');
   readonly isForced = this.auth.mustChangePassword;
 
-  readonly form = this.fb.nonNullable.group({
-    current_password: ['', [Validators.required, Validators.minLength(6)]],
-    new_password: ['', [Validators.required, Validators.minLength(8)]],
-    confirm_password: ['', [Validators.required, Validators.minLength(8)]],
-  });
+  readonly form = this.fb.nonNullable.group(
+    {
+      current_password: ['', [Validators.required, Validators.minLength(6)]],
+      new_password: [
+        '',
+        [Validators.required, Validators.minLength(8), Validators.pattern(PASSWORD_PATTERN)],
+      ],
+      confirm_password: ['', [Validators.required, Validators.minLength(8)]],
+    },
+    { validators: passwordsMatch },
+  );
 
   fieldError(field: 'current_password' | 'new_password' | 'confirm_password'): string {
     const control = this.form.get(field);
-    if (!control || !control.touched || !control.errors) return '';
+    if (!control || !control.touched) return '';
+    if (field === 'confirm_password' && this.form.errors?.['mismatch']) {
+      return 'Las contraseñas nuevas no coinciden.';
+    }
+    if (!control.errors) return '';
     if (control.errors['required']) return 'Este campo es obligatorio.';
     if (control.errors['minlength']) {
       return field === 'current_password' ? 'Mínimo 6 caracteres.' : 'Mínimo 8 caracteres.';
     }
+    if (control.errors['pattern']) return 'Usa al menos 8 caracteres con letras y números.';
     return '';
   }
 
