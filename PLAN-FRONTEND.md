@@ -21,6 +21,7 @@
 | Dashboard mock | 4 tarjetas, activity-feed con `setInterval`, hourly-chart, distribution-chart, student-list (todos con MOCK data) |
 | Asistencia mock | `features/attendance` con tabla estática |
 | Cursos y matrículas REALES (F2, 2026-10-12) | `features/courses` (lista de cursos + detalle con grupos y grilla semanal) y `features/enrollments` (cupo 40, retiro y transferencia) conectados a la API |
+| Horarios por ciclo (F2b, 2026-10-22) | Cursos con ciclo I–X, filtro por ciclo y pestañas por ciclo en `/schedule`; el grupo hereda el ciclo del curso y los choques siguen siendo del periodo |
 | Host global de toasts (2026-10-12) | `app.html` incluye `<p-toast>`; sin él, TODOS los `toast.add()` de la app (errores 409 incluidos) quedaban invisibles |
 | Build OK | `ng build --configuration development` pasa; `dist/fareas` generado |
 
@@ -62,14 +63,14 @@ Chart.js 4, material-symbols/akar-icons ya en uso.
   /courses                → Cursos y grupos + bloques (F2) [admin CRUD; docente lectura]
   /enrollments            → Matrículas por grupo (F2)     [admin CRUD; docente lectura]
   /teachers               → Docentes (F2)                 [admin]
-  /students               → Estudiantes + estado facial (F2/F4) [admin; docente lee]
+  /students               → Estudiantes + estado facial + importar nómina OCR (F2/F4/F6c) [admin; docente lee]
   /rooms                  → Aulas (F2)                    [admin]
   /devices                → Dispositivos + monitoreo RF-35 (F2/F5) [admin]
   /calendar/holidays      → Feriados (F3)                 [admin CRUD; docente lee]
   /calendar/justifications→ Justificaciones (F3)          [admin CRUD; docente lee]
   /calendar/settings      → Parámetros RF-34 (F3)         [admin]
   /faces                  → Enrolamiento facial (F4)      [admin]
-  /imports                → Importar horario PDF RF-07 (F6) [admin]
+  /imports                → Importar horario PDF/foto RF-07 (F6b) [admin]
   /reports                → Reportes Excel/PDF (F6)       [admin, docente]
   /audit                  → Bitácora RF-32 (F6)           [admin]
 /login  /auth/recover  /auth/change-password   → (ya existen, solo retoques visuales)
@@ -101,7 +102,7 @@ El sidebar actual (`layouts/admin/components/sidebar`) se extiende: grupos colap
 | | Justificaciones (`/calendar/justifications`) | `material-symbols:medical-information-outline` |
 | | Parámetros (`/calendar/settings`) | `material-symbols:tune` |
 | Herramientas ▾ | Enrolamiento facial (`/faces`) | `material-symbols:face-retouching-natural` |
-| | Importar horario (PDF) (`/imports`) | `material-symbols:upload-file-outline` |
+| | Importar horario (PDF/foto) (`/imports`) | `material-symbols:upload-file-outline` |
 | | Reportes (`/reports`) | `material-symbols:description-outline` |
 | | Bitácora (`/audit`) | `material-symbols:history-toggle-off-outline` |
 
@@ -172,19 +173,20 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 - [x] **Aula por bloque (R9)**: el aula va SOLO en el bloque (`room_id` obligatorio) y el choque
   se calcula con el aula DEL BLOQUE. El alta de grupo ya **no pide aula**: el diálogo de bloque la
   prellena con la del último bloque de ese día y, si es el primero, con la del último del grupo.
-- [x] **Horario general** `/schedule` (menú Académico): la semana completa de un semestre con
-  selector de semestre (vigente por defecto) y filtros por curso, docente y aula (en la URL),
-  contador de clases y horas libres, y la misma `app-schedule-table`. Las horas libres son
-  **botones**: abren el alta de bloque con día/hora ya puestos y el aula prellenada tras elegir el
-  grupo; el `×` permite quitar un bloque con confirmación (hard delete). Lee `GET /schedule`
-  (una sola consulta) y reutiliza `GET /groups` para el selector de grupo.
+- [x] **Horario general** `/schedule` (menú Académico): la semana de un **periodo** con selector
+  de periodo (vigente por defecto), **pestañas de ciclo I–X** (más «Todos», con contador de
+  clases) y filtros por curso, docente y aula (en la URL), contador de clases y horas libres del
+  ciclo, y la misma `app-schedule-table`. Las horas libres son **botones**: abren el alta de
+  bloque con día/hora ya puestos y el aula prellenada tras elegir el grupo; el `×` permite quitar
+  un bloque con confirmación (hard delete). Lee `GET /schedule` (una sola consulta) y reutiliza
+  `GET /groups` para el selector de grupo.
 - [x] **Franja de clases (RF-01)**: el alta de bloque valida contra `GET /settings`
   (`attendance_hour_start/end`) y avisa sin llamar a la API si el rango se sale; el fin propuesto
   nunca pasa del cierre (a las 19:00 propone 19:00–20:00). El backend re-valida igual (422).
 - [x] **Reactivar grupo**: la baja es lógica, así que el grupo inactivo sale en la misma pantalla
   con su chip «Inactivo» y un botón **Reactivar** (`POST /groups/{id}/activate`), en lugar del de
   desactivar. Se audita como `grupo_reactivado`.
-- [x] **Matrículas** `/enrollments`: selector semestre → curso → grupo (con el cupo en la
+- [x] **Matrículas** `/enrollments`: selector periodo → curso → grupo (con el ciclo y el cupo en la
   etiqueta), tarjeta resumen del grupo (docente, cupo con `activos()/capacity` y aviso
   "grupo lleno"), tabla de alumnos con badge **Enrolado/Sin rostro** (`with_face=1`), estado
   Activo/Retirado y acciones: **matricular** (buscador de estudiantes contra el servidor con
@@ -198,6 +200,28 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   `app.ts`/`app.html` (antes ningún toast se veía), `isActive()` del sidebar marca también las
   subrutas (`/admin/courses/3` resalta "Cursos y grupos") y el helper `extractDetail` pasó a
   `shared/utils/api-error.ts` (re-exportado desde `rooms.ts` para no romper imports).
+
+### F2b - Horarios por ciclo (2026-10-22) - RF-06 - **✅ LISTO**
+> Complemento del Bloque 12 del backend. En UNAMBA un periodo (2026-II) tiene 10 ciclos (I–X) y
+> cada ciclo tiene su propia semana; antes la pantalla mezclaba todos los ciclos.
+
+- [x] **Cursos** `/courses`: columna «Ciclo» y filtro por ciclo en la barra (en la URL); el alta
+  pide **Ciclo (I–X)** y lo envía a `POST /courses`; la tabla y el diálogo usan romanos.
+- [x] **Detalle de curso** `/courses/:courseId`: subtítulo y tarjetas de grupo muestran el ciclo
+  (`Ciclo IX · 2026-II`); el diálogo de grupo avisa que el grupo hereda el ciclo del curso y se
+  crea en el periodo vigente.
+- [x] **Horario general** `/schedule`: pestañas **Todos + I…X** con el número de clases de cada
+  ciclo; al elegir un ciclo se filtra la semana en cliente (sin recargar), el contador de horas
+  libres pasa a ser del ciclo y el selector de grupo del alta de bloque solo lista los grupos de
+  ese ciclo. La pestaña «Todos» muestra la carga total del periodo, no horas libres. El ciclo
+  queda en la URL (`?semester=2026-II&cycle=9`).
+- [x] **Matrículas**: el selector de grupo y la tarjeta muestran el ciclo; los textos dicen
+  «periodo», no «semestre».
+- [x] **Parámetros**: las etiquetas del formulario pasan a «Periodo académico vigente» para no
+  confundirlo con el ciclo del alumno/curso.
+- **Verificación:** `npm run build` OK (solo el warning de presupuesto preexistente), `ng test`
+  5/5 y flujo real en navegador (filtro de cursos por ciclo, detalle con Ciclo IX, pestañas del
+  horario, contador de horas libres y alta de bloque con solo grupos del ciclo).
 
 ### F3 - Asistencia y calendario (1 día) - RF-09, RF-10, RF-15, RF-21, RF-26, RF-34
 - [ ] **Backend (~30 min, aprobado):** `GET /attendance/sessions-today` →
@@ -226,6 +250,7 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   (rango fechas, motivo, curso opcional, documento URL) — `GET/POST /justifications`, `DELETE /justifications/{id}`.
   **Bloque 11 (R6):** la respuesta de alta trae `faltas_afectadas` (mostrarlo en el toast) y el
   docente está obligado a elegir curso; eliminar revierte las faltas (confirmar con dialog).
+  **F4.1:** el campo "documento URL" se complementa con adjunto PDF/JPG/PNG (subida por backend).
 - [ ] **Parámetros** `/calendar/settings`: formulario semestre/bloque/tolerancia/**ventana de
   apertura (early_open_minutes), rectify_days, dpi_min_sessions y fechas del semestre
   (semester_start/end)** — `GET/PATCH /settings` (aviso: "aplica a sesiones siguientes, nunca
@@ -311,12 +336,23 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   convertir a base64 → `POST /students/{id}/faces` con `{photos: [...], consent: true}`.
   **Bloque 11 (R13, Ley 29733):** obligatorio un **checkbox de consentimiento** antes de enviar
   (sin `consent: true` el backend responde 422) y acción "Eliminar rostro" (admin) →
-  `DELETE /students/{id}/faces` con dialog de confirmación (borra embeddings y foto).
+  `DELETE /students/{id}/faces` con dialog de confirmación (borra embeddings y el objeto local/R2).
 - [ ] Manejo de errores del validador facial: 1 rostro por foto, consistencia ≥0.55,
   duplicado → mensajes claros del backend en toasts.
 - [ ] En `/students`: badge de enrolamiento + acción directa "Enrolar rostro".
 - **Entregable:** enrolar a un alumno desde la webcam y verlo identificado en el video demo
   (`scripts/simulate_camera.py`) sin tocar la BD a mano.
+
+### F4.1 - Archivos en Cloudflare R2 (transversal, par con Bloque 13)
+> El backend sube y firma; Angular **no** recibe credenciales R2 ni usa el SDK.
+- [ ] **Enrolamiento:** mismas 3–5 fotos base64; `photo_url` sigue siendo el campo que consume
+  `<img>`, ahora con URL firmada de 900 s. Si expira, recargar el estado (no cachear la URL).
+- [ ] **Justificaciones:** input PDF/JPG/PNG ≤10 MB; después de crear la justificación,
+  `POST /justifications/{id}/document` (multipart); "Ver documento" usa la URL firmada;
+  eliminar la justificación borra el objeto. Se mantiene el campo URL externo por compatibilidad.
+- [ ] Manejo de 413 (tamaño), 415 (tipo), 422 (validación), 502/503 (R2) con mensajes claros.
+- [ ] **F8:** ninguna variable `R2_*` en Angular; el frontend solo conoce `apiUrl`.
+- **Entregable:** enrolar y adjuntar un documento desde la UI sin que el navegador vea credenciales del bucket.
 
 ### F5 - Dashboard en vivo (1 día) - RF-13, RF-35, PLAN §5
 - [ ] `DashboardApi`: `GET /dashboard/summary` → las tarjetas reales (asistencias/tardanzas/
@@ -336,7 +372,7 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 - **Entregable:** el dashboard refleja la BD y el feed muestra los veredictos REALES del
   bucle de cámaras (verificable con `simulate_camera.py` + `simulate_esp32.py` corriendo).
 
-### F6 - Reportes, importación PDF y bitácora (½-1 día) - RF-16, RF-07, RF-32
+### F6 - Reportes, importación OCR y bitácora (½-1 día; F6b/F6c aparte) - RF-16, RF-07, RF-32
 - [ ] **Reportes** `/reports`: filtros desde/hasta + curso (opcional) + botones
   "Excel" / "PDF" → `GET /reports/attendance.xlsx|pdf` con `responseType: 'blob'` +
   descarga vía `URL.createObjectURL` (respeta el `filename` del Content-Disposition);
@@ -349,12 +385,88 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   previsualización (`POST /courses/import-pdf`) con filas ambiguas resaltadas (chip "Ambiguo"
   + `nota`), select de docente y aula → confirmar → `POST /courses/import-pdf/confirm`
   → resumen de creados (cursos/grupos/bloques) y manejo del 409 de choque (todo-o-nada).
+  **Ampliado en F6b:** acepta foto o PDF escaneado (RapidOCR), pide periodo + ciclo y
+  permite docente/aula por fila, no uno para todo el archivo.
 - [ ] **Bitácora** `/audit` (admin): tabla paginada `GET /audit-log` con filtros
   action/entity/entity_id/actor/**actor_role**/since (backend ya los soporta) + visor de
   old/new_value (JSON); la respuesta trae `actor_name` y `actor_role` para la columna "Quién".
   **Bloque 11:** aquí se ven las acciones nuevas (sesión cancelada/revisada, justificación,
   matrícula retirada/transferida, rostro eliminado, consentimiento, feriado por rango).
 - **Entregable:** tesis puede mostrar: subir PDF real → propuesta → confirmar → bloques en horario.
+
+### F6b - Importar horario desde PDF o foto (RF-07) - **PLANIFICADO (1 día)**
+> **Backend listo (Bloque 14, 2026-10-22):** `POST /courses/import-pdf` y
+> `/confirm` ya aceptan PDF/JPG/PNG/WEBP, periodo/ciclo y docente/aula por fila.
+> Falta esta UI. Una importación = un ciclo de un periodo; la pantalla permite
+> revisar y corregir cada bloque antes de guardar.
+
+**Pantalla `/imports` (admin, 3 pasos)**
+1. **Archivo y contexto:** dropzone (PDF/JPG/PNG, ≤10 MB) + selector de periodo
+   (de `GET /settings/semesters`, vigente por defecto) + ciclo I–X en romanos.
+   Aviso: «sube el horario de un ciclo; repite para otros ciclos». Botón «Leer
+   horario» con estado de carga (el OCR puede tardar varios segundos).
+2. **Vista previa:** `POST /courses/import-pdf`. Cabecera con `tipo` («PDF con
+   texto» / «OCR de imagen»), páginas, confiables y ambiguos. Tabla editable
+   agrupada por curso: código, nombre (editable si `curso_nuevo`), grupo, día,
+   inicio, fin, docente y aula. Chips **Listo** / **Revisar** con tooltip de
+   `nota` y la línea OCR original; filtro «solo revisar». Acciones: «aplicar
+   docente al curso», «aplicar aula a las filas marcadas», añadir y eliminar
+   fila. **Nada se persiste en este paso.**
+3. **Confirmar:** resumen (cursos nuevos, grupos, bloques, omitidos) +
+   `POST .../confirm`; botón deshabilitado si hay filas inválidas; el 409 muestra
+   el choque y mantiene la tabla; el éxito enlaza a
+   `/schedule?semester=...&cycle=...`.
+
+**Detalles de UI**
+- Validación local: fin > inicio, dentro de la franja de `GET /settings`,
+  docente/aula obligatorios, código y grupo en mayúsculas.
+- Si el grupo ya existe, su docente se muestra bloqueado (no se reasigna por
+  importación).
+- Componentes: `features/imports/schedule-import` (ruta lazy) y
+  `shared/components/file-drop`; extender `courses-api.ts` y
+  `core/models/course-import.ts`. Sin librerías nuevas.
+- Responsive: tabla con scroll horizontal, inputs compactos y cabecera fija.
+
+### F6c - Importar nómina de alumnos (RF-02/RF-03/RF-08) - **PLANIFICADO (1 día)**
+> **Backend listo (Bloque 15, 2026-10-22):** `POST /students/import-preview` y
+> `/confirm` ya devuelven las filas editables y crean las cuentas. Falta esta UI.
+> Vive en la pantalla de estudiantes: el OCR rellena, el admin corrige en la
+> tabla y recién confirma.
+
+**Entrada:** botón «Importar nómina» (solo admin) junto a «Nuevo estudiante» en
+`features/catalog/students`. Abre un diálogo ancho de 3 pasos.
+
+**Paso 1 - Archivo:** dropzone PDF/JPG/PNG (≤10 MB) + «Ciclo por defecto» (1–12)
+para las filas sin columna CICLO. Ayuda: nómina impresa en tabla, foto recta;
+manuscrito no soportado. Botón «Leer nómina».
+
+**Paso 2 - Revisión:** `POST /students/import-preview` → tabla editable con
+código, DNI, apellidos y nombres, correo, ciclo y estado. Cada fila muestra:
+- chip Listo / Corregir / Duplicado y el motivo;
+- correo autogenerado con chip «generado» (editable);
+- validación en vivo (6/8 dígitos, correo, duplicado local);
+- la línea OCR original en un tooltip o fila expandible.
+
+Acciones: aplicar ciclo a todos, quitar filas con error, eliminar fila, añadir
+fila manual. La confirmación se deshabilita mientras haya filas inválidas.
+
+**Paso 3 - Resultado:** `POST /students/import-confirm` con las filas corregidas
+y, opcionalmente, «Matricular en grupo» (periodo → curso → grupo, apagado por
+defecto; R8). Panel con creados / omitidos / matriculados / errores por fila;
+refresca la tabla de estudiantes al cerrar. Si el OCR devuelve 0 filas: empty
+state con tips y enlace al alta manual.
+
+**Implementación:** extender `features/catalog/students/students.ts` y `.html`
++ `students-import.dialog.ts/.html` (standalone, en la misma carpeta); métodos
+`importStudentsPreview(file, semester)` e `importStudentsConfirm(rows, groupId?)`
+en `catalog-api.ts`; modelos en `core/models/student-import.ts`. Reutiliza
+`app-ui-alert`, `p-dialog`, `p-select` y `extractDetail`; sin librerías nuevas.
+El botón se oculta con `auth.isAdmin()` y el backend vuelve a validar el rol.
+
+**Verificación:** nómina de prueba de 35 filas (1 DNI repetido, 1 correo
+ausente): corregir, confirmar, ver 34/35 en la tabla y el error; recargar la
+página; con rol docente el botón no aparece y el endpoint responde 403. Probar
+PDF y foto.
 
 ### F7 - DISPOSITIVOS REALES: cámara + ESP32 (1-1.5 días) — guía completa de armado
 > Orden: primero la CÁMARA (solo configuración de red, sin soldar nada),
@@ -496,15 +608,16 @@ void loop() {
   (el ESP32 no soporta 5 GHz).
 
 ### F8 - Producción y demo de tesis (½ día) - (par con Bloque 10 del backend)
-- [ ] `environment.prod.ts` con `apiUrl: '/api/v1'` (mismo origen, sin CORS).
+- [ ] `environment.prod.ts` con `apiUrl: '/api/v1'` (mismo origen, sin CORS). Sin variables
+  `R2_*` en Angular: las URLs firmadas las entrega el backend.
 - [ ] `ng build --configuration production` → `dist/fareas/browser`.
 - [ ] Backend: montar los estáticos en `main.py` (`app.frontend()` pendiente del Bloque 10:
   StaticFiles + fallback a `index.html` para rutas Angular) + `fastapi run` con
-  `ENVIRONMENT=production` (sin /docs).
+  `ENVIRONMENT=production` (sin /docs) y `R2_ENABLED=true` con las claves en el entorno.
 - [ ] Acceso externo: **Cloudflare Tunnel** (`cloudflared tunnel --url http://localhost:8000`)
   → URL pública para la sustentación.
 - [ ] **Guion de demo (10 min):** login admin → parámetros → crear curso/grupo/bloque (F2) →
-  importar PDF de matrícula (F6) → matricular (F2) → enrolar rostro por webcam (F4) →
+  importar horario (PDF/foto) y nómina de alumnos (F6b/F6c) → matricular (F2) → enrolar rostro por webcam (F4) →
   cámara/ESP32 en la puerta (F7) → dashboard en vivo con SSE (F5) → marca manual y
   rectificación (F3) → reporte PDF (F6) → bitácora (F6).
 
@@ -525,9 +638,10 @@ void loop() {
 | `GET /attendance/me` · `GET /attendance/me/dpi` | "Mis asistencias" y DPI del estudiante (F3b) | Solo rol estudiante |
 | `GET /dpi/at-risk` · `GET /students/{id}/dpi` | Riesgo DPI (F5/F6) | A admin · D sus cursos |
 | `GET/POST/DELETE /holidays` · `POST /holidays/range` · `POST /holidays/national` · `GET/POST/DELETE /justifications` · `GET/PATCH /settings` | Calendario (F3) | A admin · L docente |
-| `POST/GET/DELETE /students/{id}/faces` (`consent: true` obligatorio) | Enrolamiento (F4) | A admin · L docente |
+| `POST/DELETE /justifications/{id}/document` (multipart PDF/JPG/PNG ≤10 MB) | Adjunto de justificación (F4.1) | A admin · D suyo |
+| `POST/GET/DELETE /students/{id}/faces` (`consent: true` obligatorio; `photo_url` firmada) | Enrolamiento (F4) | A admin · L docente |
 | `GET /dashboard/summary` (+`en_riesgo`, `sessions_to_review`) · `/dashboard/live` (SSE) · `GET /stats/hourly` · `GET /stats/distribution` | Dashboard (F5) | A+D (ambos ya filtrados por grupo si es docente) |
-| `GET /reports/attendance.xlsx|pdf` · `GET /reports/group-matrix.xlsx` · `GET /reports/dpi-risk.xlsx` · `POST /courses/import-pdf(+/confirm)` · `GET /audit-log` (+`actor_role`) | Reportes/Importación/Bitácora (F6) | A admin (reportes: D suyo) |
+| `GET /reports/attendance.xlsx|pdf` · `GET /reports/group-matrix.xlsx` · `GET /reports/dpi-risk.xlsx` · `POST /courses/import-pdf(+/confirm)` · `POST /students/import-preview(+/confirm)` · `GET /audit-log` (+`actor_role`) | Reportes/Importación/Bitácora (F6/F6b/F6c) | A admin (reportes: D suyo) |
 | `GET /devices/{id}` | Detalle de cámara con `rtsp_url` COMPLETA (R14: el listado la enmascara; un PATCH reenviando `***` se ignora) | A admin |
 
 `A`=admin escribe, `D`=docente en sus grupos, `L`=solo lectura. El backend YA aplica todo esto;

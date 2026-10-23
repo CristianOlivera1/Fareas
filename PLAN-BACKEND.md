@@ -17,8 +17,10 @@
 | Modelos probados | Ambos `.onnx` cargan en CPU (0.1 s / 0.3 s); ArcFace salida confirmada: vector **[1, 512]** |
 | Búsqueda vectorial validada | Benchmark NumPy: **0.23 ms** por búsqueda contra 5000 alumnos (la opción sin pgvector sobra para la facultad) |
 | Configuración | `.env` con `postgresql+asyncpg://postgres:***@localhost:5432/fareas`, JWT, SMTP, umbral facial 0.75, `DEVICE_TOKEN_SECRET` |
+| Almacenamiento R2 | Bucket `fareas-assets` (WNAM, privado) creado. Variables `R2_*` en `.env`/`.env.example` y en `Settings`; credenciales cargadas en el `.env` local. `services/storage.py` y la portada del enrolamiento ya suben a R2 con URL firmada (Bloque 13 en curso; adjunto de justificación pendiente) |
 | **Bloque 1 completado** | `app/main.py` + `pyproject.toml` (entrypoint `fastapi dev`), `database.py` (SQLModel async), `core/deps.py`, `tables.py` (14 entidades SQLModel con enums nativos), scripts `test_rtsp.py` y `simulate_esp32.py`. Verificado con servidor uvicorn real: `GET /api/v1/health` → `{"database":"ok","users":9}`. Ruff limpio |
-| **Cambio de contraseña con OTP (2026-10-22)** | Flujo de 3 pasos (`/auth/change-password/otp` → `/otp/verify` → `/change-password`), servicio `services/otp.py` con propósito + cooldown/TTL/intentos, `token_version` para invalidar JWT y migración `db/003_password_otp.sql`. Suite: **92 passed** (sin `test_vision.py`) |
+| **Cambio de contraseña con OTP (2026-10-22)** | Flujo de 3 pasos (`/auth/change-password/otp` → `/otp/verify` → `/change-password`), servicio `services/otp.py` con propósito + cooldown/TTL/intentos, `token_version` para invalidar JWT (columna ya consolidada en `001`). Suite: **92 passed** (sin `test_vision.py`) |
+| **OCR de fotos y nómina (2026-10-22)** | Bloques 14/15 implementados: horario desde PDF escaneado o foto con RapidOCR, periodo/ciclo, docente/aula por fila e importación idempotente; nómina de alumnos con preview editable, correo generado y confirmación fila por fila. Suite: **122 passed** (sin `test_vision.py`) |
 
 ### Decisiones definitivas
 
@@ -73,7 +75,7 @@ back-fareas/
 ├── models/                         # pesos .onnx (gitignored) - ya poblado
 │   ├── det_10g.onnx
 │   └── w600k_r50.onnx
-├── storage/                        # fotos de enrolamiento en dev (prod: Cloudflare R2) - gitignored
+├── storage/                        # fotos locales de desarrollo/pruebas; producción en R2 (Bloque 13) - gitignored
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                     # create_app() + lifespan (scheduler, routers, app.frontend() en prod)
@@ -90,7 +92,11 @@ back-fareas/
 │   │   ├── attendance_engine.py    # corazón: RF-21…RF-26 (sesión, marca única, clasificación, Tabla 8)
 │   │   ├── session_scheduler.py    # cierre automático RF-26 (APScheduler en el lifespan)
 │   │   ├── exports.py              # RF-16: Excel (openpyxl) + PDF (reportlab)
-│   │   └── ocr_schedule.py         # RF-07: pdfplumber + regex
+│   │   ├── ocr_extract.py          # PDF texto/escaneado o foto → líneas con coordenadas
+│   │   ├── ocr_schedule.py         # RF-07: regex sobre las líneas del horario
+│   │   ├── ocr_roster.py           # nómina impresa → alumnos con columnas
+│   │   ├── students_import.py      # preview y alta masiva fila por fila
+│   │   └── storage.py              # Bloque 13: R2 (boto3) + URLs firmadas
 │   └── routers/
 │       ├── health.py               # ya existe - se conecta a la BD real
 │       ├── auth.py                 # login, cambio de clave, OTP (RF-11/RF-12)
@@ -181,8 +187,8 @@ back-fareas/
 - Se audita `password_change_otp`, `password_changed` y `password_reset` (RF-32)
   y se envía `send_password_changed_notice` al correo institucional.
 
-**BD:** `db/001_schema.sql` actualizado (columna `token_version`) + ALTER
-re-ejecutable `db/003_password_otp.sql` aplicado a la BD local `fareas`.
+**BD:** `db/001_schema.sql` actualizado (columna `token_version`); el ALTER
+correspondiente ya se consolidó y se borró tras aplicarse a la BD local `fareas`.
 
 **Tests:** `tests/test_auth.py` (12/12) cubre el flujo voluntario completo,
 cooldown, expiración, máximo de intentos, OTP incorrecto, consumo único, token
@@ -274,7 +280,8 @@ completa sin `test_vision.py`: **92 passed**.
 
 ### Bloque 9 - OCR de horarios (½ día) - RF-07 - **✅ COMPLETADO Y VERIFICADO**
 - [x] `services/ocr_schedule.py`: `extraer_horarios(pdf_bytes)` con pdfplumber — estrategia por CONTEXTO DE LÍNEA: un código de curso (regex `A-Z{2,8}\d{2,4}`: ISA903, SI504…) fija curso actual; las líneas `DIA HH:MM - HH:MM` (día genérico de 3-4 letras, soporta `LUN/MIE`, guiones - – — y '8:00') generan bloques; `Grupo:`/`Sección:` en cualquier línea alimenta el contexto. Todo lo dudoso sale `confiable=False` + `nota` ('día no reconocido', 'horario invertido', 'sin curso previo', 'grupo no detectado').
-- [x] Alcance honesto: PDF DIGITAL (texto); un escaneo de imagen → 0 bloques → el endpoint responde 422 con explicación (OCR de imagen FUERA de alcance, PLAN §7). Tope 10 MB.
+- [x] Alcance honesto: PDF DIGITAL (texto); un escaneo de imagen → 0 bloques → el endpoint responde 422 con explicación (OCR de imagen FUERA de alcance, PLAN §7). Tope 10 MB. **→ Superado por el Bloque 14:** las fotos y los PDF escaneados se leen con RapidOCR; el PDF digital sigue por la vía de texto (más rápida y exacta).
+
 - [x] `routers/courses.py`: `POST /courses/import-pdf` (multipart, SOLO admin) devuelve la previsualización editable SIN persistir nada; `POST /courses/import-pdf/confirm` crea cursos faltantes + un grupo por (curso, group_code) + bloques con la MISMA validación RF-06 — **todo o nada** (`add_block(commit=False)` + rollback en excepción).
 - [x] Tests `test_ocr_schedule.py` (7): extractor puro (2 cursos, horas pegadas, grupo B), ambiguos (día raro, rango invertido), PDF escaneado, preview rechaza docente (403), preview+confirm E2E (cursos/grupos/bloques en BD), choque → 409 y ROLLBACK completo, escaneo/ilegible/vacío → 422. **67/67 en la suite.**
 - **Entregable VERIFICADO E2E:** PDF simulado (reportlab) subido por curl multipart a uvicorn real → preview JSON con 4 bloques confiables → confirm 201 con curso+grupo+2 bloques creados (y eliminados después para dejar la BD demo limpia).
@@ -324,13 +331,17 @@ completa sin `test_vision.py`: **92 passed**.
    falta); `enrollment.withdrawn_at`; `app_user.face_consent_at` + CHECK NOT
    VALID de DNI/WhatsApp; `room.capacity`; tabla `dpi_alert_sent`; valor
    `cancelada` del enum `session_status`; vistas `v_student_dpi` y
-   `v_today_attendance` con las reglas R5/R6/R7.
+   `v_today_attendance` con las reglas R5/R6/R7;
+   `course.cycle SMALLINT NOT NULL` (CHECK 1–10, ciclo de la malla).
 2. `db/002_seed.sql` — datos demo + los parámetros vigentes del semestre
    (umbral facial calibrado 0.55, DPI 20/30, semestre 2026-II). El horario demo
    lleva **el aula en cada bloque** y no puede tener clases cruzadas para un
    alumno: R8c/R9 lo rechazaría al editar (por eso ISA901 iba Vie 07:00-09:00).
-3. `db/003_aula_por_bloque.sql` — **pendiente** (aula por bloque + semana
-   Lun–Vie). Se borra cuando todo el equipo lo aplicó; regla en el README.
+   Los 6 cursos ISA901–ISA906 se siembran en el **ciclo 9**.
+3. `db/003_ciclo_curso.sql` — **pendiente** (agrega `course.cycle`, backfill de
+   los cursos existentes al ciclo 9 y CHECK 1–10). Las antiguas migraciones de
+   aula (`003_aula_por_bloque`, `004_aula_solo_en_bloque`) ya se consolidaron en
+   `001`/`002`; se borran cuando todo el equipo las aplicó (regla en el README).
 
 > **Nota de compatibilidad (regla vigente, 2026-10-16):** `001_schema.sql` **sí
 > se edita**: es la foto del esquema real, y `002_seed.sql` fija los valores
@@ -344,7 +355,7 @@ completa sin `test_vision.py`: **92 passed**.
 
 | Id | Regla | Implementación |
 |---|---|---|
-| R1 Semestre | Grupos con `semester_label`; solo el vigente abre sesiones/valida choques; cambiar de semestre no borra nada | `services/settings.py`, `attendance_engine`, `services/schedule.py`, `courses.py` |
+| R1 Semestre | Grupos con `semester_label`; solo el vigente abre sesiones; cambiar de semestre no borra nada. El **ciclo** (`course.cycle`, 1–10) separa los horarios dentro del mismo periodo; los choques se validan entre todos los ciclos del periodo | `services/settings.py`, `attendance_engine`, `services/schedule.py`, `courses.py` |
 | R2 Ventana | `clasificar()` con la tabla del ejemplo (07:44 · 07:45-08:10 · 08:11-10:00 · 10:01) | `attendance_engine.clasificar` |
 | R3 Apertura | El scheduler abre la sesión al iniciar la ventana (sin cámara); `resolver_sesion` solo la localiza (respaldo si nadie la abrió) | `abrir_sesiones_del_dia`, `resolver_sesion` |
 | R4 Cierre | Cierra al `fin` (máx. 60 s después); cero marcas → `needs_review` sin faltas; con marcas → faltas a matriculados activos | `cerrar_sesion`, `cerrar_sesiones_pendientes`, `resolver_revision` |
@@ -356,7 +367,7 @@ completa sin `test_vision.py`: **92 passed**.
 | R10 Contiguos | Candidatos por aula+ventana; desempate por la matrícula del alumno reconocido y, si persiste, el bloque que empezó más tarde | `bloques_candidatos`, `resolver_sesion`, `camera_loop` |
 | R11 Rectificación | Docente solo últimos `rectify_days` (7); admin sin plazo; motivo obligatorio → `audit_log`; cambiar de falta limpia la justificación | `attendance.py` (`/rectify`) |
 | R12 Feriados | Alta por rango (omite fines de semana) y generador nacional (fijos + Semana Santa); al crear un feriado se cancelan las sesiones abiertas/por revisar de esa fecha | `calendar_admin.py`, `services/holidays_pe.py` |
-| R13 Biometría | Consentimiento obligatorio (`face_consent_at`); `DELETE /students/{id}/faces` borra embeddings y foto; galería solo con usuarios activos | `services/faces.py`, `enrollment_faces.py`, `ai/runtime.py` |
+| R13 Biometría | Consentimiento obligatorio (`face_consent_at`); `DELETE /students/{id}/faces` borra embeddings y objeto (local o R2); galería solo con usuarios activos | `services/faces.py`, `enrollment_faces.py`, `ai/runtime.py` |
 | R14 Seguridad | Con `must_change_password` todo 403 (`code: must_change_password`) salvo `/auth/me` y `/auth/change-password`; `is_active` verificado por request; `rtsp_url` enmascarada en listados (y un PATCH con `***` se ignora) | `core/deps.py`, `catalog.py` |
 | R15 Formatos Perú | DNI 8 dígitos; WhatsApp 9 empezando en 9; correo `@unamba.edu.pe` configurable (`ALLOWED_EMAIL_DOMAIN`, vacío = sin validar; admin exento) | `services/formats.py`, `.env.example` |
 
@@ -364,13 +375,341 @@ completa sin `test_vision.py`: **92 passed**.
 
 **Tests (11.9) — nuevos archivos:** `test_rules_window.py` (R2 y niveles DPI puros), `test_sessions_lifecycle.py` (R3/R4/R5/R10), `test_justifications.py` (R6/R11 + permisos), `test_enrollment_rules.py` (R8/R9), `test_dpi.py` (R7 + envío único + semestre), `test_security.py` (R13/R14). Los tests existentes se actualizaron a la nueva regla (tardanza R2, cierre con needs_review, consentimiento) y `helpers_b6` ahora crea grupos con el semestre vigente y limpia justificaciones/auditoría.
 
-**Fuera de alcance (se documenta como limitación):** detección de vida (anti-foto), multi-escuela/multi-sede, cambio de aula por fecha, panel completo de periodos académicos (basta etiqueta + fechas), subida de documentos de justificación (se mantiene `document_url` como enlace) y reasignación de docente con historial separado.
+**Fuera de alcance (se documenta como limitación):** detección de vida (anti-foto), multi-escuela/multi-sede, cambio de aula por fecha, panel completo de periodos académicos (se mantiene etiqueta + fechas; el ciclo ya es una dimensión del curso), adjunto de justificación (se implementa en el Bloque 13; `document_url` externo se mantiene como compatibilidad) y reasignación de docente con historial separado.
 
-### Bloque 10 - Calidad y demo final (1–2 días) - **se ejecuta DESPUÉS del Bloque 11**
+### Bloque 12 - Horarios por ciclo (2026-10-22) - RF-06 - **✅ COMPLETADO Y VERIFICADO**
+> Motivo: en UNAMBA cada periodo general (p. ej. 2026-II) contiene 10 ciclos
+> (I–X), cada uno con su propia malla y su propio horario. El modelo solo tenía
+> `semester_label` (periodo), así que los cursos de todos los ciclos se
+> mezclaban en una única semana.
+
+**Decisión de modelo:** el **periodo** sigue en `course_group.semester_label`
+(2026-II) y el **ciclo** se guarda en `course.cycle` (1–10). El grupo hereda el
+ciclo de su curso; no se duplica en `course_group`. No se crean 10 periodos:
+los choques de aula y docente deben seguir detectándose **entre ciclos** del
+mismo periodo.
+
+- [x] BD: `course.cycle SMALLINT NOT NULL CHECK (1–10)` en `001`, seed al ciclo
+  9 en `002` y ALTER re-ejecutable `003_ciclo_curso.sql` aplicado a `fareas`.
+- [x] `app/tables.py`: `Course.cycle`; `CourseIn`/`CourseOut`, `GroupOut` y
+  `ScheduleRowOut` exponen `cycle`; `GET /courses`, `GET /groups` y
+  `GET /schedule` aceptan `?cycle=1..10`; la importación PDF recibe `cycle` para
+  los cursos nuevos.
+- [x] `services/schedule.py`: el chequeo de choques usa el **periodo del grupo**
+  (`group.semester_label`) y no el periodo vigente global; así se puede editar
+  un horario histórico sin falsos conflictos. El chequeo sigue cubriendo todos
+  los ciclos del periodo (no se filtra por ciclo).
+- [x] Tests: `tests/test_cycle_schedule.py` (curso/ciclo, filtros, choque entre
+  ciclos del mismo periodo y bloque de periodo antiguo sin choque cruzado);
+  `test_courses`, `test_ocr_schedule`, `helpers_b6` y `_f3_fixture` actualizados
+  con `cycle`. Suite completa: **113 passed**.
+
+**Endpoints:** `GET /courses?cycle=` · `POST /courses {code,name,cycle}` ·
+`GET /groups?cycle=` · `GET /schedule?semester=&cycle=` ·
+`POST /courses/import-pdf/confirm {...,cycle}`.
+
+### Bloque 13 - Almacenamiento de archivos en Cloudflare R2 (2026-10-22) - RF-04, RF-10, R13 - **EN CURSO (fotos en R2 listo; adjunto de justificación pendiente)**
+
+> **Decisión: fase separada.** El almacenamiento es transversal (enrolamiento,
+> justificaciones, privacidad, borrado y producción), no una pantalla de F4/F6.
+> Meterlo dentro de F4 escondería la migración, el servicio, las URLs firmadas y
+> las pruebas de regresión. F4 solo consume la API; F8 no recibe credenciales R2.
+>
+> **Bucket:** `fareas-assets` (WNAM, privado). `R2_ENABLED=true` en `.env`.
+> **Bloqueo actual:** faltan `R2_ACCESS_KEY_ID` y `R2_SECRET_ACCESS_KEY`.
+
+**Qué va a R2 y qué no:**
+
+| Sí va a R2 | No va a R2 |
+|---|---|
+| Portada del enrolamiento: `students/{student_id}/faces/{uuid}.jpg` | Embeddings faciales (`face_embedding.vector`) |
+| Adjunto de justificación: `justifications/{justification_id}/{uuid}.{ext}` | PDF de importación de horario: se procesa en memoria y se descarta |
+| Futuras imágenes de curso/perfil, si se habilitan | Reportes XLSX/PDF: se generan por request y se descargan |
+|  | Importaciones Excel/PDF: se procesan en memoria |
+
+**Diseño acordado:**
+
+- Bucket **privado** + subida desde FastAPI con `boto3` (API S3) + URLs GET
+  firmadas de corta duración. El navegador **nunca** recibe credenciales R2 ni
+  sube directo; solo consume URLs firmadas de lectura.
+- Endpoint S3: `https://<account>.r2.cloudflarestorage.com` (**sin**
+  `/fareas-assets`), `R2_REGION=auto`, `R2_BUCKET_NAME=fareas-assets`.
+- La BD guarda **claves de objeto**, no URLs públicas. Para no migrar ahora, la
+  portada reutiliza `face_embedding.photo_url` como clave R2
+  (`students/{student_id}/faces/{uuid}.jpg`); el adjunto de justificación usará
+  `justification.document_key` cuando se implemente. `document_url` queda como
+  compatibilidad para enlaces externos. Los DTO siguen exponiendo
+  `photo_url`/`document_url`, pero ya firmadas.
+- `services/storage.py`: `put_object`, `delete_object` y `signed_get_url`.
+  `boto3` es síncrono → llamadas con `asyncio.to_thread`; errores del proveedor
+  se traducen a 502/503 con mensaje controlado.
+- Límites: 5 MB por foto y 10 MB por adjunto. Formatos: JPEG/PNG/PDF; validar
+  el contenido real (OpenCV para imágenes, cabecera `%PDF-` para PDF), no solo
+  la extensión.
+- TTL de URLs firmadas: **900 s** (`R2_PRESIGN_EXPIRE_SECONDS`). No guardar URLs
+  firmadas en BD ni en logs; solo claves.
+- Borrado: `DELETE /students/{id}/faces` elimina el objeto; eliminar una
+  justificación elimina su adjunto. Si la transacción de BD falla después de
+  subir, se borra el objeto (compensación).
+- **Sin CORS** para el flujo recomendado: la subida pasa por FastAPI y la
+  visualización es directa con `<img>`/`<a>` sobre la URL firmada. Si el
+  frontend descarga con `fetch`/blob o se habilita subida directa desde el
+  navegador, agregar CORS para `http://localhost:4200` y el origen de
+  producción (GET/PUT/HEAD, headers `*`, exponer `ETag`).
+- No se habilita la **Public Development URL** ni se necesita dominio custom
+  para URLs firmadas. Si algún día se quieren URLs públicas, usar otro bucket y
+  nunca exponer biometría.
+
+**Tareas:**
+
+- [x] Bucket `fareas-assets`, endpoint y `R2_*` en `.env`/`.env.example` y en
+  `core/config.py` (cuenta, bucket, endpoint, región, TTL, límite).
+- [x] Credenciales `R2_ACCESS_KEY_ID` y `R2_SECRET_ACCESS_KEY` cargadas en el
+  `.env` local (no versionado), token limitado al bucket.
+- [x] `boto3==1.43.118` en `pyproject.toml` y `requirements.txt`.
+- [x] `services/storage.py`: `LocalStorage` (fallback dev/tests),
+  `R2Storage` (put/delete/URL firmada con `asyncio.to_thread`) y `face_key`.
+  Pruebas con fake en `tests/test_storage.py` (5 tests).
+- [x] `services/faces.py` y `enrollment_faces.py`: la portada se sube a R2
+  después de validar las fotos, `photo_url` guarda la clave y las respuestas
+  entregan la URL firmada; eliminar el rostro borra el objeto.
+- [x] README: variables R2, bucket, límites y estado del flujo.
+- [ ] Migración SQL re-ejecutable para `justification.document_key`
+  (la portada ya usa `photo_url` como clave; no hay migración de fotos).
+- [ ] `calendar_admin.py`: `POST /justifications/{id}/document` (multipart) y
+  `DELETE /justifications/{id}/document`; `document_url` firmada en la salida;
+  mantener `document_url` externo para compatibilidad.
+- [ ] Verificación E2E con una foto real de enrolamiento desde `/faces`
+  (la subida directa contra R2 ya está verificada).
+
+**Entregable:** enrolar un alumno guarda la portada en R2 (no en `storage/`),
+la web la muestra con URL firmada, `DELETE` borra el objeto, y una justificación
+con adjunto se sube/descarga/elimina sin exponer el bucket.
+
+**Verificación real (2026-10-22):** `PUT`/`GET` firmado/`DELETE` contra R2
+`fareas-assets` OK con `_smoke/fareas-upload-test.txt` y con
+`students/9999/faces/<uuid>.jpg` (clave generada por `face_key`);
+la URL firmada devolvió 200 con el mismo contenido y el objeto desapareció tras
+borrarlo. Suite completa: **118 passed** (113 previos + 5 de storage).
+
+### Bloque 14 - OCR de horario desde foto o PDF escaneado (2026-10-22) - RF-07 - **✅ COMPLETADO Y VERIFICADO**
+
+> Motivo: el Bloque 9 solo lee PDF con capa de texto y asigna UN docente y UN
+> aula a todo el archivo. Un horario real de un ciclo llega como foto del
+> cuadro impreso o PDF escaneado y tiene varios docentes y aulas. Este bloque
+> cierra esa brecha sin tocar el modelo: **un archivo = un ciclo de un periodo**.
+
+**Decisiones**
+
+1. **Entrada:** PDF digital, PDF escaneado, JPG/PNG/WEBP (foto). Tope 10 MB y
+   10 páginas. El archivo se procesa en memoria y se descarta (no va a R2).
+2. **Dos vías de lectura:** primero `pdfplumber` (texto). Si hay pocas líneas
+   útiles o el parser no encuentra bloques, se renderiza y se aplica OCR. Las
+   imágenes van directo a OCR.
+3. **RapidOCR** CPU (`rapidocr`, singleton perezoso, una sola inferencia a la
+   vez con `asyncio.Semaphore(1)` + `asyncio.to_thread`). **pypdfium2** renderiza
+   las páginas a 220 DPI (rueda pip, sin instalar poppler). Pillow aplica la
+   orientación EXIF y reduce el lado máximo a 2500 px; RapidOCR recibe RGB. El
+   enderezado y el umbral automáticos **no** se implementaron: la foto debe
+   estar recta y el preview marca cualquier fila dudosa.
+4. **Reconstrucción de líneas:** RapidOCR devuelve cajas + texto + confianza;
+   se agrupan por `y` (tolerancia ~0.6×alto) y se ordenan por `x`. El parser
+   reutiliza los regex del Bloque 9 (día, `HH:MM–HH:MM`, código, grupo).
+5. **Periodo y ciclo explícitos:** el formulario pide `semester_label` (por
+   defecto el vigente) y `cycle` (1–10). Los grupos nuevos se crean con ese
+   periodo; los cursos nuevos con ese ciclo. Para varios ciclos se repite la
+   importación (una por ciclo), sin adivinar el ciclo por página.
+6. **Docente y aula por fila:** `teacher_id`/`room_id` del request siguen siendo
+   los valores por defecto (compatibilidad) y cada bloque puede traer los suyos.
+   Un grupo tiene UN docente: si dos filas del mismo grupo traen docentes
+   distintos, el confirm responde 422. El aula sí puede variar por bloque.
+7. **Confirmación todo o nada:** se reutiliza `add_block(commit=False)` con la
+   validación RF-06/R9 (periodo del grupo, choques entre ciclos, franja RF-01).
+   Un choque devuelve 409 con la fila culpable y no persiste nada.
+8. **Idempotencia:** un bloque existente del mismo grupo con igual día y rango
+   se omite y se cuenta en `omitidos`; no se duplica al reimportar.
+9. **Cursos existentes:** se buscan por `code`; no se renombran ni se cambia su
+   ciclo. Si no existen se crean con nombre editable de la vista previa. La
+   vista previa marca `curso_nuevo: true`.
+10. **Nunca escribir sin revisar:** el preview no toca la BD (solo auditoría de
+    metadata) y la confirmación recibe las filas ya corregidas.
+
+**Servicios**
+
+- `services/ocr_extract.py` (nuevo): `leer_documento(filename, raw)` →
+  `{tipo: pdf_texto|pdf_ocr|imagen, paginas, lineas: [{texto, x, y, confianza, pagina}]}`.
+  Detecta el tipo por contenido real (cabecera `%PDF-`, magic de imagen), no
+  por la extensión; aplica los límites y traduce errores a 415/422/413.
+- `services/ocr_schedule.py`: acepta el documento extraído y devuelve
+  `BloqueExtraido` con `pagina`, `linea`, `confianza` y `curso_nuevo`. Se
+  conserva la firma actual para los tests del Bloque 9.
+- `routers/courses.py`: `POST /courses/import-pdf` acepta PDF/JPG/PNG/WEBP y
+  devuelve `tipo`, `paginas`, `confiables`, `ambiguos` y los bloques con
+  `pagina`/`linea`. `POST /courses/import-pdf/confirm` añade
+  `semester_label`, `teacher_id`/`room_id` por bloque y `omitidos`.
+  Los paths actuales se mantienen (el frontend aún no los consume).
+
+**Contrato (confirm)**
+
+```json
+{
+  "semester_label": "2026-II",
+  "cycle": 2,
+  "teacher_id": 4,
+  "room_id": 12,
+  "bloques": [
+    {"course_code": "ISA902", "course_name": "Álgebra", "group_code": "A",
+     "weekday": 1, "start_time": "07:00", "end_time": "09:00",
+     "teacher_id": 5, "room_id": 3}
+  ]
+}
+```
+
+Respuesta: `{cursos_creados, grupos_creados, bloques_creados, omitidos, total_bloques}`.
+
+**Precisión y límites (honestos)**
+
+- RapidOCR trae modelos ch/en por defecto; para nombres con tildes/ñ se evalúa
+  el modelo **Latin** de PP-OCR y, si no mejora, se normaliza para comparar y
+  se revisa a mano. Códigos, horas y DNI (dígitos) son los campos más fiables.
+- Fotos: horario **impreso**, recto, con buena luz y sin sombras. La
+  inclinación fuerte puede degradar el OCR. **Manuscrito no está soportado.**
+- Toda fila con confianza baja, día/hora dudoso, curso sin grupo o aula sin
+  detectar sale `confiable: false` + `nota`, y la UI la resalta.
+- **Calibración pendiente** con 5 fotos y 5 PDF reales: se debe medir acierto
+  en código/hora/día y documentarlo en el README. Las pruebas actuales usan
+  imágenes sintéticas, un PDF escaneado generado y el servidor real; no
+  sustituyen una muestra de horarios de la facultad.
+
+**Tests**
+
+- Parser puro con líneas inyectadas (sin OCR): día raro, rango invertido,
+  columnas pegadas, dos cursos, grupo no detectado.
+- OCR real con fixture generado (PIL/reportlab): PDF escaneado y foto con
+  rotación 3° + ruido; se afirma sobre códigos/horas (tolerante), no sobre
+  nombres completos.
+- Preview: admin 200, docente 403, archivo vacío 422, >10 MB 413, >10 páginas 422.
+- Confirm: periodo distinto al vigente, docente/aula por fila, choque 409 con
+  rollback, reimportación idempotente (`omitidos`), curso existente no se
+  renombra, grupo con dos docentes 422.
+- `pytest -q` y una prueba manual con `curl -F` sobre uvicorn real.
+
+**Dependencias:** `rapidocr==3.10.0`, `pypdfium2==5.13.0`. Los modelos OCR vienen
+incluidos en `rapidocr` (probado sin descargas adicionales); para no pisar
+`opencv-python` 4.10 se fija también `opencv-python-headless==4.10.0.84`.
+
+**Estimación:** 1.5 días. **Entregable:** subir una foto del horario del ciclo
+II de 2026-II → corregir docentes/aulas en la tabla → confirmar → ver la semana
+en `/schedule?semester=2026-II&cycle=2`.
+
+**Implementado (2026-10-22):** `services/ocr_extract.py` (PDF texto, PDF
+renderizado con pypdfium2 y OCR con RapidOCR, reconstrucción de filas por
+coordenadas), `ocr_schedule.py` (parser con página/confianza y fin de semana
+marcado como ambiguo), `routers/courses.py` (acepta PDF/JPG/PNG/WEBP; preview
+con `tipo` y reintento OCR si el PDF de texto no produce bloques; confirm con
+`semester_label`, docente/aula por fila, `omitidos` e idempotencia).
+
+### Bloque 15 - OCR de nómina de alumnos (2026-10-22) - RF-02/RF-03/RF-08 (ampliación) - **✅ COMPLETADO Y VERIFICADO**
+
+> Motivo: el alta es de uno en uno y una nómina trae 30–40 alumnos. Se importa
+> un **padrón impreso en tabla** (PDF o foto), se revisa y se confirman las
+> cuentas. No se soportan fichas individuales ni manuscrito.
+
+**Flujo**
+
+1. `POST /students/import-preview` (multipart: `file`, `default_semester`) →
+   no escribe nada. Detecta columnas por la fila de encabezado
+   (CÓDIGO, DNI, APELLIDOS Y NOMBRES, CORREO, CICLO) y reconstruye filas por
+   `y`; si el encabezado no aparece, usa regex por campo en cada línea.
+2. La vista previa edita **todos** los campos y muestra por fila `confiable`,
+   `errores[]` y la línea OCR original. Nada se guarda hasta confirmar.
+3. `POST /students/import-confirm` recibe las filas corregidas, valida todo de
+   nuevo en el servidor y crea las cuentas **fila por fila**: un duplicado no
+   bloquea a los demás. Devuelve creados, omitidos, errores y (opcional)
+   matriculados.
+
+**Reglas**
+
+- Campos: `code` (6 dígitos), `dni` (8), `full_name` (3–160), `email`,
+  `semester` (1–12), `whatsapp` opcional. Se reutilizan `services/formats.py`
+  y las validaciones de `accounts.create_account`.
+- **Correo faltante** → `{code}@unamba.edu.pe` (o el dominio de
+  `ALLOWED_EMAIL_DOMAIN`), marcado `email_generado: true` y editable. Si ya
+  está tomado, la fila es error.
+- **Duplicados:** mismo `code` en la BD → `omitido` (no se actualiza ni se
+  pisa la contraseña); `dni`/`email` de otra cuenta → error de fila. Dentro del
+  archivo, códigos repetidos → error en la segunda fila.
+- **Cuentas:** clave temporal + `must_change_password` + correo RF-08. Si el
+  correo falla, la cuenta queda creada y la fila lo reporta (comportamiento
+  actual de `send_temporary_credentials`). Sin claves en logs ni respuestas.
+- **Matrícula opcional:** si llega `group_id`, cada alumno creado o ya existente
+  se matricula con R8 (cupo, un grupo activo por curso, cruces); los fallos se
+  reportan por fila y no revierten la cuenta.
+- **Privacidad:** el archivo se descarta, no va a R2 ni a logs; la auditoría
+  guarda solo conteos y nombre de archivo.
+- Tope: 10 MB, 10 páginas, 200 filas. Solo admin.
+
+**Contrato (preview)**
+
+```json
+{
+  "tipo": "pdf_ocr",
+  "paginas": 2,
+  "total": 38,
+  "listos": 35,
+  "con_error": 3,
+  "alumnos": [
+    {"fila": 1, "code": "221181", "dni": "74581236",
+     "full_name": "QUISPE MAMANI, RAUL", "email": "221181@unamba.edu.pe",
+     "email_generado": true, "semester": 2, "confiable": true,
+     "errores": [], "nota": null, "linea": "221181 74581236 ...", "pagina": 1}
+  ]
+}
+```
+
+**Contrato (confirm)** `{alumnos: [...], group_id?: number}` →
+`{creados, omitidos, matriculados, errores: [{fila, code, motivo}], total}`.
+
+**Servicios**
+
+- `services/ocr_roster.py`: columnas por `x` del encabezado + regex de respaldo;
+  limpieza de nombres (espacios, puntos, guiones) sin inventar apellidos;
+  detección de `CICLO` y de correo.
+- `services/students_import.py`: valida y crea por fila reutilizando `accounts`
+  (se extraen los helpers de validación para no duplicar reglas); matrícula vía
+  `services/enrollments`. `create_account` sigue igual para el alta individual.
+- `routers/catalog.py`: los dos endpoints, `RequireRole(ADMIN)` y auditoría
+  `importacion_alumnos_preview` / `importacion_alumnos_confirmada`.
+
+**Tests:** parser con cajas OCR simuladas (encabezado, columna partida, correo
+ausente, código repetido), validación de filas, confirm con 38 filas y 1
+duplicada (37 creadas + 1 omitida), matrícula opcional con grupo lleno, `403`
+a docente, `422` archivo sin tabla, `413` >10 MB, y que la auditoría no guarde
+datos personales.
+
+**Estimación:** 1.5 días. **Entregable:** subir la foto de una nómina →
+corregir 3 filas → confirmar → 37 alumnos en `/students`, 1 reportado como
+duplicado y, si se eligió grupo, matriculados.
+
+**Implementado (2026-10-22):** `services/ocr_roster.py` (columnas por
+encabezado + regex de respaldo, correo generado, duplicados en archivo),
+`services/students_import.py` (duplicados en BD, preview de solo lectura y
+confirmación por fila con `create_account`; auditoría sin PII) y los endpoints
+`POST /students/import-preview` + `POST /students/import-confirm`.
+
+**Verificación (2026-10-22):** `tests/test_ocr_images.py` (7) y
+`tests/test_students_import.py` (6) cubren OCR real de imágenes y PDF escaneado,
+periodo/ciclo, aula por fila, idempotencia, dos docentes en un grupo, nómina con
+correo generado, duplicados y matrícula opcional. Suite completa sin
+`test_vision.py`: **122 passed**. Además, contra el `fastapi dev` real por HTTP
+multipart: la nómina devolvió una fila con correo generado y el horario un
+bloque, ambos con 200.
+
+### Bloque 10 - Calidad y demo final (1–2 días) - **se ejecuta DESPUÉS de los Bloques 11, 13, 14 y 15**
 - [ ] Tests pytest (`fareas_test`); motor y auth con prioridad.
-- [ ] Producción simple: `fastapi run` + Cloudflare Tunnel; el build de Angular se sirve desde el propio FastAPI con `app.frontend("dist/fareas/browser")` (un solo origen, sin CORS).
+- [ ] Producción simple: `fastapi run` + Cloudflare Tunnel; el build de Angular se sirve desde el propio FastAPI con `app.frontend("dist/fareas/browser")` (un solo origen, sin CORS). Activar `R2_ENABLED=true` con las claves en el entorno y el bucket privado.
 - [ ] README final con diagrama, protocolo ESP32 y guion de demo de tesis.
-- **Entregable:** demo end-to-end: PDF → matrícula → enrolamiento → video/entrada real → asistencia → reportes.
+- **Entregable:** demo end-to-end: PDF/foto → horario y nómina → matrícula → enrolamiento → video/entrada real → asistencia → reportes.
 
 ---
 
@@ -424,6 +763,7 @@ Convención única de estados en todo el sistema: `asistio | tardanza | falta | 
 
 1. **Cuando probemos la cámara real:** pasarme la IP fija y contraseña RTSP (o ejecutar tú el `test_rtsp.py` y pegarme la salida).
 2. **Cuando probemos el ESP32 real:** abrir el puerto 8000 del firewall de Windows (te preparo el comando y me das permiso para ejecutarlo).
+3. **Para activar R2 (Bloque 13):** crear un API token con permiso `Object Read & Write` limitado al bucket `fareas-assets` y pasarme `Access Key ID` + `Secret Access Key`. No hace falta dominio público. CORS solo si el navegador sube directo o descarga con `fetch`/blob; con `<img>`/`<a>` directo sobre la URL firmada no se necesita.
 
 ---
 
@@ -436,4 +776,6 @@ Convención única de estados en todo el sistema: `asistio | tardanza | falta | 
 | 3 | ~~6, 7~~ ✅ | ~~Motor de asistencia + protocolo ESP32~~ — COMPLETADO (el ESP32 físico se conecta cuando lo armes) |
 | 4 | ~~8, 9~~ ✅ | ~~Dashboard + reportes + OCR~~ — COMPLETADO |
 | 5 | **11 (reglas de negocio)** ✅ | Semestre, cupos, transferencias, justificaciones, DPI con aviso único, seguridad y reportes por grupo — COMPLETADO (ver §3, Bloque 11) |
-| 6 | 10 | Calidad y demo final (README, demo E2E, tunnel) |
+| 6 | **13** | R2 (fotos/adjuntos) — fotos listas; adjunto de justificación pendiente |
+| 7 | **14 + 15** ✅ | OCR de horario (foto/PDF escaneado) + importación de nómina de alumnos — COMPLETADO |
+| 8 | **10** | Calidad y demo final (README, demo E2E, tunnel) |
