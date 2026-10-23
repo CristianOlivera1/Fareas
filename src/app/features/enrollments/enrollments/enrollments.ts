@@ -69,9 +69,9 @@ export class EnrollmentsPage {
   readonly columns: TableColumn[] = [
     { id: 'index', header: 'N°', width: '60px', align: 'center' },
     { id: 'student', header: 'Estudiante' },
-    { id: 'rostro', header: 'Rostro', align: 'center', hiddenOnMobile: true },
+    { id: 'face', header: 'Rostro', align: 'center', hiddenOnMobile: true },
     { id: 'semester', header: 'Ciclo', align: 'center', hiddenOnMobile: true },
-    { id: 'estado', header: 'Matrícula', align: 'center' },
+    { id: 'status', header: 'Matrícula', align: 'center' },
     { id: 'actions', header: 'Acciones', align: 'center', width: '150px' },
   ];
 
@@ -107,23 +107,32 @@ export class EnrollmentsPage {
     })),
   );
 
-  readonly group = computed(() => this.groups().find((g) => g.id === this.groupIdNumber()) ?? null);
+  readonly selectedGroup = computed(
+    () => this.groups().find((group) => group.id === this.groupIdNumber()) ?? null,
+  );
 
-  readonly activos = computed(() => this.students().filter((s) => !s.withdrawn_at).length);
+  readonly activeEnrollmentCount = computed(
+    () => this.students().filter((student) => !student.withdrawn_at).length,
+  );
 
-  readonly cupoLibre = computed(() => {
-    const g = this.group();
-    return g ? Math.max(0, g.capacity - this.activos()) : 0;
+  readonly remainingCapacity = computed(() => {
+    const group = this.selectedGroup();
+    return group ? Math.max(0, group.capacity - this.activeEnrollmentCount()) : 0;
   });
 
-  readonly transferOptions = computed<Option<number>[]>(() => {
-    const origen = this.group();
-    if (!origen) return [];
+  readonly transferGroupOptions = computed<Option<number>[]>(() => {
+    const sourceGroup = this.selectedGroup();
+    if (!sourceGroup) return [];
     return this.groups()
-      .filter((g) => g.id !== origen.id && g.is_active && g.enrolled_count < g.capacity)
-      .map((g) => ({
-        label: `Ciclo ${toRoman(g.cycle)} · Grupo ${g.group_code} · ${g.enrolled_count}/${g.capacity}`,
-        value: g.id,
+      .filter(
+        (group) =>
+          group.id !== sourceGroup.id &&
+          group.is_active &&
+          group.enrolled_count < group.capacity,
+      )
+      .map((group) => ({
+        label: `Ciclo ${toRoman(group.cycle)} · Grupo ${group.group_code} · ${group.enrolled_count}/${group.capacity}`,
+        value: group.id,
       }));
   });
 
@@ -133,17 +142,26 @@ export class EnrollmentsPage {
 
   private async init(): Promise<void> {
     try {
-      const [cfg, labels, courses] = await Promise.all([
+      const [settings, semesterLabels, coursePage] = await Promise.all([
         this.calendar.settings().toPromise(),
         this.calendar.semesters().toPromise(),
         this.api.courses({ page_size: 100 }).toPromise(),
       ]);
-      const vigente = cfg?.semester_label ?? null;
-      this.semesters.set([...new Set([vigente ?? '', ...(labels ?? [])])].filter((s) => s !== ''));
-      this.courseOptions.set(
-        (courses?.items ?? []).map((c) => ({ label: `${c.code} · ${c.name}`, value: c.id })),
+      const currentSemester = settings?.semester_label ?? null;
+      this.semesters.set(
+        [...new Set([currentSemester ?? '', ...(semesterLabels ?? [])])].filter(
+          (semester) => semester !== '',
+        ),
       );
-      if (!this.semester() && vigente) await this.qp.update({ semester: vigente });
+      this.courseOptions.set(
+        (coursePage?.items ?? []).map((course) => ({
+          label: `${course.code} · ${course.name}`,
+          value: course.id,
+        })),
+      );
+      if (!this.semester() && currentSemester) {
+        await this.qp.update({ semester: currentSemester });
+      }
     } catch (err) {
       this.error.set(extractDetail(err));
       return;
@@ -161,13 +179,16 @@ export class EnrollmentsPage {
       this.groups.set([]);
       return;
     }
-    const sem = semesterOverride ?? this.semester();
+    const selectedSemester = semesterOverride ?? this.semester();
     this.loadingGroups.set(true);
     this.error.set(null);
     try {
-      const list = await this.api.courseGroups(courseId, sem).toPromise();
-      this.groups.set(list ?? []);
-      if (this.groupId() && !(list ?? []).some((g) => g.id === this.groupIdNumber())) {
+      const courseGroups = await this.api.courseGroups(courseId, selectedSemester).toPromise();
+      this.groups.set(courseGroups ?? []);
+      if (
+        this.groupId() &&
+        !(courseGroups ?? []).some((group) => group.id === this.groupIdNumber())
+      ) {
         this.students.set([]);
       }
     } catch (err) {
@@ -186,8 +207,8 @@ export class EnrollmentsPage {
     this.loadingStudents.set(true);
     this.error.set(null);
     try {
-      const list = await this.api.enrolled(groupId, true).toPromise();
-      this.students.set(list ?? []);
+      const enrolledStudents = await this.api.enrolled(groupId, true).toPromise();
+      this.students.set(enrolledStudents ?? []);
     } catch (err) {
       this.error.set(extractDetail(err));
     } finally {
@@ -234,13 +255,13 @@ export class EnrollmentsPage {
   private async searchStudents(term: string): Promise<void> {
     this.searchingStudents.set(true);
     try {
-      const res = await this.catalog
+      const studentPage = await this.catalog
         .students({ q: term || null, page_size: 20, with_face: 'true' })
         .toPromise();
       this.studentOptions.set(
-        (res?.items ?? []).map((s) => ({
-          label: `${s.code ?? 'sin código'} · ${s.full_name}`,
-          value: s.id,
+        (studentPage?.items ?? []).map((student) => ({
+          label: `${student.code ?? 'sin código'} · ${student.full_name}`,
+          value: student.id,
         })),
       );
     } catch (err) {
@@ -264,11 +285,11 @@ export class EnrollmentsPage {
     }
     this.saving.set(true);
     try {
-      const res = await this.api.enroll(groupId, studentId).toPromise();
+      const enrollment = await this.api.enroll(groupId, studentId).toPromise();
       this.toast.add({
         severity: 'success',
         summary: 'Matrícula registrada',
-        detail: res?.message ?? 'Alumno matriculado',
+        detail: enrollment?.message ?? 'Alumno matriculado',
         life: 3500,
       });
       this.enrollDialogVisible = false;
@@ -292,20 +313,22 @@ export class EnrollmentsPage {
   }
 
   async confirmTransfer(): Promise<void> {
-    const origen = this.groupIdNumber();
-    const destino = this.transferTargetId();
+    const sourceGroupId = this.groupIdNumber();
+    const targetGroupId = this.transferTargetId();
     const student = this.transferStudent();
-    if (!origen || !destino || !student) {
+    if (!sourceGroupId || !targetGroupId || !student) {
       this.toast.add({ severity: 'warn', summary: 'Selecciona el grupo destino', life: 3000 });
       return;
     }
     this.saving.set(true);
     try {
-      const res = await this.api.transfer(origen, student.id, destino).toPromise();
+      const transfer = await this.api
+        .transfer(sourceGroupId, student.id, targetGroupId)
+        .toPromise();
       this.toast.add({
         severity: 'success',
         summary: 'Alumno transferido',
-        detail: res?.message ?? 'Las faltas anteriores se conservan (suman al curso)',
+        detail: transfer?.message ?? 'Las faltas anteriores se conservan (suman al curso)',
         life: 4000,
       });
       this.transferDialogVisible = false;
@@ -322,31 +345,31 @@ export class EnrollmentsPage {
     }
   }
 
-  askRetirar(student: EnrolledStudent): void {
+  askToWithdraw(student: EnrolledStudent): void {
     this.deleteStudent.set(student);
     this.deleteVisible = true;
   }
 
-  retirarLabel(): string | null {
+  withdrawalLabel(): string | null {
     return this.deleteStudent()?.full_name ?? null;
   }
 
-  cancelRetirar(): void {
+  cancelWithdrawal(): void {
     this.deleteStudent.set(null);
     this.deleteVisible = false;
   }
 
-  async confirmRetirar(): Promise<void> {
+  async confirmWithdrawal(): Promise<void> {
     const groupId = this.groupIdNumber();
     const student = this.deleteStudent();
     if (!groupId || !student) return;
     this.deleting.set(true);
     try {
-      const res = await this.api.unenroll(groupId, student.id).toPromise();
+      const enrollment = await this.api.unenroll(groupId, student.id).toPromise();
       this.toast.add({
         severity: 'success',
         summary: 'Matrícula retirada',
-        detail: res?.message ?? 'El historial del curso se conserva',
+        detail: enrollment?.message ?? 'El historial del curso se conserva',
         life: 3500,
       });
       await Promise.all([this.loadStudents(), this.loadGroups()]);
@@ -365,7 +388,7 @@ export class EnrollmentsPage {
     }
   }
 
-  async reactivar(student: EnrolledStudent): Promise<void> {
+  async reactivate(student: EnrolledStudent): Promise<void> {
     const groupId = this.groupIdNumber();
     if (!groupId) return;
     try {
