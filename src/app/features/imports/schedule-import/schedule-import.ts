@@ -328,7 +328,7 @@ export class ScheduleImportPage {
     );
   }
 
-  groupNeedsReview(group: ImportGroup): boolean {
+  groupNeedsReview(group: ScheduleImportGroup): boolean {
     return group.rows.some((row) => this.needsReview(row));
   }
 
