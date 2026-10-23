@@ -144,7 +144,7 @@ class CourseGroup(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     course_id: int = Field(foreign_key="course.id")
     group_code: str = Field(max_length=5)
-    teacher_id: int = Field(foreign_key="app_user.id")
+    teacher_id: int | None = Field(default=None, foreign_key="app_user.id")
     semester_label: str = Field(max_length=40)
     capacity: int = 40
     is_active: bool = True
@@ -158,7 +158,7 @@ class ScheduleBlock(SQLModel, table=True):
     weekday: int = Field(ge=1, le=5)
     start_time: time
     end_time: time
-    room_id: int = Field(foreign_key="room.id")
+    room_id: int | None = Field(default=None, foreign_key="room.id")
 
 class Enrollment(SQLModel, table=True):
     __tablename__ = "enrollment"

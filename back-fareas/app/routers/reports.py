@@ -39,7 +39,7 @@ SQL_BASE = (
     "JOIN schedule_block  sb ON sb.id = s.block_id "
     "JOIN course_group    cg ON cg.id = sb.group_id "
     "JOIN course          c  ON c.id  = cg.course_id "
-    "JOIN room            r  ON r.id  = sb.room_id "
+    "LEFT JOIN room       r  ON r.id  = sb.room_id "
     "JOIN app_user        st ON st.id = ar.student_id "
     "WHERE s.session_date BETWEEN :d1 AND :d2 "
     "AND cg.is_active "

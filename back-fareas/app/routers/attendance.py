@@ -16,7 +16,6 @@ from app.services.attendance_engine import (
     cerrar_sesion,
     registrar_marca,
     resolver_revision,
-    resolver_sesion,
 )
 from app.services.audit import audit
 from app.services.dpi import resumen_alumno
@@ -168,8 +167,8 @@ async def sessions_today(
         .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)
         .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)
         .join(Course, Course.id == CourseGroup.course_id)
-        .join(Room, Room.id == ScheduleBlock.room_id)
-        .join(AppUser, AppUser.id == CourseGroup.teacher_id)
+        .outerjoin(Room, Room.id == ScheduleBlock.room_id)
+        .outerjoin(AppUser, AppUser.id == CourseGroup.teacher_id)
         .where(
             AttendanceSession.session_date == _naive_peru(ahora_peru()).date(),
             AttendanceSession.status == SessionStatus.ABIERTA,
@@ -193,10 +192,10 @@ async def sessions_today(
             "course_id": curso.id,
             "course_code": curso.code,
             "course_name": curso.name,
-            "room_id": aula.id,
-            "room_code": aula.code,
-            "teacher_id": docente.id,
-            "teacher_name": docente.full_name,
+            "room_id": aula.id if aula is not None else None,
+            "room_code": aula.code if aula is not None else None,
+            "teacher_id": docente.id if docente is not None else None,
+            "teacher_name": docente.full_name if docente is not None else None,
         }
         for ses, bloque, grupo, curso, aula, docente in filas
     ]
@@ -211,8 +210,8 @@ async def sessions_review(
         .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)
         .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)
         .join(Course, Course.id == CourseGroup.course_id)
-        .join(Room, Room.id == ScheduleBlock.room_id)
-        .join(AppUser, AppUser.id == CourseGroup.teacher_id)
+        .outerjoin(Room, Room.id == ScheduleBlock.room_id)
+        .outerjoin(AppUser, AppUser.id == CourseGroup.teacher_id)
         .where(
             AttendanceSession.needs_review.is_(True),
             AttendanceSession.status == SessionStatus.CERRADA,
@@ -234,10 +233,10 @@ async def sessions_review(
             "course_id": curso.id,
             "course_code": curso.code,
             "course_name": curso.name,
-            "room_id": aula.id,
-            "room_code": aula.code,
-            "teacher_id": docente.id,
-            "teacher_name": docente.full_name,
+            "room_id": aula.id if aula is not None else None,
+            "room_code": aula.code if aula is not None else None,
+            "teacher_id": docente.id if docente is not None else None,
+            "teacher_name": docente.full_name if docente is not None else None,
         }
         for ses, bloque, grupo, curso, aula, docente in filas
     ]

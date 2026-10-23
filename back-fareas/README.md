@@ -160,7 +160,9 @@ psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/003_ciclo_curso.sql
 ```
 
 **Pendiente ahora mismo:** `db/003_ciclo_curso.sql` (agrega `course.cycle`
-1–10, rellena los cursos existentes con el ciclo 9 y crea el CHECK) y
+1–10, rellena los cursos existentes con el ciclo 9 y crea el CHECK),
+`db/004_docente_aula_opcionales.sql` (docente del grupo y aula del bloque
+nullable, más `v_today_attendance` con `LEFT JOIN room`) y
 `db/005_refresh_tokens.sql` (tabla `refresh_token` para las sesiones con
 refresh). Quien ya los aplicó: borra su línea cuando todo el equipo los tenga,
 junto con el archivo.
@@ -388,14 +390,19 @@ Protocolo en `ws://localhost:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET>`
 - `POST /courses/import-pdf` — sube un **PDF digital, PDF escaneado o foto**
   (JPG/PNG/WEBP, ≤10 MB y 10 páginas; multipart, solo admin). Devuelve `tipo`
   (`pdf_texto`, `pdf_ocr` o `imagen`), páginas y bloques CANDIDATOS (curso,
-  grupo, día, horas) con `confiable`, `nota`, `pagina` y `linea`.
+  grupo, día, horas) con `confiable`, `nota`, `pagina`, `linea`, y sugerencias
+  ya rellenadas de `teacher_id`, `room_id` y `curso_sugerido` (parecido por
+  código/nombre cuando el curso aún no existe con ese código exacto).
   **No persiste nada**: es la pantalla de revisión del RF-07.
 - `POST /courses/import-pdf/confirm` — recibe la propuesta corregida,
   `semester_label` (periodo; por defecto el vigente), `cycle` (1–10),
   `teacher_id`/`room_id` por defecto y, opcionalmente, `teacher_id`/`room_id`
-  por bloque. Crea cursos/grupos/bloques con la validación RF-06/R9 y
+  por bloque (ambos pueden quedar en `null` si el horario no los trae). Crea
+  los cursos que no existan, cursos/grupos/bloques con la validación RF-06/R9 y
   **todo o nada** (rollback ante choque). Reimportar el mismo archivo devuelve
-  `omitidos` en vez de duplicar bloques. Un grupo solo admite un docente.
+  `omitidos` en vez de duplicar bloques. Un grupo solo admite un docente; el
+  docente y el aula se completan luego con `PATCH /blocks/{id}`, y la sesión de
+  asistencia solo se abre cuando ambos existen.
 - `POST /students/import-preview` — sube una **nómina impresa en tabla**
   (PDF/foto) y `default_semester`; devuelve alumnos con código, DNI, nombres,
   correo (generado como `codigo@unamba.edu.pe` si falta), ciclo, `confiable`,

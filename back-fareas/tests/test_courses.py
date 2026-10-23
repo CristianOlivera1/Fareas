@@ -211,7 +211,7 @@ async def _aulas(client: AsyncClient, admin_headers: dict) -> dict[int, str]:
     rooms = (await client.get(f"{API}/rooms", headers=admin_headers, params={"page_size": 100})).json()
     return {r["id"]: r["code"] for r in rooms["items"]}
 
-async def test_aula_por_bloque_es_obligatoria(client: AsyncClient, admin_headers: dict, db_session):
+async def test_aula_por_bloque_es_opcional(client: AsyncClient, admin_headers: dict, db_session):
     await _cleanup_course(db_session)
     course = (await client.post(f"{API}/courses", headers=admin_headers, json=CURSO)).json()
     teacher_id, room_a = await _ids_base(client, admin_headers)
@@ -224,13 +224,13 @@ async def test_aula_por_bloque_es_obligatoria(client: AsyncClient, admin_headers
 
     r = await client.post(f"{API}/groups/{g_a['id']}/blocks", headers=admin_headers,
                           json={"weekday": 1, "start_time": "16:00", "end_time": "18:00"})
-    assert r.status_code == 422, r.text
-    assert "aula" in r.json()["detail"].lower()
-
-    r = await client.post(f"{API}/groups/{g_a['id']}/blocks", headers=admin_headers,
-                          json={"weekday": 1, "start_time": "16:00", "end_time": "18:00",
-                                "room_id": room_a})
     assert r.status_code == 201, r.text
+    assert r.json()["room_id"] is None and r.json()["room_code"] is None
+    bloque_a = r.json()
+
+    r = await client.patch(f"{API}/blocks/{bloque_a['id']}", headers=admin_headers,
+                           json={"room_id": room_a})
+    assert r.status_code == 200, r.text
     assert r.json()["room_id"] == room_a and r.json()["room_code"] == codigos[room_a]
     bloque_a = r.json()
 

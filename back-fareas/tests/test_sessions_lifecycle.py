@@ -21,7 +21,7 @@ from app.tables import (
     ScheduleBlock,
     SessionStatus,
 )
-from tests.helpers_b6 import CURSO, AULA, crear, h, limpiar, weekday_hoy
+from tests.helpers_b6 import crear, h, limpiar, weekday_hoy
 
 
 async def _limpiar_aperturas_del_barrido(db) -> None:
@@ -99,6 +99,21 @@ async def test_apertura_sin_marcas_y_cierre_needs_review(db_session, escenario):
         )
     ).all()
     assert {f.status.value for f in faltas} == {"falta"}
+
+async def test_no_abre_sesion_sin_docente_o_aula(db_session, escenario):
+    esc = escenario
+    grupo = await db_session.get(CourseGroup, esc["grupo_id"])
+    bloque = await db_session.get(ScheduleBlock, esc["bloque_id"])
+    assert grupo is not None and bloque is not None
+    grupo.teacher_id = None
+    bloque.room_id = None
+    db_session.add_all([grupo, bloque])
+    await db_session.commit()
+
+    lunes = esc["lunes"]
+    abiertas = await abrir_sesiones_del_dia(db_session, now=h(lunes, "08:05"))
+    assert abiertas == 0
+    assert await _sesion_de_escenario(db_session, esc, lunes) is None
 
 async def test_barrido_cierra_al_fin_del_bloque(db_session, escenario):
     esc = escenario

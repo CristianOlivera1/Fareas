@@ -36,7 +36,9 @@ RE_AULA = re.compile(
     r"\b(?:LAB|L[A-ZÁÉÍÓÚ]?B|AULA|LABORATORIO)\s*[-:]?\s*([A-Z0-9][A-Z0-9-]{0,7})\b",
     re.IGNORECASE,
 )
-RE_DOCENTE = re.compile(r"\s+[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]{2,},\s*[A-Za-zÁÉÍÓÚÑ]")
+RE_DOCENTE = re.compile(
+    r"([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]{2,},\s*[A-Za-zÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑ\s.]{0,60})"
+)
 
 MAX_PESO_PDF = 10 * 1024 * 1024
 CONFIANZA_MINIMA = 0.55
@@ -74,6 +76,8 @@ class BloqueExtraido(BaseModel):
     course_code: str | None = None
     course_name: str | None = None
     group_code: str | None = None
+    teacher_name: str | None = None
+    room_code: str | None = None
     weekday: int
     start_time: str
     end_time: str
@@ -116,6 +120,21 @@ def _rango_horario(match: re.Match[str]) -> tuple[str, str] | None:
 
 def _cortar_docente(texto: str) -> str:
     return RE_DOCENTE.split(texto, maxsplit=1)[0]
+
+
+def _limpiar_docente(texto: str | None) -> str | None:
+    if not texto:
+        return None
+    limpio = re.sub(r"\((?:dr|dra|mag|ing|lic)\.?\)", " ", texto, flags=re.IGNORECASE)
+    limpio = re.sub(r"\s+", " ", limpio).strip(" -–—:.,")
+    return limpio[:160] or None
+
+
+def _limpiar_aula(texto: str | None) -> str | None:
+    if not texto:
+        return None
+    limpio = re.sub(r"\s+", " ", texto).strip(" -–—:.,()")
+    return limpio[:20] or None
 
 
 def _cabeceras_dias(items: list[ItemTexto]) -> list[_CabeceraDia]:
@@ -249,8 +268,12 @@ def _bloque_de_celda(
     code = match_curso.group(1)
     resto = texto[match_curso.end():].strip()
     match_aula = RE_AULA.search(resto)
-    nombre_txt = resto[:match_aula.start()] if match_aula else _cortar_docente(resto)
+    match_docente = RE_DOCENTE.search(resto)
+    cortes = [match.start() for match in (match_aula, match_docente) if match is not None]
+    nombre_txt = resto[: min(cortes)] if cortes else _cortar_docente(resto)
     nombre = _limpiar_nombre(nombre_txt)
+    teacher_name = _limpiar_docente(match_docente.group(1)) if match_docente else None
+    room_code = _limpiar_aula(match_aula.group(0)) if match_aula else None
     match_grupo = RE_GRUPO.search(texto.upper())
     notas: list[str] = []
     confiable = True
@@ -274,6 +297,8 @@ def _bloque_de_celda(
         course_code=code,
         course_name=nombre,
         group_code=grupo,
+        teacher_name=teacher_name,
+        room_code=room_code,
         weekday=weekday,
         start_time=etiqueta.inicio,
         end_time=etiqueta.fin,

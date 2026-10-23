@@ -8,7 +8,15 @@ from app.services import errors
 from app.services.audit import audit
 from app.services.enrollments import _conflicto_de_alumno
 from app.services.settings import get_settings_row
-from app.tables import CourseGroup, Enrollment, Room, ScheduleBlock
+from app.tables import (
+    AppUser,
+    AttendanceSession,
+    CourseGroup,
+    Enrollment,
+    Room,
+    ScheduleBlock,
+    UserRole,
+)
 
 DIAS = {1: "Lunes", 2: "Martes", 3: "Miércoles", 4: "Jueves", 5: "Viernes"}
 MAX_BLOCK_MINUTES = 120
@@ -34,9 +42,9 @@ def _validar_duracion(start_time: time, end_time: time) -> None:
     if minutos > MAX_BLOCK_MINUTES:
         raise errors.DomainError("El bloque no puede durar más de 2 horas")
 
-async def _aula_del_bloque(db: SQLModelAsyncSession, room_id: int | None) -> Room:
+async def _aula_del_bloque(db: SQLModelAsyncSession, room_id: int | None) -> Room | None:
     if room_id is None:
-        raise errors.DomainError("Indica el aula donde se dicta el bloque")
+        return None
     room = await db.get(Room, room_id)
     if room is None:
         raise errors.NotFoundError("Aula no encontrada")
@@ -44,16 +52,49 @@ async def _aula_del_bloque(db: SQLModelAsyncSession, room_id: int | None) -> Roo
         raise errors.DomainError(f"El aula {room.code} está inactiva")
     return room
 
+async def _docente_valido(db: SQLModelAsyncSession, teacher_id: int) -> AppUser:
+    docente = await db.get(AppUser, teacher_id)
+    if docente is None or docente.role is not UserRole.DOCENTE or not docente.is_active:
+        raise errors.DomainError("El docente asignado no existe o no está activo")
+    return docente
+
+async def _bloque_tiene_sesiones(db: SQLModelAsyncSession, block_id: int) -> bool:
+    return (
+        await db.exec(
+            select(AttendanceSession.id).where(AttendanceSession.block_id == block_id).limit(1)
+        )
+    ).first() is not None
+
+async def _grupo_tiene_sesiones(db: SQLModelAsyncSession, group_id: int) -> bool:
+    return (
+        await db.exec(
+            select(AttendanceSession.id)
+            .join(ScheduleBlock, ScheduleBlock.id == AttendanceSession.block_id)
+            .where(ScheduleBlock.group_id == group_id)
+            .limit(1)
+        )
+    ).first() is not None
+
 async def _raise_if_conflict(
     db: SQLModelAsyncSession,
     group: CourseGroup,
     *,
-    room: Room,
+    room: Room | None,
     weekday: int,
     start_time,
     end_time,
     exclude_block_id: int | None = None,
+    teacher_id: int | None = None,
+    incluir_docente: bool = True,
 ) -> None:
+    docente_id = teacher_id if teacher_id is not None else group.teacher_id
+    condiciones = []
+    if room is not None:
+        condiciones.append(ScheduleBlock.room_id == room.id)
+    if incluir_docente and docente_id is not None:
+        condiciones.append(CourseGroup.teacher_id == docente_id)
+    if not condiciones:
+        return
     rows = (
         await db.exec(
             select(ScheduleBlock, CourseGroup)
@@ -62,10 +103,7 @@ async def _raise_if_conflict(
                 CourseGroup.is_active,
                 ScheduleBlock.group_id != group.id,
                 CourseGroup.semester_label == group.semester_label,
-                or_(
-                    ScheduleBlock.room_id == room.id,
-                    CourseGroup.teacher_id == group.teacher_id,
-                ),
+                or_(*condiciones),
                 ScheduleBlock.weekday == weekday,
                 ScheduleBlock.start_time < end_time,
                 ScheduleBlock.end_time > start_time,
@@ -74,10 +112,35 @@ async def _raise_if_conflict(
         )
     ).all()
     for block, other in rows:
-        quien = f"el aula {room.code}" if block.room_id == room.id else "el docente"
+        quien = (
+            f"el aula {room.code}"
+            if room is not None and block.room_id == room.id
+            else "el docente"
+        )
         raise errors.ConflictError(
             f"Choque de horario: el grupo #{other.id} ({other.group_code}) ya ocupa {quien} "
             f"el {DIAS[weekday]} entre {start_time} y {end_time}"
+        )
+
+async def _raise_if_teacher_conflict(
+    db: SQLModelAsyncSession,
+    group: CourseGroup,
+    teacher_id: int,
+    exclude_block_id: int | None = None,
+) -> None:
+    bloques = (
+        await db.exec(select(ScheduleBlock).where(ScheduleBlock.group_id == group.id))
+    ).all()
+    for bloque in bloques:
+        await _raise_if_conflict(
+            db,
+            group,
+            room=None,
+            teacher_id=teacher_id,
+            weekday=bloque.weekday,
+            start_time=bloque.start_time,
+            end_time=bloque.end_time,
+            exclude_block_id=exclude_block_id,
         )
 
 async def _raise_si_alumnos_chocan(
@@ -113,6 +176,7 @@ async def add_block(
     start_time,
     end_time,
     room_id: int | None,
+    teacher_id: int | None = None,
     ip: str | None = None,
     commit: bool = True,
 ) -> ScheduleBlock:
@@ -125,10 +189,19 @@ async def add_block(
     await _validar_franja(db, start_time, end_time)
     _validar_duracion(start_time, end_time)
 
+    if teacher_id is not None:
+        await _docente_valido(db, teacher_id)
+        if group.teacher_id is None:
+            await _raise_if_teacher_conflict(db, group, teacher_id)
+            group.teacher_id = teacher_id
+            db.add(group)
+        elif group.teacher_id != teacher_id:
+            raise errors.DomainError("El grupo ya tiene otro docente")
+
     room = await _aula_del_bloque(db, room_id)
     await _raise_if_conflict(db, group, room=room, weekday=weekday,
                              start_time=start_time, end_time=end_time)
-    block = ScheduleBlock(group_id=group_id, room_id=room.id,
+    block = ScheduleBlock(group_id=group_id, room_id=room.id if room else None,
                           weekday=weekday, start_time=start_time, end_time=end_time)
     db.add(block)
     await db.flush()
@@ -139,7 +212,8 @@ async def add_block(
         action="bloque_creado",
         entity="schedule_block",
         entity_id=block.id,
-        new_value={"group_id": group_id, "room_id": room.id, "weekday": weekday,
+        new_value={"group_id": group_id, "room_id": room.id if room else None,
+                   "teacher_id": group.teacher_id, "weekday": weekday,
                    "start_time": str(start_time), "end_time": str(end_time)},
         ip_address=ip,
     )
@@ -164,19 +238,47 @@ async def update_block(db, actor, *, block_id: int, data: dict, ip: str | None =
     block_group = await db.get(CourseGroup, block.group_id)
     if block_group is None:
         raise errors.NotFoundError("El grupo del bloque no existe")
-    room = await _aula_del_bloque(db, data.get("room_id", block.room_id))
+
+    docente_anterior = block_group.teacher_id
+    nuevo_docente = (
+        data["teacher_id"] if "teacher_id" in data else block_group.teacher_id
+    )
+    if nuevo_docente is not None:
+        await _docente_valido(db, nuevo_docente)
+    if nuevo_docente != docente_anterior:
+        if nuevo_docente is None and await _grupo_tiene_sesiones(db, block_group.id):
+            raise errors.ConflictError(
+                "No se puede quitar el docente de un grupo con sesiones registradas"
+            )
+        if nuevo_docente is not None:
+            await _raise_if_teacher_conflict(
+                db, block_group, nuevo_docente, exclude_block_id=block.id
+            )
+
+    nuevo_room_id = data["room_id"] if "room_id" in data else block.room_id
+    room = await _aula_del_bloque(db, nuevo_room_id)
+    if room is None and block.room_id is not None:
+        if await _bloque_tiene_sesiones(db, block.id):
+            raise errors.ConflictError(
+                "No se puede quitar el aula de un bloque con sesiones registradas"
+            )
     await _raise_if_conflict(
         db,
         block_group,
         room=room,
+        teacher_id=nuevo_docente,
+        incluir_docente=nuevo_docente is not None,
         weekday=weekday,
         start_time=start_time,
         end_time=end_time,
         exclude_block_id=block.id,
     )
-    old = {"room_id": block.room_id, "weekday": block.weekday,
-           "start_time": str(block.start_time), "end_time": str(block.end_time)}
-    block.room_id = room.id
+    old = {"room_id": block.room_id, "teacher_id": docente_anterior,
+           "weekday": block.weekday, "start_time": str(block.start_time),
+           "end_time": str(block.end_time)}
+    block_group.teacher_id = nuevo_docente
+    db.add(block_group)
+    block.room_id = room.id if room else None
     block.weekday = weekday
     block.start_time = start_time
     block.end_time = end_time
@@ -190,7 +292,8 @@ async def update_block(db, actor, *, block_id: int, data: dict, ip: str | None =
         entity="schedule_block",
         entity_id=block.id,
         old_value=old,
-        new_value={"room_id": room.id, "weekday": weekday,
+        new_value={"room_id": room.id if room else None,
+                   "teacher_id": nuevo_docente, "weekday": weekday,
                    "start_time": str(start_time), "end_time": str(end_time)},
         ip_address=ip,
     )

@@ -9,7 +9,6 @@ from app.services.audit import audit
 from app.services.settings import get_settings_row, semestre_en_curso
 from app.tables import (
     AppSettings,
-    AppUser,
     AttendanceRecord,
     AttendanceSession,
     AttendanceStatus,
@@ -68,6 +67,7 @@ async def bloques_candidatos(
             .where(
                 ScheduleBlock.room_id == room_id,
                 CourseGroup.is_active,
+                CourseGroup.teacher_id.is_not(None),
                 CourseGroup.semester_label == cfg.semester_label,
                 ScheduleBlock.weekday == weekday,
             )
@@ -241,6 +241,8 @@ async def abrir_sesiones_del_dia(db: SQLModelAsyncSession, now: datetime | None 
             .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)
             .where(
                 CourseGroup.is_active,
+                CourseGroup.teacher_id.is_not(None),
+                ScheduleBlock.room_id.is_not(None),
                 CourseGroup.semester_label == cfg.semester_label,
                 ScheduleBlock.weekday == weekday,
             )

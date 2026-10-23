@@ -98,7 +98,7 @@ CREATE TABLE course_group (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     course_id  BIGINT      NOT NULL REFERENCES course(id) ON DELETE CASCADE,
     group_code VARCHAR(5)  NOT NULL,
-    teacher_id BIGINT      NOT NULL REFERENCES app_user(id),
+    teacher_id BIGINT      REFERENCES app_user(id),
     is_active  BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP   NOT NULL DEFAULT NOW(),
     semester_label VARCHAR(40) NOT NULL,
@@ -115,7 +115,7 @@ CREATE TABLE schedule_block (
     weekday    SMALLINT NOT NULL,
     start_time TIME     NOT NULL,
     end_time   TIME     NOT NULL,
-    room_id    BIGINT   NOT NULL REFERENCES room(id),
+    room_id    BIGINT   REFERENCES room(id),
     CHECK (start_time < end_time)
 );
 ALTER TABLE schedule_block ADD CONSTRAINT schedule_block_weekday_check
@@ -294,7 +294,7 @@ JOIN attendance_session s ON s.id = ar.session_id
 JOIN schedule_block  sb ON sb.id = s.block_id
 JOIN course_group    cg ON cg.id = sb.group_id
 JOIN course          c  ON c.id  = cg.course_id
-JOIN room            r  ON r.id  = sb.room_id
+LEFT JOIN room       r  ON r.id  = sb.room_id
 JOIN app_user        st ON st.id = ar.student_id
 WHERE s.session_date = CURRENT_DATE
   AND s.status <> 'cancelada';

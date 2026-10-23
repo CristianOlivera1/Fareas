@@ -4,14 +4,16 @@ import pytest
 from reportlab.pdfgen import canvas as rl_canvas
 from sqlmodel import delete, select
 
+from app.services.import_matching import emparejar_aula, emparejar_docente, sugerir_curso
 from app.services.ocr_extract import DocumentoLeido, ItemTexto
 from app.services.ocr_schedule import extraer_horarios, extraer_horarios_documento
-from app.tables import Course, CourseGroup, ScheduleBlock
+from app.tables import AppUser, Course, CourseGroup, Room, ScheduleBlock, UserRole
 from tests.helpers_b6 import crear, limpiar
 
 API = "/api/v1"
 TST_CURSO_OCR = "TSTOCR901"
 TST_CURSO_OCR2 = "TSTOCR902"
+TST_CURSO_OCR3 = "TSTOCR903"
 
 
 def _pdf_matricula() -> bytes:
@@ -49,7 +51,7 @@ async def escenario(db_session):
     esc = await crear(db_session)
     yield esc
     await limpiar(db_session)
-    for code in (TST_CURSO_OCR, TST_CURSO_OCR2):
+    for code in (TST_CURSO_OCR, TST_CURSO_OCR2, TST_CURSO_OCR3):
         curso = (await db_session.exec(select(Course).where(Course.code == code))).first()
         if curso is not None:
             grupos = (await db_session.exec(
@@ -118,9 +120,15 @@ def test_extraer_horarios_tabla_por_columnas():
     }
     por_curso = {bloque.course_code: bloque for bloque in bloques}
     assert por_curso["ISA903"].course_name == "Inteligencia Artificial I"
+    assert por_curso["ISA903"].teacher_name == "AQUINO CRUZ, Mario"
+    assert por_curso["ISA903"].room_code == "LAB 304"
     assert por_curso["ISA901"].course_name == "Computación Gráfica"
+    assert por_curso["ISA901"].teacher_name == "MAMANI VILCA, Eddy"
+    assert por_curso["ISA901"].room_code == "LAB 401"
     assert por_curso["ISA906"].start_time == "09:00"
     assert por_curso["ISA906"].end_time == "10:00"
+    assert por_curso["ISA906"].teacher_name == "ROJAS ENRIQUEZ, Hermenegildo"
+    assert por_curso["ISA906"].room_code == "LAB 304"
 
 
 def test_extraer_horarios_pdf_simulado():
@@ -229,6 +237,72 @@ async def test_confirmacion_con_choque_revierta_todo(client, admin_headers, db_s
     assert r.status_code == 409
     curso = (await db_session.exec(select(Course).where(Course.code == TST_CURSO_OCR))).first()
     assert curso is None
+
+def test_coincidencias_para_autocompletar():
+    cursos = [
+        Course(id=1, code="ISA903", name="Inteligencia Artificial I", cycle=9),
+        Course(id=2, code="ISA901", name="Computación Gráfica", cycle=9),
+    ]
+    sugerido = sugerir_curso("ISA9O3", "INTELIGENCIA ARTIFICIAL I", cursos)
+    assert sugerido is not None and sugerido.valor.code == "ISA903"
+    assert sugerir_curso("ISA904", "PROGRAMACION PARALELA", cursos) is None
+
+    docentes = [
+        AppUser(id=3, role=UserRole.DOCENTE, email="mamani@test.pe",
+                full_name="Eddy Mamani Vilca", password_hash="x" * 20),
+        AppUser(id=4, role=UserRole.DOCENTE, email="aquino@test.pe",
+                full_name="Mario Aquino Cruz", password_hash="x" * 20),
+    ]
+    docente = emparejar_docente("MAMANI VILCA, Eddy (Dr.)", docentes)
+    assert docente is not None and docente.valor.id == 3
+    assert emparejar_docente("VILCA, Eddy", docentes).valor.id == 3
+    assert emparejar_docente("QUINO CRUZ, Mario", docentes).valor.id == 4
+
+    aulas = [Room(id=7, code="LAB 401"), Room(id=8, code="LAB 304")]
+    aula = emparejar_aula("LAB 401", aulas)
+    assert aula is not None and aula.valor.id == 7
+
+async def test_confirmacion_sin_docente_ni_aula(client, admin_headers, db_session, escenario):
+    payload = {
+        "cycle": 9, "semester_label": "2027-I",
+        "bloques": [
+            {"course_code": TST_CURSO_OCR3, "course_name": "Curso sin docente",
+             "group_code": "A", "weekday": 1, "start_time": "07:00", "end_time": "09:00"},
+        ],
+    }
+    r = await client.post(
+        f"{API}/courses/import-pdf/confirm", headers=admin_headers, json=payload
+    )
+    assert r.status_code == 201, r.text
+
+    curso = (await db_session.exec(select(Course).where(Course.code == TST_CURSO_OCR3))).first()
+    assert curso is not None
+    grupo = (await db_session.exec(
+        select(CourseGroup).where(CourseGroup.course_id == curso.id)
+    )).first()
+    assert grupo is not None and grupo.teacher_id is None
+    bloque = (await db_session.exec(
+        select(ScheduleBlock).where(ScheduleBlock.group_id == grupo.id)
+    )).first()
+    assert bloque is not None and bloque.room_id is None
+
+    r = await client.get(
+        f"{API}/schedule", headers=admin_headers, params={"semester": "2027-I"}
+    )
+    assert r.status_code == 200, r.text
+    fila = next(f for f in r.json() if f["id"] == bloque.id)
+    assert fila["teacher_id"] is None and fila["room_id"] is None
+    assert fila["teacher_name"] is None and fila["room_code"] is None
+
+    r = await client.patch(
+        f"{API}/blocks/{bloque.id}", headers=admin_headers,
+        json={"teacher_id": escenario["docente_id"], "room_id": escenario["aula_id"]},
+    )
+    assert r.status_code == 200, r.text
+    await db_session.refresh(grupo)
+    await db_session.refresh(bloque)
+    assert grupo.teacher_id == escenario["docente_id"]
+    assert bloque.room_id == escenario["aula_id"]
 
 async def test_preview_escaneo_y_tamano(client, admin_headers):
     r = await _subir(client, admin_headers, _pdf_escaneado())

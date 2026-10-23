@@ -13,6 +13,12 @@ from app.schemas.common import Page
 from app.services import errors
 from app.services.audit import audit
 from app.services.enrollments import matricular, retirar, transferir
+from app.services.import_matching import (
+    Coincidencia,
+    emparejar_aula,
+    emparejar_docente,
+    sugerir_curso,
+)
 from app.services.ocr_extract import MAX_PESO_ARCHIVO, leer_documento_async
 from app.services.ocr_schedule import BloqueExtraido, extraer_horarios_documento
 from app.services.schedule import add_block, update_block
@@ -169,15 +175,15 @@ class GroupOut(BaseModel):
     course_code: str
     course_name: str
     group_code: str
-    teacher_id: int
-    teacher_name: str
+    teacher_id: int | None
+    teacher_name: str | None
     semester_label: str
     cycle: int
     capacity: int
     enrolled_count: int
     is_active: bool
 
-async def _group_out(db, g: CourseGroup, course: Course, teacher: AppUser) -> GroupOut:
+async def _group_out(db, g: CourseGroup, course: Course, teacher: AppUser | None) -> GroupOut:
     activos = (
         await db.exec(
             select(func.count())
@@ -191,8 +197,8 @@ async def _group_out(db, g: CourseGroup, course: Course, teacher: AppUser) -> Gr
         course_code=course.code,
         course_name=course.name,
         group_code=g.group_code,
-        teacher_id=teacher.id,
-        teacher_name=teacher.full_name,
+        teacher_id=teacher.id if teacher is not None else None,
+        teacher_name=teacher.full_name if teacher is not None else None,
         semester_label=g.semester_label,
         cycle=course.cycle,
         capacity=g.capacity,
@@ -206,7 +212,7 @@ async def _group_rows(db, *, group_id: int | None = None, course_id: int | None 
     stmt = (
         select(CourseGroup, Course, AppUser)
         .join(Course, Course.id == CourseGroup.course_id)
-        .join(AppUser, AppUser.id == CourseGroup.teacher_id)
+        .outerjoin(AppUser, AppUser.id == CourseGroup.teacher_id)
     )
     if group_id is not None:
         stmt = stmt.where(CourseGroup.id == group_id)
@@ -316,27 +322,38 @@ class BlockIn(BaseModel):
     start_time: time
     end_time: time
     room_id: int | None = Field(default=None, description="Aula donde se dicta ESTE bloque (R9)")
+    teacher_id: int | None = Field(default=None, description="Docente del grupo (opcional)")
 
 class BlockUpdate(BaseModel):
     weekday: int | None = Field(default=None, ge=1, le=5)
     start_time: time | None = None
     end_time: time | None = None
     room_id: int | None = None
+    teacher_id: int | None = None
 
 class BlockOut(BaseModel):
     id: int
     group_id: int
-    room_id: int
-    room_code: str
+    room_id: int | None
+    room_code: str | None
+    teacher_id: int | None
+    teacher_name: str | None
     weekday: int
     start_time: time
     end_time: time
 
 async def _block_out(db, b: ScheduleBlock) -> BlockOut:
-    room = await db.get(Room, b.room_id)
-    return BlockOut(id=b.id, group_id=b.group_id, room_id=b.room_id,
-                    room_code=room.code if room is not None else "",
-                    weekday=b.weekday, start_time=b.start_time, end_time=b.end_time)
+    room = await db.get(Room, b.room_id) if b.room_id is not None else None
+    group = await db.get(CourseGroup, b.group_id)
+    teacher = await db.get(AppUser, group.teacher_id) if group and group.teacher_id else None
+    return BlockOut(
+        id=b.id, group_id=b.group_id,
+        room_id=room.id if room is not None else None,
+        room_code=room.code if room is not None else None,
+        teacher_id=teacher.id if teacher is not None else None,
+        teacher_name=teacher.full_name if teacher is not None else None,
+        weekday=b.weekday, start_time=b.start_time, end_time=b.end_time,
+    )
 
 @router.get("/groups/{group_id}/blocks", response_model=list[BlockOut])
 async def list_blocks(
@@ -359,7 +376,7 @@ async def create_block(
     block = await add_block(
         db, admin, group_id=group_id, weekday=body.weekday,
         start_time=body.start_time, end_time=body.end_time, room_id=body.room_id,
-        ip=_client_ip(request),
+        teacher_id=body.teacher_id, ip=_client_ip(request),
     )
     return await _block_out(db, block)
 
@@ -411,10 +428,10 @@ class ScheduleRowOut(BaseModel):
     course_code: str
     course_name: str
     group_code: str
-    teacher_id: int
-    teacher_name: str
-    room_id: int
-    room_code: str
+    teacher_id: int | None
+    teacher_name: str | None
+    room_id: int | None
+    room_code: str | None
     semester_label: str
     cycle: int
     weekday: int
@@ -438,8 +455,8 @@ async def general_schedule(
         select(ScheduleBlock, CourseGroup, Course, AppUser, Room)
         .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)
         .join(Course, Course.id == CourseGroup.course_id)
-        .join(AppUser, AppUser.id == CourseGroup.teacher_id)
-        .join(Room, Room.id == ScheduleBlock.room_id)
+        .outerjoin(AppUser, AppUser.id == CourseGroup.teacher_id)
+        .outerjoin(Room, Room.id == ScheduleBlock.room_id)
         .where(CourseGroup.semester_label == semester)
         .order_by(Course.cycle, ScheduleBlock.weekday, ScheduleBlock.start_time, Course.code)
     )
@@ -462,10 +479,10 @@ async def general_schedule(
             course_code=c.code,
             course_name=c.name,
             group_code=g.group_code,
-            teacher_id=t.id,
-            teacher_name=t.full_name,
-            room_id=r.id,
-            room_code=r.code,
+            teacher_id=t.id if t is not None else None,
+            teacher_name=t.full_name if t is not None else None,
+            room_id=r.id if r is not None else None,
+            room_code=r.code if r is not None else None,
             semester_label=g.semester_label,
             cycle=c.cycle,
             weekday=b.weekday,
@@ -558,13 +575,40 @@ async def transfer_student(
         destino_group_id=destino, ip=_client_ip(request),
     )
 
+class CursoSugeridoOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    cycle: int
+    score: float
+    motivo: str
+
+class BloquePreviewOut(BloqueExtraido):
+    teacher_id: int | None = None
+    room_id: int | None = None
+    curso_sugerido: CursoSugeridoOut | None = None
+
 class ImportPreviewOut(BaseModel):
     tipo: str
     paginas: int
     total: int
     confiables: int
     ambiguousos: int
-    bloques: list[BloqueExtraido]
+    bloques: list[BloquePreviewOut]
+
+def _id_de_coincidencia(coincidencia: Coincidencia | None) -> int | None:
+    if coincidencia is None:
+        return None
+    return getattr(coincidencia.valor, "id", None)
+
+def _curso_sugerido_out(coincidencia: Coincidencia | None) -> CursoSugeridoOut | None:
+    if coincidencia is None or not isinstance(coincidencia.valor, Course):
+        return None
+    curso = coincidencia.valor
+    return CursoSugeridoOut(
+        id=curso.id, code=curso.code, name=curso.name, cycle=curso.cycle,
+        score=coincidencia.puntaje, motivo=coincidencia.motivo,
+    )
 
 @router.post("/courses/import-pdf", response_model=ImportPreviewOut)
 async def import_pdf_preview(
@@ -604,18 +648,45 @@ async def import_pdf_preview(
             detail=("No se reconocieron bloques de horario. Revisa que la foto sea de un "
                     "horario impreso, recto y con buena luz, o corrige el archivo a mano."),
         )
+    cursos = (await db.exec(select(Course))).all()
+    docentes = (
+        await db.exec(
+            select(AppUser).where(
+                AppUser.role == UserRole.DOCENTE,
+                AppUser.is_active,
+            )
+        )
+    ).all()
+    aulas = (await db.exec(select(Room).where(Room.is_active))).all()
+    preview: list[BloquePreviewOut] = []
+    for bloque in bloques:
+        sugerencia = (
+            sugerir_curso(bloque.course_code, bloque.course_name, cursos)
+            if bloque.course_code else None
+        )
+        docente = emparejar_docente(bloque.teacher_name, docentes)
+        aula = emparejar_aula(bloque.room_code, aulas)
+        preview.append(
+            BloquePreviewOut(
+                **bloque.model_dump(),
+                teacher_id=_id_de_coincidencia(docente),
+                room_id=_id_de_coincidencia(aula),
+                curso_sugerido=_curso_sugerido_out(sugerencia),
+            )
+        )
+
     await audit(db, admin, action="importacion_preview", entity="schedule_block",
                 new_value={"archivo": file.filename, "tipo": documento.tipo,
-                           "paginas": documento.paginas, "bloques": len(bloques)},
+                           "paginas": documento.paginas, "bloques": len(preview)},
                 ip_address=_client_ip(request))
     await db.commit()
     return ImportPreviewOut(
         tipo=documento.tipo,
         paginas=documento.paginas,
-        total=len(bloques),
-        confiables=sum(1 for b in bloques if b.confiable),
-        ambiguousos=sum(1 for b in bloques if not b.confiable),
-        bloques=bloques,
+        total=len(preview),
+        confiables=sum(1 for b in preview if b.confiable),
+        ambiguousos=sum(1 for b in preview if not b.confiable),
+        bloques=preview,
     )
 
 class BloqueConfirmado(BaseModel):
@@ -634,8 +705,8 @@ class BloqueConfirmado(BaseModel):
         return v.strip().upper()
 
 class ImportConfirmIn(BaseModel):
-    teacher_id: int = Field(description="Docente por defecto de los grupos creados")
-    room_id: int = Field(description="Aula por defecto de los bloques importados")
+    teacher_id: int | None = Field(default=None, description="Docente por defecto de los grupos creados")
+    room_id: int | None = Field(default=None, description="Aula por defecto de los bloques importados")
     cycle: int = Field(ge=1, le=10, description="Ciclo de los cursos nuevos (1-10)")
     semester_label: str | None = Field(default=None, max_length=20,
                                        description="Periodo de los grupos; por defecto, el vigente")
@@ -653,10 +724,11 @@ class ImportConfirmOut(BaseModel):
 async def import_pdf_confirm(
     body: ImportConfirmIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> ImportConfirmOut:
-    if (await _docente_valido(db, body.teacher_id)) is None:
+    if body.teacher_id is not None and (await _docente_valido(db, body.teacher_id)) is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                             detail="El docente asignado no existe o no está activo")
-    await _get_or_404(db, Room, body.room_id, "Aula")
+    if body.room_id is not None:
+        await _get_or_404(db, Room, body.room_id, "Aula")
     periodo = ((body.semester_label or "").strip() or await semestre_vigente(db)).upper()
     cursos_nuevos: list[str] = []
     grupos_nuevos: list[str] = []
@@ -664,7 +736,7 @@ async def import_pdf_confirm(
     omitidos = 0
     vistos: set[tuple[str, str]] = set()
     grupos_en_sesion: dict[tuple[str, str], CourseGroup] = {}
-    docentes_grupo: dict[tuple[str, str], int] = {}
+    docentes_grupo: dict[tuple[str, str], int | None] = {}
 
     try:
         for b in body.bloques:
@@ -681,14 +753,19 @@ async def import_pdf_confirm(
                 db.add(curso)
 
             docente_id = b.teacher_id or body.teacher_id
-            if (await _docente_valido(db, docente_id)) is None:
+            if docente_id is not None and (await _docente_valido(db, docente_id)) is None:
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                                     detail=f"El docente {docente_id} del bloque no existe o no está activo")
 
             clave = (b.course_code, b.group_code)
             if clave in vistos:
                 grupo = grupos_en_sesion[clave]
-                if docentes_grupo[clave] != docente_id:
+                docente_actual = docentes_grupo[clave]
+                if docente_id is not None and docente_actual is None:
+                    grupo.teacher_id = docente_id
+                    db.add(grupo)
+                    docentes_grupo[clave] = docente_id
+                elif docente_id is not None and docente_actual != docente_id:
                     raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                                         detail=("Un grupo tiene un solo docente; revisa las filas de "
                                                 f"{curso.code} grupo {b.group_code}"))
@@ -713,7 +790,10 @@ async def import_pdf_confirm(
                         detail=(f"El grupo {curso.code}-{b.group_code} está inactivo; "
                                 "reactívalo antes de importar"),
                     )
-                elif grupo.teacher_id != docente_id:
+                elif docente_id is not None and grupo.teacher_id is None:
+                    grupo.teacher_id = docente_id
+                    db.add(grupo)
+                elif docente_id is not None and grupo.teacher_id != docente_id:
                     raise HTTPException(
                         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                         detail=(f"El grupo {curso.code}-{b.group_code} ya tiene otro docente; "
@@ -739,6 +819,7 @@ async def import_pdf_confirm(
                 db, admin, group_id=grupo.id, weekday=b.weekday,
                 start_time=b.start_time, end_time=b.end_time,
                 room_id=b.room_id or body.room_id,
+                teacher_id=docente_id,
                 ip=_client_ip(request), commit=False,
             )
             bloques_creados += 1
