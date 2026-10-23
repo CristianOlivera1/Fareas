@@ -28,7 +28,7 @@ import { DataTable } from '../../../shared/components/data-table/data-table';
 import { DataTableCellDirective } from '../../../shared/components/data-table/data-table-cell.directive';
 import { TableColumn } from '../../../core/models/table-column';
 import { Device, DeviceType, Room } from '../../../core/models/catalog';
-import { extractDetail } from '../rooms/rooms';
+import { extractDetail } from '../../../shared/utils/api-error';
 
 const REFRESH_MONITOREO_MS = 30_000;
 

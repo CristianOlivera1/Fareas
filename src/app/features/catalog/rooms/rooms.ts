@@ -24,8 +24,6 @@ import { DataTableCellDirective } from '../../../shared/components/data-table/da
 import { TableColumn } from '../../../core/models/table-column';
 import { Room } from '../../../core/models/catalog';
 
-export { extractDetail };
-
 interface RoomForm {
   id: number | null;
   code: string;
