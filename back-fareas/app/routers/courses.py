@@ -1,7 +1,8 @@
 from datetime import time
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile, status
+from pydantic import BaseModel, Field, field_validator
 from sqlmodel import func, select
 
 from app.core.deps import DbSession, RequireRole
@@ -11,8 +12,10 @@ from app.schemas.common import Page
 from app.services import errors
 from app.services.audit import audit
 from app.services.enrollments import matricular, retirar, transferir
+from app.services.ocr_extract import MAX_PESO_ARCHIVO, leer_documento_async
+from app.services.ocr_schedule import BloqueExtraido, extraer_horarios_documento
 from app.services.schedule import add_block, update_block
-from app.services.settings import semestre_vigente, semesters_con_grupos
+from app.services.settings import semestre_vigente
 from app.tables import AppUser, Course, CourseGroup, Enrollment, Room, ScheduleBlock, UserRole
 
 router = APIRouter(tags=["courses"])
@@ -525,17 +528,8 @@ async def transfer_student(
         destino_group_id=destino, ip=_client_ip(request),
     )
 
-from fastapi import File, UploadFile
-from pydantic import field_validator
-
-from app.services.ocr_schedule import (
-    MAX_PESO_PDF,
-    BloqueExtraido,
-    extraer_horarios,
-)
-
-
 class ImportPreviewOut(BaseModel):
+    tipo: str
     paginas: int
     total: int
     confiables: int
@@ -547,36 +541,47 @@ async def import_pdf_preview(
     request: Request,
     db: DbSession,
     admin: RequireRole(UserRole.ADMIN),
-    file: UploadFile = File(..., description="Constancia de matrícula en PDF"),
+    file: Annotated[UploadFile, File(description="Horario en PDF, JPG, PNG o WEBP")],
 ) -> ImportPreviewOut:
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                             detail="El archivo está vacío")
-    if len(raw) > MAX_PESO_PDF:
+    if len(raw) > MAX_PESO_ARCHIVO:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                            detail="El PDF supera el máximo de 10 MB")
+                            detail="El archivo supera el máximo de 10 MB")
     try:
-        bloques, paginas = extraer_horarios(raw)
+        documento = await leer_documento_async(raw, file.filename)
+        bloques = extraer_horarios_documento(documento)
+        if not bloques and documento.tipo == "pdf_texto":
+            documento = await leer_documento_async(raw, file.filename, forzar_ocr=True)
+            bloques = extraer_horarios_documento(documento)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        detalle = str(exc)
+        codigo = (status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+                  if detalle.startswith("Formato no soportado") else
+                  status.HTTP_422_UNPROCESSABLE_CONTENT)
+        raise HTTPException(status_code=codigo, detail=detalle) from exc
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            detail="No se pudo leer el PDF; ¿es un archivo válido?") from exc
-    if paginas == 0:
+                            detail="No se pudo leer el archivo; ¿es un horario válido?") from exc
+    if documento.paginas == 0:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            detail="El PDF no tiene páginas legibles")
-    if not bloques and paginas > 0:
+                            detail="El documento no tiene páginas legibles")
+    if not bloques:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=("No se encontró TEXTO en el PDF (probablemente es un escaneo). "
-                    "RF-07 procesa constancias digitales, no imágenes; ingresa el horario a mano."),
+            detail=("No se reconocieron bloques de horario. Revisa que la foto sea de un "
+                    "horario impreso, recto y con buena luz, o corrige el archivo a mano."),
         )
     await audit(db, admin, action="importacion_preview", entity="schedule_block",
-                new_value={"archivo": file.filename, "paginas": paginas, "bloques": len(bloques)},
+                new_value={"archivo": file.filename, "tipo": documento.tipo,
+                           "paginas": documento.paginas, "bloques": len(bloques)},
                 ip_address=_client_ip(request))
+    await db.commit()
     return ImportPreviewOut(
-        paginas=paginas,
+        tipo=documento.tipo,
+        paginas=documento.paginas,
         total=len(bloques),
         confiables=sum(1 for b in bloques if b.confiable),
         ambiguousos=sum(1 for b in bloques if not b.confiable),
@@ -590,6 +595,7 @@ class BloqueConfirmado(BaseModel):
     weekday: int = Field(ge=1, le=5, description="1=Lunes … 5=Viernes")
     start_time: time
     end_time: time
+    teacher_id: int | None = Field(default=None, description="Docente del grupo (por defecto, el del import)")
     room_id: int | None = Field(default=None, description="Aula del bloque; por defecto, la del import")
 
     @field_validator("course_code", "group_code")
@@ -598,14 +604,18 @@ class BloqueConfirmado(BaseModel):
         return v.strip().upper()
 
 class ImportConfirmIn(BaseModel):
-    teacher_id: int = Field(description="Docente del/de los grupos creados")
+    teacher_id: int = Field(description="Docente por defecto de los grupos creados")
     room_id: int = Field(description="Aula por defecto de los bloques importados")
+    cycle: int = Field(ge=1, le=10, description="Ciclo de los cursos nuevos (1-10)")
+    semester_label: str | None = Field(default=None, max_length=20,
+                                       description="Periodo de los grupos; por defecto, el vigente")
     bloques: list[BloqueConfirmado] = Field(min_length=1, max_length=200)
 
 class ImportConfirmOut(BaseModel):
     cursos_creados: list[str]
     grupos_creados: list[str]
     bloques_creados: int
+    omitidos: int
     total_bloques: int
 
 @router.post("/courses/import-pdf/confirm", response_model=ImportConfirmOut,
@@ -613,23 +623,26 @@ class ImportConfirmOut(BaseModel):
 async def import_pdf_confirm(
     body: ImportConfirmIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> ImportConfirmOut:
-    teacher = await _get_or_404(db, AppUser, body.teacher_id, "Docente")
-    if teacher.role is not UserRole.DOCENTE or not teacher.is_active:
+    if (await _docente_valido(db, body.teacher_id)) is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                             detail="El docente asignado no existe o no está activo")
-    room = await _get_or_404(db, Room, body.room_id, "Aula")
+    await _get_or_404(db, Room, body.room_id, "Aula")
+    periodo = ((body.semester_label or "").strip() or await semestre_vigente(db)).upper()
     cursos_nuevos: list[str] = []
     grupos_nuevos: list[str] = []
     bloques_creados = 0
+    omitidos = 0
     vistos: set[tuple[str, str]] = set()
-    _grupos_en_sesion: dict[tuple[str, str], CourseGroup] = {}
+    grupos_en_sesion: dict[tuple[str, str], CourseGroup] = {}
+    docentes_grupo: dict[tuple[str, str], int] = {}
 
     try:
         for b in body.bloques:
             curso = (await db.exec(select(Course).where(Course.code == b.course_code))).first()
             if curso is None:
                 curso = Course(code=b.course_code,
-                               name=b.course_name or f"Curso {b.course_code}")
+                               name=b.course_name or f"Curso {b.course_code}",
+                               cycle=body.cycle)
                 db.add(curso)
                 await db.flush()
                 cursos_nuevos.append(curso.code)
@@ -637,27 +650,60 @@ async def import_pdf_confirm(
                 curso.name = b.course_name
                 db.add(curso)
 
+            docente_id = b.teacher_id or body.teacher_id
+            if (await _docente_valido(db, docente_id)) is None:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                    detail=f"El docente {docente_id} del bloque no existe o no está activo")
+
             clave = (b.course_code, b.group_code)
             if clave in vistos:
-                grupo = _grupos_en_sesion[clave]
+                grupo = grupos_en_sesion[clave]
+                if docentes_grupo[clave] != docente_id:
+                    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                        detail=("Un grupo tiene un solo docente; revisa las filas de "
+                                                f"{curso.code} grupo {b.group_code}"))
             else:
-                sem_vigente = await semestre_vigente(db)
                 grupo = (await db.exec(
                     select(CourseGroup).where(
                         CourseGroup.course_id == curso.id,
                         CourseGroup.group_code == b.group_code,
-                        CourseGroup.semester_label == sem_vigente,
+                        CourseGroup.semester_label == periodo,
                     )
                 )).first()
                 if grupo is None:
                     grupo = CourseGroup(course_id=curso.id, group_code=b.group_code,
-                                        teacher_id=body.teacher_id,
-                                        semester_label=sem_vigente, capacity=40)
+                                        teacher_id=docente_id,
+                                        semester_label=periodo, capacity=40)
                     db.add(grupo)
                     await db.flush()
                     grupos_nuevos.append(f"{curso.code}-{b.group_code}")
-                _grupos_en_sesion[clave] = grupo
+                elif not grupo.is_active:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail=(f"El grupo {curso.code}-{b.group_code} está inactivo; "
+                                "reactívalo antes de importar"),
+                    )
+                elif grupo.teacher_id != docente_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail=(f"El grupo {curso.code}-{b.group_code} ya tiene otro docente; "
+                                "no se reasigna desde la importación"),
+                    )
+                grupos_en_sesion[clave] = grupo
+                docentes_grupo[clave] = grupo.teacher_id
                 vistos.add(clave)
+
+            existente = (await db.exec(
+                select(ScheduleBlock).where(
+                    ScheduleBlock.group_id == grupo.id,
+                    ScheduleBlock.weekday == b.weekday,
+                    ScheduleBlock.start_time == b.start_time,
+                    ScheduleBlock.end_time == b.end_time,
+                )
+            )).first()
+            if existente is not None:
+                omitidos += 1
+                continue
 
             await add_block(
                 db, admin, group_id=grupo.id, weekday=b.weekday,
@@ -667,16 +713,28 @@ async def import_pdf_confirm(
             )
             bloques_creados += 1
         await db.commit()
+    except HTTPException:
+        await db.rollback()
+        raise
     except Exception:
         await db.rollback()
         raise
 
     await audit(db, admin, action="importacion_confirmada", entity="schedule_block",
                 new_value={"cursos": cursos_nuevos, "grupos": grupos_nuevos,
-                           "bloques": bloques_creados},
+                           "bloques": bloques_creados, "omitidos": omitidos,
+                           "periodo": periodo},
                 ip_address=_client_ip(request))
     await db.commit()
     return ImportConfirmOut(
         cursos_creados=cursos_nuevos, grupos_creados=grupos_nuevos,
-        bloques_creados=bloques_creados, total_bloques=len(body.bloques),
+        bloques_creados=bloques_creados, omitidos=omitidos,
+        total_bloques=len(body.bloques),
     )
+
+
+async def _docente_valido(db: DbSession, teacher_id: int) -> AppUser | None:
+    docente = await db.get(AppUser, teacher_id)
+    if docente is None or docente.role is not UserRole.DOCENTE or not docente.is_active:
+        return None
+    return docente

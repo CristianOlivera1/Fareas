@@ -130,7 +130,8 @@ async def test_preview_y_confirmacion_completa(client, admin_headers, db_session
     ]
     r = await client.post(
         f"{API}/courses/import-pdf/confirm", headers=admin_headers,
-        json={"teacher_id": esc["docente_id"], "room_id": esc["aula_id"], "bloques": bloques},
+        json={"teacher_id": esc["docente_id"], "room_id": esc["aula_id"],
+              "cycle": 9, "bloques": bloques},
     )
     assert r.status_code == 201, r.text
     data = r.json()
@@ -140,6 +141,7 @@ async def test_preview_y_confirmacion_completa(client, admin_headers, db_session
 
     curso = (await db_session.exec(select(Course).where(Course.code == TST_CURSO_OCR))).first()
     assert curso is not None and "ocr uno" in curso.name.lower()
+    assert curso.cycle == 9
     grupo = (await db_session.exec(
         select(CourseGroup).where(
             CourseGroup.course_id == curso.id, CourseGroup.group_code == "A")
@@ -160,7 +162,8 @@ async def test_confirmacion_con_choque_revierta_todo(client, admin_headers, db_s
     ]
     r = await client.post(
         f"{API}/courses/import-pdf/confirm", headers=admin_headers,
-        json={"teacher_id": esc["docente_id"], "room_id": esc["aula_id"], "bloques": bloques},
+        json={"teacher_id": esc["docente_id"], "room_id": esc["aula_id"],
+              "cycle": 9, "bloques": bloques},
     )
     assert r.status_code == 409
     curso = (await db_session.exec(select(Course).where(Course.code == TST_CURSO_OCR))).first()
@@ -169,10 +172,10 @@ async def test_confirmacion_con_choque_revierta_todo(client, admin_headers, db_s
 async def test_preview_escaneo_y_tamano(client, admin_headers):
     r = await _subir(client, admin_headers, _pdf_escaneado())
     assert r.status_code == 422
-    assert "escaneo" in r.json()["detail"].lower()
+    assert "reconocieron" in r.json()["detail"].lower()
 
     r = await _subir(client, admin_headers, b"esto no es un pdf", filename="x.pdf")
-    assert r.status_code == 422
+    assert r.status_code == 415
 
     r = await _subir(client, admin_headers, b"", filename="vacio.pdf")
     assert r.status_code == 422
