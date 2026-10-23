@@ -165,6 +165,15 @@ async def test_admin_no_se_crea_por_api_y_patch_protege_admin(client: AsyncClien
     assert r.status_code == 200
     assert r.json()["whatsapp"] == "955666777" and r.json()["is_active"] is False
 
+async def test_docente_sin_grupos_no_ve_estudiantes(
+    client: AsyncClient, docente_headers: dict, temp_student: AppUser
+):
+    r = await client.get(f"{API}/students", headers=docente_headers)
+    assert r.status_code == 200
+    assert r.json()["total"] == 0 and r.json()["items"] == []
+    r = await client.get(f"{API}/accounts/{temp_student.id}", headers=docente_headers)
+    assert r.status_code == 403
+
 async def test_temp_user_fixture_intacto(client: AsyncClient, temp_user: AppUser):
     assert temp_user.email == TEMP_EMAIL
 

@@ -45,7 +45,7 @@ async def delete_student_faces(
 async def enrollment_status(
     student_id: int,
     db: DbSession,
-    _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
+    _admin: RequireRole(UserRole.ADMIN),
 ) -> dict:
     student = await db.get(AppUser, student_id)
     if student is None:

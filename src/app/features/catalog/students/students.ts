@@ -9,6 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
 import {
   FormBuilder,
   FormsModule,
@@ -61,6 +62,7 @@ export class StudentsPage {
   private readonly api = inject(CatalogApi);
   private readonly qp = inject(QueryParams);
   private readonly toast = inject(MessageService);
+  private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -98,7 +100,7 @@ export class StudentsPage {
     { id: 'email', header: 'Correo', hiddenOnMobile: true },
     { id: 'semester', header: 'Ciclo', align: 'center' },
     { id: 'is_active', header: 'Estado', align: 'center', hiddenOnMobile: true },
-    { id: 'actions', header: '', align: 'center', width: '70px' },
+    { id: 'actions', header: '', align: 'center', width: '96px' },
   ];
 
   readonly q = this.qp.filter('q');
@@ -207,6 +209,10 @@ export class StudentsPage {
 
   openImport(): void {
     this.importVisible = true;
+  }
+
+  openFaces(s: Person): void {
+    void this.router.navigate(['/admin/faces'], { queryParams: { student: s.id } });
   }
 
   openEdit(s: Person): void {

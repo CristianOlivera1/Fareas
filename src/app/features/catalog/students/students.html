@@ -75,6 +75,13 @@
   </ng-template>
   <ng-template appCell="actions" let-s>
     <div class="flex items-center justify-center gap-1">
+      @if (auth.isAdmin()) {
+        <button type="button"
+          class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-blue-50 hover:text-(--fareas-primary) transition-colors"
+          title="Enrolar rostro" (click)="openFaces(s)">
+          <iconify-icon icon="material-symbols:face-retouching-natural" width="18"></iconify-icon>
+        </button>
+      }
       <button type="button"
         class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
         title="Editar" (click)="openEdit(s)">

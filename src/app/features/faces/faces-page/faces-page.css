@@ -1,0 +1,13 @@
+.camera-video {
+  transform: scaleX(-1);
+}
+
+.camera-oval {
+  width: 46%;
+  height: 78%;
+  border: 2px solid rgb(255 255 255 / 0.9);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 9999px rgb(0 0 0 / 0.3),
+    inset 0 0 24px rgb(0 0 0 / 0.2);
+}

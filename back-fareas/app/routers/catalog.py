@@ -19,7 +19,16 @@ from app.services.students_import import (
     confirmar_nomina,
     preview_nomina,
 )
-from app.tables import AppUser, Device, DeviceType, FaceEmbedding, Room, UserRole
+from app.tables import (
+    AppUser,
+    CourseGroup,
+    Device,
+    DeviceType,
+    Enrollment,
+    FaceEmbedding,
+    Room,
+    UserRole,
+)
 
 router = APIRouter(tags=["catalog"])
 
@@ -311,6 +320,13 @@ def _people_stmt(role: UserRole, q: str | None):
         count_stmt = count_stmt.where(cond)
     return stmt, count_stmt
 
+def _taught_student_ids(teacher_id: int):
+    return (
+        select(Enrollment.student_id)
+        .join(CourseGroup, CourseGroup.id == Enrollment.group_id)
+        .where(Enrollment.withdrawn_at.is_(None), CourseGroup.teacher_id == teacher_id)
+    )
+
 async def _paged_people(db, role: UserRole, page: PageParams, q: str | None) -> Page[PersonOut]:
     stmt, count_stmt = _people_stmt(role, q)
     total = (await db.exec(count_stmt)).one()
@@ -357,13 +373,17 @@ class StudentIn(BaseModel):
 @router.get("/students", response_model=Page[PersonOut])
 async def list_students(
     db: DbSession,
-    _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
+    user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
     page: PageParamsDep,
     q: str | None = Query(None, max_length=80),
     semester: int | None = Query(None, ge=1, le=12),
     with_face: bool = Query(False, description="Incluye enrolled (rostro actual RF-04)"),
 ) -> Page[PersonOut]:
     stmt, count_stmt = _people_stmt(UserRole.ESTUDIANTE, q)
+    if user.role is UserRole.DOCENTE:
+        own = AppUser.id.in_(_taught_student_ids(user.id))
+        stmt = stmt.where(own)
+        count_stmt = count_stmt.where(own)
     if semester is not None:
         stmt = stmt.where(AppUser.semester == semester)
         count_stmt = count_stmt.where(AppUser.semester == semester)
@@ -469,9 +489,16 @@ async def students_import_confirm(
 
 @router.get("/accounts/{user_id}", response_model=PersonOut)
 async def get_account(
-    user_id: int, db: DbSession, _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE)
+    user_id: int, db: DbSession, user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE)
 ) -> PersonOut:
-    return person_out(await _get_or_404(db, AppUser, user_id, "Cuenta"))
+    account = await _get_or_404(db, AppUser, user_id, "Cuenta")
+    if user.role is UserRole.DOCENTE and account.id != user.id:
+        taught = (
+            await db.exec(_taught_student_ids(user.id).where(Enrollment.student_id == account.id).limit(1))
+        ).first()
+        if taught is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="La cuenta no pertenece a tus grupos")
+    return person_out(account)
 
 @router.patch("/accounts/{user_id}", response_model=PersonOut)
 async def update_account(
