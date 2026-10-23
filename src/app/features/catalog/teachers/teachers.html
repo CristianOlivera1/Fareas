@@ -61,23 +61,25 @@
   </ng-template>
 </app-data-table>
 
-<p-dialog [header]="form().id ? 'Editar docente' : 'Nuevo docente'"
+<p-dialog [header]="isEditing() ? 'Editar docente' : 'Nuevo docente'"
   [(visible)]="dialogVisible" [modal]="true" [style]="{ width: '440px' }">
-  <div class="space-y-4 pt-2">
-    <app-ui-input label="Nombre completo" [required]="true" placeholder="Aquino Cruz, Mario (Mag.)"
-      [ngModel]="form().full_name" (ngModelChange)="patch({ full_name: $event })" />
-    @if (form().id === null) {
-      <app-ui-input label="Correo institucional" [required]="true" type="email"
-        placeholder="mario.aquino@unamba.edu.pe" icon="material-symbols:mail-outline"
-        [ngModel]="form().email" (ngModelChange)="patch({ email: $event })" />
-      <app-ui-input label="DNI" [required]="true" type="number" placeholder="8 dígitos"
-        [ngModel]="form().dni" (ngModelChange)="patch({ dni: $event })" />
+  <div class="space-y-4 pt-2" [formGroup]="teacherForm">
+    <app-ui-input formControlName="full_name" label="Nombre completo" [required]="true"
+      placeholder="Aquino Cruz, Mario (Mag.)" autocomplete="name" [maxlength]="160"
+      [error]="fieldError('full_name')" />
+    @if (!isEditing()) {
+      <app-ui-input formControlName="email" label="Correo institucional" [required]="true"
+        type="email" placeholder="mario.aquino@unamba.edu.pe" icon="material-symbols:mail-outline"
+        inputmode="email" autocomplete="email" [maxlength]="160" [error]="fieldError('email')" />
+      <app-ui-input formControlName="dni" label="DNI" [required]="true" placeholder="8 dígitos"
+        inputmode="numeric" autocomplete="off" [maxlength]="8" [error]="fieldError('dni')" />
     }
-    <app-ui-input label="WhatsApp" placeholder="+51 983 000 000"
-      [ngModel]="form().whatsapp" (ngModelChange)="patch({ whatsapp: $event })" />
-    @if (form().id !== null) {
+    <app-ui-input formControlName="whatsapp" label="WhatsApp" placeholder="+51 983 000 000"
+      type="tel" inputmode="tel" autocomplete="tel" [maxlength]="15"
+      [error]="fieldError('whatsapp')" hint="Opcional. 9 dígitos, empieza con 9. Acepta +51." />
+    @if (isEditing()) {
       <label class="flex items-center gap-2 pt-1">
-        <p-toggleswitch [ngModel]="form().is_active" (ngModelChange)="patch({ is_active: $event })" />
+        <p-toggleswitch formControlName="is_active" />
         <span class="text-sm text-gray-700">Cuenta activa</span>
       </label>
     } @else {
@@ -88,6 +90,6 @@
   </div>
   <ng-template pTemplate="footer">
     <app-ui-button variant="ghost" (click)="dialogVisible = false">Cancelar</app-ui-button>
-    <app-ui-button [loading]="saving()" (click)="save()">Guardar</app-ui-button>
+    <app-ui-button [loading]="saving()" [disabled]="saving()" (click)="save()">Guardar</app-ui-button>
   </ng-template>
 </p-dialog>

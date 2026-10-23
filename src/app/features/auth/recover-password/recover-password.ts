@@ -7,30 +7,26 @@ import {
   signal,
 } from '@angular/core';
 import {
-  AbstractControl,
   FormBuilder,
   ReactiveFormsModule,
-  ValidationErrors,
   Validators,
 } from '@angular/forms';
+import type { AbstractControl, ValidationErrors } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth/auth';
 import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
+import {
+  INSTITUTIONAL_EMAIL_DOMAIN,
+  institutionalEmail,
+} from '../../../shared/validators/person.validators';
 
 type RecoverStep = 'email' | 'otp' | 'reset';
 
-const INSTITUTIONAL_EMAIL_DOMAIN = 'unamba.edu.pe';
 const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
 const DEFAULT_RESEND_SECONDS = 60;
-
-function institutionalEmail(control: AbstractControl): ValidationErrors | null {
-  const value = String(control.value ?? '').trim().toLowerCase();
-  if (!value || !value.includes('@')) return null;
-  return value.endsWith(`@${INSTITUTIONAL_EMAIL_DOMAIN}`) ? null : { institutional: true };
-}
 
 function passwordsMatch(group: AbstractControl): ValidationErrors | null {
   const newPassword = group.get('new_password')?.value;

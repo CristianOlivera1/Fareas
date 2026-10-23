@@ -10,58 +10,40 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
-  AbstractControl,
   FormBuilder,
   FormsModule,
   ReactiveFormsModule,
-  ValidationErrors,
   Validators,
 } from '@angular/forms';
+import { Person } from '../../../core/models/catalog';
+import { TableColumn } from '../../../core/models/table-column';
+import { AuthService } from '../../../core/services/auth/auth';
+import { CatalogApi } from '../../../core/services/catalog-api';
 import { MessageService } from 'primeng/api';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
-import { QueryParams } from '../../../shared/utils/query-params';
-import { CatalogApi } from '../../../core/services/catalog-api';
-import { AuthService } from '../../../core/services/auth/auth';
-import { PageHeader } from '../../../shared/components/page-header/page-header';
-import { UiButton } from '../../../shared/components/ui-button/ui-button';
-import { UiInput } from '../../../shared/components/ui-input/ui-input';
-import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { DataTable } from '../../../shared/components/data-table/data-table';
 import { DataTableCellDirective } from '../../../shared/components/data-table/data-table-cell.directive';
-import { TableColumn } from '../../../core/models/table-column';
-import { Person } from '../../../core/models/catalog';
-import { StudentsImportDialog } from './students-import.dialog';
+import { PageHeader } from '../../../shared/components/page-header/page-header';
+import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
+import { UiButton } from '../../../shared/components/ui-button/ui-button';
+import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { extractDetail } from '../../../shared/utils/api-error';
+import { QueryParams } from '../../../shared/utils/query-params';
+import {
+  DNI_PATTERN,
+  INSTITUTIONAL_EMAIL_DOMAIN,
+  institutionalEmail,
+  nonBlank,
+  normalizeWhatsapp,
+  peruWhatsapp,
+} from '../../../shared/validators/person.validators';
+import { StudentsImportDialog } from './students-import.dialog';
 
-const CICLOS = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}`, value: i + 1 }));
-const INSTITUTIONAL_EMAIL_DOMAIN = 'unamba.edu.pe';
-const DNI_PATTERN = /^\d{8}$/;
 const CODE_PATTERN = /^\d{6}$/;
-const PERU_WHATSAPP_PATTERN = /^9\d{8}$/;
-
-function nonBlank(control: AbstractControl): ValidationErrors | null {
-  return String(control.value ?? '').trim().length > 0 ? null : { blank: true };
-}
-
-function institutionalEmail(control: AbstractControl): ValidationErrors | null {
-  const value = String(control.value ?? '').trim().toLowerCase();
-  if (!value || !value.includes('@')) return null;
-  return value.endsWith(`@${INSTITUTIONAL_EMAIL_DOMAIN}`) ? null : { institutional: true };
-}
-
-function normalizeWhatsapp(value: string): string {
-  const digits = value.replace(/\D/g, '');
-  return digits.startsWith('51') && digits.length === 11 ? digits.slice(2) : digits;
-}
-
-function peruWhatsapp(control: AbstractControl): ValidationErrors | null {
-  const value = String(control.value ?? '').trim();
-  if (!value) return null;
-  return PERU_WHATSAPP_PATTERN.test(normalizeWhatsapp(value)) ? null : { whatsapp: true };
-}
+const CICLOS = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}`, value: i + 1 }));
 
 @Component({
   selector: 'app-students-page',

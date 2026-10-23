@@ -85,7 +85,7 @@
 </app-data-table>
 
 <p-dialog [header]="isEditing() ? 'Editar estudiante' : 'Nuevo estudiante'"
-  [(visible)]="dialogVisible" [modal]="true" [style]="{ width: '460px' }">
+  [(visible)]="dialogVisible" [modal]="true" [style]="{ width: '480px' }">
   <div class="space-y-4 pt-2" [formGroup]="studentForm">
     <app-ui-input formControlName="full_name" label="Nombre completo" [required]="true"
       placeholder="Montesinos Valdivia, Raul" autocomplete="name" [maxlength]="160"
@@ -96,11 +96,10 @@
         inputmode="email" autocomplete="email" [maxlength]="160" [error]="fieldError('email')" />
       <div class="grid grid-cols-2 gap-3">
         <app-ui-input formControlName="dni" label="DNI" [required]="true" placeholder="8 dígitos"
-          inputmode="numeric" autocomplete="off" [maxlength]="8" [error]="fieldError('dni')"
-          hint="8 dígitos, sin espacios." />
+          inputmode="numeric" autocomplete="off" [maxlength]="8" [error]="fieldError('dni')"/>
         <app-ui-input formControlName="code" label="Código de matrícula" [required]="true"
           placeholder="221181" inputmode="numeric" autocomplete="off" [maxlength]="6"
-          [error]="fieldError('code')" hint="6 dígitos; sirve para iniciar sesión" />
+          [error]="fieldError('code')"/>
       </div>
       <label class="block space-y-1">
         <span class="text-sm font-medium text-gray-700">Ciclo <span class="text-red-500">*</span></span>
