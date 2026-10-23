@@ -9,6 +9,12 @@ from botocore.config import Config
 from app.core.config import Settings, get_settings
 
 _FACE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+_DOCUMENT_EXTENSIONS = {".pdf", ".jpg", ".png"}
+_DOCUMENT_SIGNATURES = (
+    (b"%PDF-", "application/pdf", ".pdf"),
+    (b"\xff\xd8\xff", "image/jpeg", ".jpg"),
+    (b"\x89PNG\r\n\x1a\n", "image/png", ".png"),
+)
 
 
 def face_key(student_id: int, extension: str = ".jpg") -> str:
@@ -16,6 +22,20 @@ def face_key(student_id: int, extension: str = ".jpg") -> str:
     if ext not in _FACE_EXTENSIONS:
         ext = ".jpg"
     return f"students/{student_id}/faces/{uuid.uuid4().hex}{ext}"
+
+
+def justification_key(justification_id: int, extension: str) -> str:
+    ext = extension.lower()
+    if ext not in _DOCUMENT_EXTENSIONS:
+        ext = ".pdf"
+    return f"justifications/{justification_id}/{uuid.uuid4().hex}{ext}"
+
+
+def detect_document_type(data: bytes) -> tuple[str, str] | None:
+    for signature, content_type, extension in _DOCUMENT_SIGNATURES:
+        if data.startswith(signature):
+            return content_type, extension
+    return None
 
 
 def _is_external(key: str) -> bool:

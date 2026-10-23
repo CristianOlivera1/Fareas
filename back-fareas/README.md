@@ -164,8 +164,11 @@ psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/003_ciclo_curso.sql
 `db/004_docente_aula_opcionales.sql` (docente del grupo y aula del bloque
 nullable, más `v_today_attendance` con `LEFT JOIN room`) y
 `db/005_refresh_tokens.sql` (tabla `refresh_token` para las sesiones con
-refresh). Quien ya los aplicó: borra su línea cuando todo el equipo los tenga,
-junto con el archivo.
+refresh), `db/008_password_otp.sql` (tabla `password_otp` para los códigos de
+verificación), `db/009_justificacion_documento.sql` (columna
+`justification.document_key`) y `db/010_defaults_app_settings.sql` (DEFAULT de
+`app_settings`: umbral facial 0.55 y DPI 20/30). Quien ya los aplicó: borra su línea cuando todo
+el equipo los tenga, junto con el archivo.
 
 Lo que se revisa al actualizar: que una BD **vieja + ALTER** y una instalación
 **nueva con `001` + `002`** queden idénticas. Ese es el contrato de la regla.
@@ -238,6 +241,13 @@ Reglas del flujo:
 - El OTP es un **segundo factor**: no reemplaza la contraseña actual.
 - TTL 10 min, máximo 5 intentos, un solo uso y binding por `(user_id, purpose)`:
   un código de recuperación no sirve para el cambio voluntario (ni al revés).
+- Los códigos viven en la tabla `password_otp` (hash Argon2, una fila por
+  `user_id` + `purpose`), no en memoria: sobreviven a un reinicio del backend
+  (incluida la recarga de `fastapi dev`) y funcionan con varios workers. La fila
+  queda con `consumed_at` al usarse, así que un segundo intento responde
+  "Este código ya se usó" en lugar de un error genérico.
+- Pedir otro código dentro de los 60 s de cooldown no envía correo; el frontend
+  bloquea el reenvío y muestra los segundos restantes.
 - La clave temporal (`must_change_password=true`) se cambia **sin OTP** en el
   primer login: el usuario acaba de recibirla y el guard lo obliga a cambiarla.
 - Al cambiar/restablecer se incrementa `app_user.token_version` (`ver` en el JWT):
@@ -289,10 +299,25 @@ Reglas del flujo:
   `course_group.semester_label` (2026-II).
 - **Matrículas RF-22:** `GET/POST /groups/{id}/students` · `DELETE /groups/{id}/students/{student_id}`
 - **Calendario:** `GET/POST /holidays` · `DELETE /holidays/{id}` · `GET/POST /justifications`
-  · `DELETE /justifications/{id}` · `GET/PATCH /settings` (RF-34)
+  · `DELETE /justifications/{id}` · `POST/DELETE /justifications/{id}/document` ·
+  `GET/PATCH /settings` (RF-34)
 - **Bitácora RF-32:** `GET /audit-log` (solo admin; filtros `action`, `entity`, `entity_id`, `actor_id`, `since`)
 
 Toda escritura queda registrada en `audit_log` con actor, IP y valores antes/después (JSONB).
+
+### Bloque 13 - adjuntos de justificación (R2)
+
+- `POST /justifications/{id}/document` (multipart `file`): admin o el docente que
+  creó la justificación. Acepta **PDF, JPG o PNG de hasta 10 MB**, validando la
+  firma real del archivo (no la extensión). Lo sube a
+  `justifications/{id}/{uuid}.{pdf|jpg|png}` en R2 (fallback `storage/` local).
+- `GET /justifications` devuelve `document_url` con una **URL firmada de 900 s**
+  cuando el adjunto está en R2; el enlace externo viejo (`document_url` de la
+  creación) se conserva como compatibilidad.
+- `DELETE /justifications/{id}/document` borra el objeto y deja la justificación
+  sin adjunto; `DELETE /justifications/{id}` también elimina el objeto.
+- Límite y TTL se configuran con `R2_MAX_UPLOAD_MB` y
+  `R2_PRESIGN_EXPIRE_SECONDS`. El navegador nunca recibe credenciales de R2.
 
 ### Bloque 5 - enrolamiento facial (RF-04) y pipeline de visión
 

@@ -17,7 +17,7 @@
 | Modelos probados | Ambos `.onnx` cargan en CPU (0.1 s / 0.3 s); ArcFace salida confirmada: vector **[1, 512]** |
 | Búsqueda vectorial validada | Benchmark NumPy: **0.23 ms** por búsqueda contra 5000 alumnos (la opción sin pgvector sobra para la facultad) |
 | Configuración | `.env` con `postgresql+asyncpg://postgres:***@localhost:5432/fareas`, JWT, SMTP, umbral facial 0.75, `DEVICE_TOKEN_SECRET` |
-| Almacenamiento R2 | Bucket `fareas-assets` (WNAM, privado) creado. Variables `R2_*` en `.env`/`.env.example` y en `Settings`; credenciales cargadas en el `.env` local. `services/storage.py` y la portada del enrolamiento ya suben a R2 con URL firmada (Bloque 13 en curso; adjunto de justificación pendiente) |
+| Almacenamiento R2 | Bucket `fareas-assets` (WNAM, privado) creado. Variables `R2_*` en `.env`/`.env.example` y en `Settings`; credenciales cargadas en el `.env` local. `services/storage.py`, la portada del enrolamiento y el adjunto de justificación suben a R2 con URL firmada (Bloque 13 completado) |
 | **Bloque 1 completado** | `app/main.py` + `pyproject.toml` (entrypoint `fastapi dev`), `database.py` (SQLModel async), `core/deps.py`, `tables.py` (14 entidades SQLModel con enums nativos), scripts `test_rtsp.py` y `simulate_esp32.py`. Verificado con servidor uvicorn real: `GET /api/v1/health` → `{"database":"ok","users":9}`. Ruff limpio |
 | **Cambio de contraseña con OTP (2026-10-22)** | Flujo de 3 pasos (`/auth/change-password/otp` → `/otp/verify` → `/change-password`), servicio `services/otp.py` con propósito + cooldown/TTL/intentos, `token_version` para invalidar JWT (columna ya consolidada en `001`). Suite: **92 passed** (sin `test_vision.py`) |
 | **OCR de fotos y nómina (2026-10-22)** | Bloques 14/15 implementados: horario desde PDF escaneado o foto con RapidOCR, periodo/ciclo, docente/aula por fila e importación idempotente; nómina de alumnos con preview editable, correo generado y confirmación fila por fila. Suite: **122 passed** (sin `test_vision.py`) |
@@ -180,7 +180,9 @@ back-fareas/
   primer login (el usuario acaba de recibirla y el guard lo obliga a cambiarla).
 - `services/otp.py` centraliza TTL (10 min), cooldown (60 s), máximo de intentos
   (5), hash argon2id del código y binding por `(user_id, purpose)`; el store es
-  en memoria (mismo trade-off académico que el resto del proyecto, sin Redis).
+  la tabla `password_otp` (UNIQUE por usuario y propósito), sin Redis. Las sesiones usan
+  refresh tokens (`refresh_token`, 30 días, rotación por familia) y el frontend renueva el
+  access token ante un 401.
 - `app_user.token_version` (`INTEGER NOT NULL DEFAULT 0`) viaja como claim `ver`.
   Al cambiar/restablecer se incrementa: los JWT viejos responden 401 y la
   respuesta entrega un `access_token` nuevo; el frontend lo persiste para no
@@ -339,10 +341,10 @@ completa sin `test_vision.py`: **92 passed**.
    lleva **el aula en cada bloque** y no puede tener clases cruzadas para un
    alumno: R8c/R9 lo rechazaría al editar (por eso ISA901 iba Vie 07:00-09:00).
    Los 6 cursos ISA901–ISA906 se siembran en el **ciclo 9**.
-3. `db/003_ciclo_curso.sql` — **pendiente** (agrega `course.cycle`, backfill de
-   los cursos existentes al ciclo 9 y CHECK 1–10). Las antiguas migraciones de
-   aula (`003_aula_por_bloque`, `004_aula_solo_en_bloque`) ya se consolidaron en
-   `001`/`002`; se borran cuando todo el equipo las aplicó (regla en el README).
+3. `course.cycle` (ciclo 1–10 con CHECK) ya está consolidado en `001`/`002`; el ALTER
+   `003_ciclo_curso.sql` se aplicó y se borró. Las antiguas migraciones de aula
+   (`003_aula_por_bloque`, `004_aula_solo_en_bloque`) también se consolidaron; los
+   ALTER se borran cuando todo el equipo los aplicó (regla en el README).
 
 > **Nota de compatibilidad (regla vigente, 2026-10-16):** `001_schema.sql` **sí
 > se edita**: es la foto del esquema real, y `002_seed.sql` fija los valores
@@ -409,7 +411,7 @@ mismo periodo.
 `GET /groups?cycle=` · `GET /schedule?semester=&cycle=` ·
 `POST /courses/import-pdf/confirm {...,cycle}`.
 
-### Bloque 13 - Almacenamiento de archivos en Cloudflare R2 (2026-10-22) - RF-04, RF-10, R13 - **EN CURSO (fotos en R2 listo; adjunto de justificación pendiente)**
+### Bloque 13 - Almacenamiento de archivos en Cloudflare R2 (2026-10-22) - RF-04, RF-10, R13 - **✅ COMPLETADO Y VERIFICADO**
 
 > **Decisión: fase separada.** El almacenamiento es transversal (enrolamiento,
 > justificaciones, privacidad, borrado y producción), no una pantalla de F4/F6.
@@ -475,13 +477,19 @@ mismo periodo.
   después de validar las fotos, `photo_url` guarda la clave y las respuestas
   entregan la URL firmada; eliminar el rostro borra el objeto.
 - [x] README: variables R2, bucket, límites y estado del flujo.
-- [ ] Migración SQL re-ejecutable para `justification.document_key`
-  (la portada ya usa `photo_url` como clave; no hay migración de fotos).
-- [ ] `calendar_admin.py`: `POST /justifications/{id}/document` (multipart) y
-  `DELETE /justifications/{id}/document`; `document_url` firmada en la salida;
-  mantener `document_url` externo para compatibilidad.
-- [ ] Verificación E2E con una foto real de enrolamiento desde `/faces`
+- [x] Migración SQL re-ejecutable `db/009_justificacion_documento.sql` y columna
+  `justification.document_key` en `001`/`tables.py`.
+- [x] `calendar_admin.py`: `POST /justifications/{id}/document` (multipart, PDF/JPG/PNG
+  ≤ 10 MB con validación de firma real, 413/415/503 controlados) y
+  `DELETE /justifications/{id}/document`; `document_url` firmada en el listado;
+  `document_url` externo se mantiene como compatibilidad. Eliminar la justificación
+  borra el objeto; reemplazar el adjunto borra el anterior.
+- [x] Verificación E2E con una foto real de enrolamiento desde `/faces`
   (la subida directa contra R2 ya está verificada).
+- [x] Tests de adjuntos (`tests/test_justification_documents.py`, 5): subida,
+  listado firmado, reemplazo, 415, 413, borrado del documento/justificación y
+  docente ajeno (403). Verificado con `LocalStorage`; R2 usa el mismo servicio ya
+  probado contra el bucket.
 
 **Entregable:** enrolar un alumno guarda la portada en R2 (no en `storage/`),
 la web la muestra con URL firmada, `DELETE` borra el objeto, y una justificación
@@ -780,3 +788,12 @@ Convención única de estados en todo el sistema: `asistio | tardanza | falta | 
 | 6 | **13** | R2 (fotos/adjuntos) — fotos listas; adjunto de justificación pendiente |
 | 7 | **14 + 15** ✅ | OCR de horario (foto/PDF escaneado) + importación de nómina de alumnos — COMPLETADO |
 | 8 | **10** | Calidad y demo final (README, demo E2E, tunnel) |
+
+---
+
+## 9. Autorización por rol
+
+La matriz por pantalla está en `PLAN-FRONTEND.md` §7. Pendientes del lado backend:
+
+- [ ] Limpieza periódica de `refresh_token`/`password_otp` expirados y política de retención de `audit_log`.
+- [ ] Test parametrizado de permisos: endpoint × rol (admin/docente/estudiante) esperando 200/403.

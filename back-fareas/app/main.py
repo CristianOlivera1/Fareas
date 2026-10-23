@@ -17,6 +17,7 @@ from app.routers import (
     dpi,
     enrollment_faces,
     health,
+    me,
     reports,
     ws_devices,
 )
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["Content-Disposition"],
     )
 
     @app.exception_handler(errors.DomainError)
@@ -87,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(attendance.router, prefix=settings.API_V1_PREFIX)
     app.include_router(dashboard.router, prefix=settings.API_V1_PREFIX)
     app.include_router(reports.router, prefix=settings.API_V1_PREFIX)
+    app.include_router(me.router, prefix=settings.API_V1_PREFIX)
 
     return app
 

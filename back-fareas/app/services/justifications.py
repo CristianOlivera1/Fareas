@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 
 from sqlmodel import select
@@ -5,6 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
 
 from app.services import errors
 from app.services.audit import audit
+from app.services.storage import get_storage
 from app.tables import (
     AppUser,
     AttendanceRecord,
@@ -16,6 +18,8 @@ from app.tables import (
     ScheduleBlock,
     UserRole,
 )
+
+logger = logging.getLogger("fareas.justifications")
 
 
 async def _grupos_del_docente(db, teacher_id: int, curso_id: int | None) -> set[int]:
@@ -129,6 +133,7 @@ async def eliminar(
         if actor.role is not UserRole.DOCENTE or just.created_by != actor.id:
             raise errors.DomainError("Solo puedes eliminar las justificaciones que creaste")
 
+    document_key = just.document_key
     faltas = (
         await db.exec(
             select(AttendanceRecord).where(
@@ -153,4 +158,10 @@ async def eliminar(
         ip_address=ip,
     )
     await db.commit()
+
+    if document_key:
+        try:
+            await get_storage().delete(document_key)
+        except Exception:
+            logger.warning("No se pudo borrar el adjunto %s", document_key, exc_info=True)
     return revertidas

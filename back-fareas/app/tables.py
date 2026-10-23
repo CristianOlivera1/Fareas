@@ -102,6 +102,22 @@ class RefreshToken(SQLModel, table=True):
     user_agent: str | None = Field(default=None, max_length=300)
     ip_address: str | None = Field(default=None, max_length=45)
 
+class PasswordOtp(SQLModel, table=True):
+    __tablename__ = "password_otp"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="app_user.id", index=True)
+    purpose: str = Field(max_length=20)
+    code_hash: str = Field(max_length=128)
+    sent_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    )
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    attempts: int = 0
+    verified: bool = False
+    consumed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+
 class Room(SQLModel, table=True):
     __tablename__ = "room"
 
@@ -220,6 +236,7 @@ class Justification(SQLModel, table=True):
     document_url: str | None = Field(default=None, max_length=500)
     created_by: int = Field(foreign_key="app_user.id")
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
+    document_key: str | None = Field(default=None, max_length=500)
 
 class AttendanceSession(SQLModel, table=True):
     __tablename__ = "attendance_session"

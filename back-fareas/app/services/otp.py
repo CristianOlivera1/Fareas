@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import math
 import secrets
-import time
-from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.core.security import hash_password, verify_password
+from app.tables import PasswordOtp
 
 OTP_TTL_SECONDS = 10 * 60
 OTP_RESEND_SECONDS = 60
@@ -37,64 +40,91 @@ class OtpInvalidError(OtpError):
 class OtpNotVerifiedError(OtpError):
     pass
 
-@dataclass
-class _OtpEntry:
-    code_hash: str
-    expires_at: float
-    sent_at: float
-    attempts: int = 0
-    verified: bool = False
+class OtpUsedError(OtpError):
+    pass
 
-_store: dict[tuple[int, str], _OtpEntry] = {}
+def _now() -> datetime:
+    return datetime.now(UTC)
 
+async def _get(db: AsyncSession, user_id: int, purpose: str | OtpPurpose) -> PasswordOtp | None:
+    query = select(PasswordOtp).where(
+        PasswordOtp.user_id == user_id,
+        PasswordOtp.purpose == str(purpose),
+    )
+    return (await db.exec(query)).first()
 
-def clear() -> None:
-    _store.clear()
+async def _drop(db: AsyncSession, row: PasswordOtp) -> None:
+    await db.delete(row)
+    await db.commit()
 
-def issue(user_id: int, purpose: str | OtpPurpose) -> str:
-    now = time.monotonic()
-    key = (user_id, str(purpose))
-    previous = _store.get(key)
-    if previous is not None and previous.expires_at > now:
-        elapsed = now - previous.sent_at
+async def issue(db: AsyncSession, user_id: int, purpose: str | OtpPurpose) -> str:
+    now = _now()
+    row = await _get(db, user_id, purpose)
+    if row is not None and row.consumed_at is None and row.expires_at > now:
+        elapsed = (now - row.sent_at).total_seconds()
         if elapsed < OTP_RESEND_SECONDS:
             raise OtpCooldownError(math.ceil(OTP_RESEND_SECONDS - elapsed))
 
     code = f"{secrets.randbelow(1_000_000):06d}"
-    _store[key] = _OtpEntry(
-        code_hash=hash_password(code),
-        expires_at=now + OTP_TTL_SECONDS,
-        sent_at=now,
-    )
+    if row is None:
+        row = PasswordOtp(user_id=user_id, purpose=str(purpose))
+    row.code_hash = hash_password(code)
+    row.sent_at = now
+    row.expires_at = now + timedelta(seconds=OTP_TTL_SECONDS)
+    row.attempts = 0
+    row.verified = False
+    row.consumed_at = None
+    db.add(row)
+    await db.commit()
     return code
 
-def verify(user_id: int, purpose: str | OtpPurpose, code: str) -> None:
-    key = (user_id, str(purpose))
-    entry = _store.get(key)
-    now = time.monotonic()
-    if entry is None or now > entry.expires_at:
-        _store.pop(key, None)
+async def verify(db: AsyncSession, user_id: int, purpose: str | OtpPurpose, code: str) -> None:
+    row = await _get(db, user_id, purpose)
+    now = _now()
+    if row is None or row.expires_at <= now:
+        if row is not None:
+            await _drop(db, row)
         raise OtpExpiredError("Código expirado o inexistente")
 
-    if entry.attempts >= OTP_MAX_ATTEMPTS:
-        _store.pop(key, None)
+    if row.consumed_at is not None:
+        raise OtpUsedError("Este código ya se usó; solicita uno nuevo")
+
+    if row.attempts >= OTP_MAX_ATTEMPTS:
+        await _drop(db, row)
         raise OtpAttemptsExceededError("Demasiados intentos; solicita otro código")
 
-    entry.attempts += 1
-    if not verify_password(code, entry.code_hash):
-        raise OtpInvalidError("Código incorrecto")
-    entry.verified = True
+    row.attempts += 1
+    db.add(row)
+    await db.commit()
 
-def consume(user_id: int, purpose: str | OtpPurpose) -> None:
-    key = (user_id, str(purpose))
-    entry = _store.get(key)
-    now = time.monotonic()
-    if entry is None or now > entry.expires_at:
-        _store.pop(key, None)
+    if not verify_password(code, row.code_hash):
+        raise OtpInvalidError("Código incorrecto")
+
+    row.verified = True
+    db.add(row)
+    await db.commit()
+
+async def consume(db: AsyncSession, user_id: int, purpose: str | OtpPurpose) -> None:
+    row = await _get(db, user_id, purpose)
+    now = _now()
+    if row is None or row.expires_at <= now:
+        if row is not None:
+            await _drop(db, row)
         raise OtpExpiredError("El código expiró; solicita uno nuevo")
-    if not entry.verified:
+    if row.consumed_at is not None:
+        raise OtpUsedError("Este código ya se usó; solicita uno nuevo")
+    if not row.verified:
         raise OtpNotVerifiedError("Verifica el código antes de continuar")
-    _store.pop(key, None)
+
+    row.consumed_at = now
+    db.add(row)
+    await db.commit()
+
+async def clear(db: AsyncSession) -> None:
+    rows = (await db.exec(select(PasswordOtp))).all()
+    for row in rows:
+        await db.delete(row)
+    await db.commit()
 
 def mask_email(email: str) -> str:
     if "@" not in email:
