@@ -252,6 +252,27 @@ async def test_logout_revokes_refresh_family_idempotently(
     assert rows[0].revoked_reason == "logout"
 
 
+async def test_logout_with_rotated_token_revokes_the_active_successor(
+    client: AsyncClient,
+    temp_user: AppUser,
+    db_session: SQLModelAsyncSession,
+):
+    user_id = temp_user.id
+    login = await _login(client, temp_user.email)
+
+    rotated = await _refresh(client, login["refresh_token"])
+    assert rotated.status_code == 200, rotated.text
+    successor = rotated.json()["refresh_token"]
+
+    r = await client.post(f"{API}/logout", json={"refresh_token": login["refresh_token"]})
+    assert r.status_code == 204
+    assert (await _refresh(client, successor)).status_code == 401
+
+    rows = await _rows(db_session, user_id)
+    assert all(row.revoked_at is not None for row in rows)
+    assert any(row.revoked_reason == "logout" for row in rows)
+
+
 async def test_logout_all_revokes_every_session_and_access_token(
     client: AsyncClient,
     temp_user: AppUser,

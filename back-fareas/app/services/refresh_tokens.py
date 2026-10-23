@@ -251,7 +251,9 @@ async def revoke_refresh_token(
             .with_for_update()
         )
     ).first()
-    if row is not None and row.revoked_at is None:
+    if row is not None:
+        # A rotated token still identifies the family. Revoking the family here
+        # closes the active successor when logout races with a refresh.
         await _revoke_family(db, row.family_id, "logout", _now())
     if commit:
         await db.commit()
