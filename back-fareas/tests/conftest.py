@@ -8,9 +8,9 @@ from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
 
 from app.core.config import get_settings
-from app.core.security import hash_password
+from app.core.security import hash_password, hash_refresh_token
 from app.main import create_app
-from app.tables import AppUser, AuditLog, UserRole
+from app.tables import AppUser, AuditLog, RefreshToken, UserRole
 
 TEMP_EMAIL = "temp.test.auth@unamba.edu.pe"
 TEMP_STUDENT_EMAIL = "temp.student@unamba.edu.pe"
@@ -148,10 +148,15 @@ async def docente_headers(
     await _purge_docente()
 
 @pytest.fixture
-async def admin_login(client: AsyncClient) -> dict:
+async def admin_login(client: AsyncClient, db_session: SQLModelAsyncSession) -> dict:
     r = await client.post("/api/v1/auth/login", json={"email": "admin@unamba.edu.pe", "password": "12345678"})
     assert r.status_code == 200, r.text
     data = r.json()
+    # La suite usa el access token; no dejes refresh tokens del admin acumulándose.
+    await db_session.exec(
+        delete(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(data["refresh_token"]))
+    )
+    await db_session.commit()
     return {"headers": {"Authorization": f"Bearer {data['access_token']}"}, "user": data["user"]}
 
 @pytest.fixture

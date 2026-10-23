@@ -1,11 +1,11 @@
 import logging
 import time
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlmodel import select
 
 from app.core.deps import CurrentUserPending, DbSession
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import hash_password, verify_password
 from app.schemas.auth import (
     ChangePasswordOtpRequest,
     ChangePasswordOtpResponse,
@@ -16,7 +16,9 @@ from app.schemas.auth import (
     MessageResponse,
     RecoverRequest,
     RecoverResponse,
+    RefreshTokenRequest,
     ResetPasswordRequest,
+    TokenPairResponse,
     UserOut,
     VerifyChangePasswordOtpRequest,
     VerifyOtpRequest,
@@ -24,6 +26,13 @@ from app.schemas.auth import (
 from app.services import otp
 from app.services.audit import audit
 from app.services.emailer import send_otp, send_password_changed_notice
+from app.services.refresh_tokens import (
+    RefreshTokenError,
+    issue_token_pair,
+    revoke_all_for_user,
+    revoke_refresh_token,
+    rotate_refresh_token,
+)
 from app.tables import AppUser
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -65,6 +74,10 @@ def _login_rate_reset(request: Request) -> None:
 
 def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
+
+def _user_agent(request: Request) -> str | None:
+    value = request.headers.get("user-agent")
+    return value[:300] if value else None
 
 async def _notify_password_changed(user: AppUser) -> None:
     try:
@@ -123,8 +136,71 @@ async def login(body: LoginRequest, request: Request, db: DbSession) -> LoginRes
             detail="Credenciales incorrectas o usuario inactivo",
         )
     _login_rate_reset(request)
-    access = create_access_token(user.id, user.role.value, user.token_version)
-    return LoginResponse(access_token=access, user=_build_user_out(user))
+    issued = await issue_token_pair(
+        db,
+        user,
+        ip_address=_client_ip(request),
+        user_agent=_user_agent(request),
+    )
+    await db.commit()
+    return LoginResponse(
+        access_token=issued.access_token,
+        refresh_token=issued.refresh_token,
+        expires_in=issued.expires_in,
+        refresh_expires_in=issued.refresh_expires_in,
+        user=_build_user_out(user),
+    )
+
+@router.post("/refresh", response_model=TokenPairResponse)
+async def refresh(
+    body: RefreshTokenRequest,
+    request: Request,
+    db: DbSession,
+) -> TokenPairResponse:
+    try:
+        issued = await rotate_refresh_token(
+            db,
+            body.refresh_token,
+            ip_address=_client_ip(request),
+            user_agent=_user_agent(request),
+        )
+    except RefreshTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sesión inválida o expirada. Inicia sesión nuevamente.",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    return TokenPairResponse(
+        access_token=issued.access_token,
+        refresh_token=issued.refresh_token,
+        expires_in=issued.expires_in,
+        refresh_expires_in=issued.refresh_expires_in,
+    )
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(body: RefreshTokenRequest, db: DbSession) -> Response:
+    await revoke_refresh_token(db, body.refresh_token)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_all(
+    request: Request,
+    user: CurrentUserPending,
+    db: DbSession,
+) -> Response:
+    await revoke_all_for_user(db, user.id, "logout_all", commit=False)
+    user.token_version += 1
+    db.add(user)
+    await audit(
+        db,
+        user,
+        action="logout_all",
+        entity="app_user",
+        entity_id=user.id,
+        ip_address=_client_ip(request),
+    )
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 @router.get("/me", response_model=UserOut)
 async def me(user: CurrentUserPending) -> UserOut:
@@ -211,6 +287,7 @@ async def change_password(
     user.must_change_password = False
     user.token_version += 1
     db.add(user)
+    await revoke_all_for_user(db, user.id, "password_change", commit=False)
     await audit(
         db,
         user,
@@ -220,13 +297,21 @@ async def change_password(
         new_value={"method": "otp" if used_otp else "temporary_password"},
         ip_address=_client_ip(request),
     )
+    issued = await issue_token_pair(
+        db,
+        user,
+        ip_address=_client_ip(request),
+        user_agent=_user_agent(request),
+    )
     await db.commit()
 
-    access = create_access_token(user.id, user.role.value, user.token_version)
     await _notify_password_changed(user)
     return ChangePasswordResponse(
         message="Contraseña actualizada correctamente",
-        access_token=access,
+        access_token=issued.access_token,
+        refresh_token=issued.refresh_token,
+        expires_in=issued.expires_in,
+        refresh_expires_in=issued.refresh_expires_in,
     )
 
 @router.post("/recover", response_model=RecoverResponse)
@@ -290,6 +375,7 @@ async def reset_password(body: ResetPasswordRequest, db: DbSession) -> MessageRe
     user.must_change_password = False
     user.token_version += 1
     db.add(user)
+    await revoke_all_for_user(db, user.id, "password_reset", commit=False)
     await audit(
         db,
         user,

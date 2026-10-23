@@ -1,4 +1,7 @@
+import hashlib
+import secrets
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import jwt
 from pwdlib import PasswordHash
@@ -17,6 +20,14 @@ def verify_password(plain: str, password_hash: str) -> bool:
     except Exception:
         return False
 
+def generate_refresh_token() -> str:
+    """Create an opaque, high-entropy refresh token. It is shown only once."""
+    return f"rt_{secrets.token_urlsafe(48)}"
+
+def hash_refresh_token(token: str) -> str:
+    """Hash a refresh token for storage. SHA-256 is enough for 256-bit random tokens."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
 def create_access_token(user_id: int, role: str, token_version: int = 0) -> str:
     settings = get_settings()
     now = datetime.now(UTC)
@@ -24,6 +35,7 @@ def create_access_token(user_id: int, role: str, token_version: int = 0) -> str:
         "sub": str(user_id),
         "role": role,
         "ver": token_version,
+        "jti": str(uuid4()),
         "iat": now,
         "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     }

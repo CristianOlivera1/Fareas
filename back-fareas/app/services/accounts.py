@@ -10,6 +10,7 @@ from app.services import errors
 from app.services.audit import audit
 from app.services.emailer import send_temporary_credentials
 from app.services.formats import validar_dni, validar_dominio_email, validar_whatsapp
+from app.services.refresh_tokens import revoke_all_for_user
 from app.tables import AppUser, UserRole
 
 _CODE_RE = re.compile(r"^\d{6}$")
@@ -105,7 +106,9 @@ async def resend_credentials(
     temp_password = _temp_password()
     user.password_hash = hash_password(temp_password)
     user.must_change_password = True
+    user.token_version += 1
     db.add(user)
+    await revoke_all_for_user(db, user.id, "temporary_password_resent", commit=False)
     await audit(
         db,
         actor,

@@ -28,7 +28,7 @@ back-fareas/
 │   ├── core/deps.py          # DbSession, CurrentUser (Bearer), RequireRole (RF-01)
 │   ├── core/security.py      # argon2 (pwdlib) + JWT (pyjwt)
 │   ├── database.py           # engine asyncpg + SessionLocal (SQLModel)
-│   ├── tables.py             # 15 entidades SQLModel que MAPEAN db/001_schema.sql
+│   ├── tables.py             # 16 entidades SQLModel que MAPEAN db/001_schema.sql
 │   ├── schemas/              # DTOs: auth.py, common.py (Page/Message), …
 │   ├── ai/                   # pipeline de visión (Bloque 5): detector, embedder,
 │   │                         #   recognizer, pipeline (Tabla 8), frame_source, runtime
@@ -37,6 +37,7 @@ back-fareas/
 │   │   ├── audit.py          # bitácora RF-32 dentro de la transacción
 │   │   ├── emailer.py        # credenciales (RF-08), OTP de recuperación/cambio (RF-12) y aviso de clave actualizada
 │   │   ├── notifications.py  # alertas DPI al cierre de sesión (RF-24)
+│   │   ├── refresh_tokens.py # refresh opaco, rotación y revocación por familia
 │   │   ├── errors.py         # DomainError/ConflictError/NotFoundError → handlers HTTP
 │   │   ├── attendance_engine.py  # resolver sesión, marca única, cierre RF-26, DPI RF-24
 │   │   ├── session_scheduler.py  # APScheduler: cierre automático cada 60 s (RF-26)
@@ -49,7 +50,7 @@ back-fareas/
 │   │   ├── exports.py        # reportes Excel/PDF con encabezado institucional (RF-16)
 │   │   └── storage.py        # Cloudflare R2 (fotos) + URLs firmadas (Bloque 13)
 │   └── routers/
-│       ├── auth.py           # login JWT (campo email), /me, cambio de clave con OTP (RF-11/RF-12)
+│       ├── auth.py           # login JWT + refresh, /me, cambio de clave con OTP (RF-11/RF-12)
 │       ├── audit.py          # GET /audit-log (RF-32, solo admin, paginado)
 │       ├── calendar_admin.py # feriados RF-09, justificaciones RF-10, settings RF-34
 │       ├── catalog.py        # aulas, dispositivos, docentes, estudiantes (RF-02…RF-05, RF-35)
@@ -159,8 +160,10 @@ psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/003_ciclo_curso.sql
 ```
 
 **Pendiente ahora mismo:** `db/003_ciclo_curso.sql` (agrega `course.cycle`
-1–10, rellena los cursos existentes con el ciclo 9 y crea el CHECK). Quien ya lo
-aplicó: borra su línea cuando todo el equipo lo tenga, junto con el archivo.
+1–10, rellena los cursos existentes con el ciclo 9 y crea el CHECK) y
+`db/005_refresh_tokens.sql` (tabla `refresh_token` para las sesiones con
+refresh). Quien ya los aplicó: borra su línea cuando todo el equipo los tenga,
+junto con el archivo.
 
 Lo que se revisa al actualizar: que una BD **vieja + ALTER** y una instalación
 **nueva con `001` + `002`** queden idénticas. Ese es el contrato de la regla.
@@ -214,7 +217,8 @@ El campo `email` acepta también el código de matrícula (p. ej. `"email": "221
 | `aquino.mario@unamba.edu.pe` | `12345678` | docente |
 | `221181` | `12345678` | estudiante (código) |
 
-Endpoints de auth: `POST /auth/login` · `GET /auth/me` · `POST /auth/change-password`
+Endpoints de auth: `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout`
+· `POST /auth/logout-all` · `GET /auth/me` · `POST /auth/change-password`
 · `POST /auth/recover` → `/verify` → `/reset` (OTP 6 dígitos, RF-12).
 
 **Cambio de contraseña con OTP (2026-10-22, RF-11/RF-12):**
@@ -239,6 +243,30 @@ Reglas del flujo:
   cerrar la sesión actual. El frontend lo persiste en `AuthService.changePassword`.
 - Se audita `password_change_otp`, `password_changed` y `password_reset`
   (RF-32) y se envía un aviso de seguridad por correo.
+
+### Refresh tokens (2026-10-22)
+
+- `POST /auth/login` devuelve `access_token`, `refresh_token`, `token_type`,
+  `expires_in` (acceso) y `refresh_expires_in` (refresh).
+- `POST /auth/refresh {refresh_token}` rota el token y devuelve un par nuevo.
+  El refresh token es opaco y de alta entropía; en BD solo se guarda su hash
+  SHA-256, nunca el valor original.
+- Cada login crea una **familia** de refresh tokens. Si se reutiliza un token ya
+  rotado, se revoca toda la familia y se audita como `refresh_token_reuse`.
+- `POST /auth/logout {refresh_token}` revoca la familia de forma idempotente
+  (204). `POST /auth/logout-all` revoca todas las sesiones e invalida también
+  los access tokens incrementando `app_user.token_version`.
+- La sesión tiene vencimiento absoluto: `REFRESH_TOKEN_EXPIRE_DAYS` (30 días).
+  Rotar no extiende ese plazo. El access token sigue durando
+  `ACCESS_TOKEN_EXPIRE_MINUTES` (120 min).
+- Cambio/restablecimiento de clave, reenvío de clave temporal y desactivación de
+  cuenta revocan los refresh tokens. El cambio de clave devuelve un par nuevo
+  para no cerrar la sesión actual.
+- BD existente: aplicar `db/005_refresh_tokens.sql`. Una instalación nueva ya
+  incluye la tabla en `db/001_schema.sql`.
+- **Fase frontend pendiente:** persistir el refresh token de forma segura e
+  implementar un refresh *single-flight* ante 401. Por ahora el backend lo
+  entrega en JSON; para producción web conviene moverlo a cookie HttpOnly.
 
 ### Endpoints del Bloque 4 - catálogo académico (RF-02…RF-10, RF-22, RF-32, RF-34, RF-35)
 
@@ -291,12 +319,14 @@ cd back-fareas
 .venv/Scripts/python -m pytest tests/ -v
 ```
 
-12 tests de autenticación corren contra la BD `fareas` real usando un usuario
+24 tests de autenticación corren contra la BD `fareas` real usando un usuario
 temporal que se crea y elimina solo (no toca los datos del seed). Cubren login
 con clave temporal, rate limit, `/me`, cambio forzado sin OTP, cambio voluntario
 con OTP (cooldown, expiración, máximo de intentos e invalidación del token
-viejo), recuperación completa y reset sin verificar. La suite completa (sin
-`test_vision.py`, que requiere el MP4 demo) queda en **113 passed**.
+viejo), recuperación completa, reset sin verificar y refresh tokens (rotación,
+reuso, expiración, logout, logout-all y revocación por cambio de clave). La
+suite completa (sin `test_vision.py`, que requiere el MP4 demo) se corre con
+`pytest -q`.
 
 ### Bloque 6 — motor de asistencia (RF-21…RF-26)
 

@@ -44,10 +44,18 @@ class UserOut(BaseModel):
     email: str
     must_change_password: bool
 
-class LoginResponse(BaseModel):
+class TokenPairResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
+    expires_in: int
+    refresh_expires_in: int
+
+class LoginResponse(TokenPairResponse):
     user: UserOut
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str = Field(min_length=32, max_length=512)
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=6, max_length=128)
@@ -73,6 +81,10 @@ class VerifyChangePasswordOtpRequest(BaseModel):
 class ChangePasswordResponse(BaseModel):
     message: str
     access_token: str | None = None
+    refresh_token: str | None = None
+    token_type: str = "bearer"
+    expires_in: int | None = None
+    refresh_expires_in: int | None = None
 
 class RecoverRequest(InstitutionalEmailRequest):
     pass

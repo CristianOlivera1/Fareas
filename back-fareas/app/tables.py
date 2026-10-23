@@ -1,9 +1,10 @@
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any
+from uuid import UUID, uuid4
 
-from sqlalchemy import text
+from sqlalchemy import DateTime, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import UserDefinedType
 from sqlmodel import Column, Field, SQLModel
@@ -80,6 +81,26 @@ class AppUser(SQLModel, table=True):
     face_consent_at: datetime | None = None
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
     updated_at: datetime | None = Field(default=None, **server_now_kwargs())
+
+class RefreshToken(SQLModel, table=True):
+    __tablename__ = "refresh_token"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="app_user.id", index=True)
+    family_id: UUID = Field(default_factory=uuid4, index=True)
+    token_hash: str = Field(max_length=64, unique=True)
+    token_version: int = 0
+    issued_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    )
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    last_used_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    revoked_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    revoked_reason: str | None = Field(default=None, max_length=40)
+    replaced_by_id: int | None = Field(default=None, foreign_key="refresh_token.id")
+    user_agent: str | None = Field(default=None, max_length=300)
+    ip_address: str | None = Field(default=None, max_length=45)
 
 class Room(SQLModel, table=True):
     __tablename__ = "room"

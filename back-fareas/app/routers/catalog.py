@@ -11,6 +11,7 @@ from app.services.accounts import create_account, resend_credentials
 from app.services.audit import audit
 from app.services.formats import validar_whatsapp
 from app.services.ocr_extract import MAX_PESO_ARCHIVO
+from app.services.refresh_tokens import revoke_all_for_user
 from app.services.students_import import (
     ImportacionAlumnosIn,
     ImportacionAlumnosOut,
@@ -481,8 +482,12 @@ async def update_account(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="La cuenta admin se gestiona por BD")
     old = {"full_name": user.full_name, "whatsapp": user.whatsapp, "is_active": user.is_active,
            "semester": user.semester}
+    was_active = user.is_active
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(user, field, value)
+    if was_active and not user.is_active:
+        user.token_version += 1
+        await revoke_all_for_user(db, user.id, "account_deactivated", commit=False)
     db.add(user)
     await audit(db, admin, action="cuenta_actualizada", entity="app_user", entity_id=user.id,
                 old_value=old, ip_address=_client_ip(request))

@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +18,7 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "clave-en-produccion"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 120
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=30, gt=0)
 
     MODELS_DIR: str = "models"
     FACE_MATCH_THRESHOLD: float = 0.75
