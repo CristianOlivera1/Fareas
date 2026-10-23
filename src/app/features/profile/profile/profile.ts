@@ -10,6 +10,7 @@ import {
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { DialogModule } from 'primeng/dialog';
 import { AuthService } from '../../../core/services/auth/auth';
 import { ROLE_LABELS } from '../../../core/models/user';
 import { PageHeader } from '../../../shared/components/page-header/page-header';
@@ -23,7 +24,7 @@ type PasswordField = 'current_password' | 'otp_code' | 'new_password' | 'confirm
 
 @Component({
   selector: 'app-profile-page',
-  imports: [ReactiveFormsModule, PageHeader, UiAlert, UiButton, UiInput],
+  imports: [ReactiveFormsModule, PageHeader, UiAlert, UiButton, UiInput, DialogModule],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './profile.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -40,12 +41,16 @@ export class ProfilePage {
   readonly isSubmitting = signal(false);
   readonly errorMessage = signal('');
   readonly successMessage = signal('');
+  readonly securityDialogVisible = signal(false);
 
   readonly step = signal<PasswordStep>(1);
   readonly maskedEmail = signal('');
   readonly resendSeconds = signal(0);
   readonly otpExpiresIn = signal(600);
   readonly otpExpiresMinutes = computed(() => Math.ceil(this.otpExpiresIn() / 60));
+  readonly isPasswordFlowBusy = computed(
+    () => this.isSendingOtp() || this.isVerifyingOtp() || this.isSubmitting(),
+  );
 
   readonly steps = [
     { id: 1, label: 'Identidad' },
@@ -100,6 +105,45 @@ export class ProfilePage {
         );
       },
     });
+  }
+
+  openSecurityDialog(): void {
+    if (this.isPasswordFlowBusy()) return;
+    this.resetFlow();
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    this.securityDialogVisible.set(true);
+  }
+
+  closeSecurityDialog(): void {
+    if (this.isPasswordFlowBusy()) return;
+    this.securityDialogVisible.set(false);
+  }
+
+  onSecurityDialogVisibilityChange(visible: boolean): void {
+    if (!visible && this.isPasswordFlowBusy()) return;
+    this.securityDialogVisible.set(visible);
+  }
+
+  onSecurityDialogHide(): void {
+    if (this.isPasswordFlowBusy()) return;
+    this.securityDialogVisible.set(false);
+    this.clearPasswordFlow();
+  }
+
+  onSecurityDialogShow(): void {
+    const fieldId: Record<PasswordStep, string> = {
+      1: 'profile-current-password',
+      2: 'profile-otp-code',
+      3: 'profile-new-password',
+    };
+    this.focusField(fieldId[this.step()]);
+  }
+
+  private clearPasswordFlow(): void {
+    this.resetFlow();
+    this.errorMessage.set('');
+    this.successMessage.set('');
   }
 
   fieldError(field: PasswordField): string {
