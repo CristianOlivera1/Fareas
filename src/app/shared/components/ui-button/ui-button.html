@@ -1,4 +1,5 @@
-<button [type]="type()" [disabled]="disabled() || loading()" [class]="classes()">
+<button [type]="type()" [disabled]="disabled() || loading()" [class]="classes()"
+  [attr.aria-label]="ariaLabel()" [attr.title]="ariaLabel()">
   @if (loading()) {
     <iconify-icon icon="material-symbols:progress-activity" width="18" class="animate-spin" />
   } @else if (icon(); as iconName) {

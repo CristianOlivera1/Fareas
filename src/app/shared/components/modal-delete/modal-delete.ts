@@ -46,7 +46,9 @@ export class ModalDelete {
 
   requestClose(value: boolean): void {
     if (this.loading() && value) return;
+    const wasVisible = this.visible();
     this.visible.set(value);
+    if (wasVisible && !value) this.canceled.emit();
   }
 
   onConfirm(): void {
