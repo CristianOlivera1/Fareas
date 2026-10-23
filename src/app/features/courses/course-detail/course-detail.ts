@@ -35,18 +35,12 @@ import {
   BLOCK_START_HOUR,
   blockEndOptions,
   blockStartOptions,
+  formatTime,
   hourValue,
   nextBlockEnd,
   validBlockRange,
 } from '../../../shared/utils/schedule-hours';
-
-const DIAS = [
-  { label: 'Lunes', value: 1 },
-  { label: 'Martes', value: 2 },
-  { label: 'Miércoles', value: 3 },
-  { label: 'Jueves', value: 4 },
-  { label: 'Viernes', value: 5 },
-];
+import { LECTURE_WEEKDAYS, weekdayLabel } from '../../../shared/utils/weekdays';
 
 interface Option<T> {
   label: string;
@@ -64,6 +58,7 @@ interface BlockForm {
   start_time: string;
   end_time: string;
   room_id: number | null;
+  teacher_id: number | null;
 }
 
 type DeleteTarget = { kind: 'group'; group: Group } | { kind: 'block'; block: Block } | null;
@@ -95,7 +90,7 @@ export class CourseDetailPage {
   private readonly queryName = (this.route.snapshot.queryParamMap.get('name') ?? '').trim();
   private readonly queryCycle = Number(this.route.snapshot.queryParamMap.get('cycle') ?? 0);
 
-  readonly dias = DIAS;
+  readonly weekdays = LECTURE_WEEKDAYS;
   readonly roman = toRoman;
 
   readonly semester = this.qp.filter('semester');
@@ -114,11 +109,11 @@ export class CourseDetailPage {
   readonly teacherOptions = signal<Option<number>[]>([]);
   readonly roomOptions = signal<Option<number>[]>([]);
 
-  readonly horaInicio = signal('07:00');
-  readonly horaFin = signal('20:00');
-  readonly franja = computed(() => ({
-    from: Number(this.horaInicio().slice(0, 2)),
-    to: Number(this.horaFin().slice(0, 2)),
+  readonly attendanceStartTime = signal('07:00');
+  readonly attendanceEndTime = signal('20:00');
+  readonly scheduleHourRange = computed(() => ({
+    from: Number(this.attendanceStartTime().slice(0, 2)),
+    to: Number(this.attendanceEndTime().slice(0, 2)),
   }));
 
   readonly groupForm = signal<GroupForm>({
@@ -131,7 +126,9 @@ export class CourseDetailPage {
     start_time: '08:00',
     end_time: '10:00',
     room_id: null,
+    teacher_id: null,
   });
+  readonly editingBlockId = signal<number | null>(null);
   readonly startHours = blockStartOptions();
   readonly endHours = computed(() => blockEndOptions(this.blockForm().start_time));
 
@@ -141,19 +138,19 @@ export class CourseDetailPage {
   readonly deleteTarget = signal<DeleteTarget>(null);
 
   readonly selectedGroup = computed(() =>
-    this.groups().find((g) => g.id === this.selectedGroupId()) ?? null,
+    this.groups().find((group) => group.id === this.selectedGroupId()) ?? null,
   );
 
   readonly title = computed(() => {
-    const first = this.groups()[0];
-    const code = this.queryCode || first?.course_code || `#${this.courseId}`;
-    const name = this.queryName || first?.course_name || '';
-    return name ? `${code} · ${name}` : code;
+    const firstGroup = this.groups()[0];
+    const courseCode = this.queryCode || firstGroup?.course_code || `#${this.courseId}`;
+    const courseName = this.queryName || firstGroup?.course_name || '';
+    return courseName ? `${courseCode} · ${courseName}` : courseCode;
   });
 
   readonly courseCycle = computed(() => {
-    const first = this.groups()[0];
-    const cycle = first?.cycle ?? this.queryCycle;
+    const firstGroup = this.groups()[0];
+    const cycle = firstGroup?.cycle ?? this.queryCycle;
     return cycle >= 1 && cycle <= 10 ? cycle : null;
   });
 
@@ -165,27 +162,31 @@ export class CourseDetailPage {
   });
 
   readonly isCurrentPeriod = computed(() => {
-    const selected = this.semester();
-    const current = this.currentSemester();
-    return !selected || !current || selected === current;
+    const selectedSemester = this.semester();
+    const currentSemester = this.currentSemester();
+    return !selectedSemester || !currentSemester || selectedSemester === currentSemester;
   });
 
   readonly selectedGroupBlocks = computed(() =>
-    [...this.blocks()].sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time)),
+    [...this.blocks()].sort(
+      (firstBlock, secondBlock) =>
+        firstBlock.weekday - secondBlock.weekday ||
+        firstBlock.start_time.localeCompare(secondBlock.start_time),
+    ),
   );
 
   readonly scheduleEntries = computed<ScheduleEntry[]>(() => {
     const group = this.selectedGroup();
     if (!group) return [];
-    return this.blocks().map((b) => ({
-      id: b.id,
-      weekday: b.weekday,
-      start_time: b.start_time,
-      end_time: b.end_time,
+    return this.blocks().map((block) => ({
+      id: block.id,
+      weekday: block.weekday,
+      start_time: block.start_time,
+      end_time: block.end_time,
       course_code: group.course_code,
       course_name: group.course_name,
       group_code: group.group_code,
-      room_code: b.room_code,
+      room_code: block.room_code,
       teacher_name: group.teacher_name,
     }));
   });
@@ -201,26 +202,36 @@ export class CourseDetailPage {
 
   private async loadContext(): Promise<void> {
     try {
-      const [cfg, labels, teachers, rooms] = await Promise.all([
+      const [settings, semesterLabels, teacherPage, roomPage] = await Promise.all([
         this.calendar.settings().toPromise(),
         this.calendar.semesters().toPromise(),
         this.catalog.teachers({ page_size: 100 }).toPromise(),
         this.catalog.rooms({ page_size: 100 }).toPromise(),
       ]);
-      const vigente = cfg?.semester_label ?? null;
-      const opciones = [...new Set([vigente ?? '', ...(labels ?? []), this.semester() ?? ''])]
-        .filter((s) => s !== '');
-      this.currentSemester.set(vigente);
-      this.semesters.set(opciones);
-      if (!this.semester() && vigente) {
-        await this.qp.update({ semester: vigente });
+      const currentSemester = settings?.semester_label ?? null;
+      const semesterOptions = [
+        ...new Set([currentSemester ?? '', ...(semesterLabels ?? []), this.semester() ?? '']),
+      ].filter((semesterLabel) => semesterLabel !== '');
+      this.currentSemester.set(currentSemester);
+      this.semesters.set(semesterOptions);
+      if (!this.semester() && currentSemester) {
+        await this.qp.update({ semester: currentSemester });
       }
       this.teacherOptions.set(
-        (teachers?.items ?? []).map((t) => ({ label: t.full_name, value: t.id })),
+        (teacherPage?.items ?? []).map((teacher) => ({
+          label: teacher.full_name,
+          value: teacher.id,
+        })),
       );
-      this.roomOptions.set((rooms?.items ?? []).map((r) => ({ label: r.code, value: r.id })));
-      this.horaInicio.set(this.hora(cfg?.attendance_hour_start) ?? '07:00');
-      this.horaFin.set(this.hora(cfg?.attendance_hour_end) ?? '20:00');
+      this.roomOptions.set(
+        (roomPage?.items ?? []).map((room) => ({ label: room.code, value: room.id })),
+      );
+      this.attendanceStartTime.set(
+        settings?.attendance_hour_start ? formatTime(settings.attendance_hour_start) : '07:00',
+      );
+      this.attendanceEndTime.set(
+        settings?.attendance_hour_end ? formatTime(settings.attendance_hour_end) : '20:00',
+      );
     } catch (err) {
       this.toast.add({
         severity: 'warn',
@@ -232,16 +243,16 @@ export class CourseDetailPage {
   }
 
   private async loadGroups(semesterOverride?: string | null): Promise<void> {
-    const sem = semesterOverride ?? this.semester();
+    const semester = semesterOverride ?? this.semester();
     this.loading.set(true);
     this.error.set(null);
     try {
-      const list = await this.api.courseGroups(this.courseId, sem).toPromise();
-      const grupos = list ?? [];
-      this.groups.set(grupos);
-      const actual = this.selectedGroupId();
-      if (!grupos.some((g) => g.id === actual)) {
-        this.selectedGroupId.set(grupos[0]?.id ?? null);
+      const groupList = await this.api.courseGroups(this.courseId, semester).toPromise();
+      const groups = groupList ?? [];
+      this.groups.set(groups);
+      const selectedGroupId = this.selectedGroupId();
+      if (!groups.some((group) => group.id === selectedGroupId)) {
+        this.selectedGroupId.set(groups[0]?.id ?? null);
       }
       if (this.selectedGroupId() !== null) {
         await this.loadBlocks(this.selectedGroupId() as number);
@@ -258,8 +269,8 @@ export class CourseDetailPage {
   private async loadBlocks(groupId: number): Promise<void> {
     this.blocksLoading.set(true);
     try {
-      const list = await this.api.blocks(groupId).toPromise();
-      this.blocks.set(list ?? []);
+      const blockList = await this.api.blocks(groupId).toPromise();
+      this.blocks.set(blockList ?? []);
     } catch (err) {
       this.toast.add({
         severity: 'error',
@@ -296,36 +307,42 @@ export class CourseDetailPage {
   }
 
   blocksFor(weekday: number): Block[] {
-    return this.selectedGroupBlocks().filter((b) => b.weekday === weekday);
+    return this.selectedGroupBlocks().filter((block) => block.weekday === weekday);
   }
 
   onBlockAdd(event: { weekday: number; hour: number }): void {
-    this.openCreateBlock(event.weekday, this.hhmm(event.hour));
+    this.openCreateBlock(event.weekday, this.formatHour(event.hour));
   }
 
   onBlockRemove(entry: ScheduleEntry): void {
-    const block = this.blocks().find((b) => b.id === entry.id);
+    const block = this.blocks().find((candidate) => candidate.id === entry.id);
     if (block) this.askDeleteBlock(block);
   }
 
-  time(value: string): string {
-    return value.slice(0, 5);
+  onBlockEdit(entry: ScheduleEntry): void {
+    const block = this.blocks().find((candidate) => candidate.id === entry.id);
+    if (!block) return;
+    this.editingBlockId.set(block.id);
+    this.blockForm.set({
+      weekday: block.weekday,
+      start_time: formatTime(block.start_time),
+      end_time: formatTime(block.end_time),
+      room_id: block.room_id,
+      teacher_id: block.teacher_id ?? this.selectedGroup()?.teacher_id ?? null,
+    });
+    this.blockDialogVisible = true;
   }
 
-  dayLabel(weekday: number): string {
-    return DIAS.find((d) => d.value === weekday)?.label ?? `Día ${weekday}`;
-  }
-
-  cupoPercent(group: Group): number {
+  capacityPercent(group: Group): number {
     return group.capacity > 0
       ? Math.min(100, Math.round((group.enrolled_count / group.capacity) * 100))
       : 0;
   }
 
-  cupoClass(group: Group): string {
-    const pct = this.cupoPercent(group);
+  capacityClass(group: Group): string {
+    const percentage = this.capacityPercent(group);
     if (group.enrolled_count >= group.capacity) return 'bg-red-500';
-    return pct >= 80 ? 'bg-amber-500' : 'bg-green-500';
+    return percentage >= 80 ? 'bg-amber-500' : 'bg-green-500';
   }
 
   goBack(): void {
@@ -333,7 +350,7 @@ export class CourseDetailPage {
   }
 
   patch(p: Partial<GroupForm>): void {
-    this.groupForm.update((f) => ({ ...f, ...p }));
+    this.groupForm.update((form) => ({ ...form, ...p }));
   }
 
   openCreateGroup(): void {
@@ -342,8 +359,8 @@ export class CourseDetailPage {
   }
 
   async saveGroup(): Promise<void> {
-    const f = this.groupForm();
-    if (!f.group_code.trim() || !f.teacher_id) {
+    const form = this.groupForm();
+    if (!form.group_code.trim() || !form.teacher_id) {
       this.toast.add({
         severity: 'warn',
         summary: 'Completa el grupo',
@@ -356,9 +373,9 @@ export class CourseDetailPage {
     try {
       await this.api
         .createGroup(this.courseId, {
-          group_code: f.group_code.trim().toUpperCase(),
-          teacher_id: f.teacher_id,
-          capacity: Number(f.capacity) || 40,
+          group_code: form.group_code.trim().toUpperCase(),
+          teacher_id: form.teacher_id,
+          capacity: Number(form.capacity) || 40,
         })
         .toPromise();
       this.toast.add({
@@ -382,7 +399,7 @@ export class CourseDetailPage {
   }
 
   patchBlock(p: Partial<BlockForm>): void {
-    this.blockForm.update((f) => ({ ...f, ...p }));
+    this.blockForm.update((form) => ({ ...form, ...p }));
   }
 
   onStartTime(value: string): void {
@@ -395,15 +412,17 @@ export class CourseDetailPage {
 
   openCreateBlock(weekday?: number, hour?: string): void {
     const group = this.selectedGroup();
-    const delDia = this.blocksFor(weekday ?? 1);
-    const ultimo = delDia[delDia.length - 1];
-    const finAnterior = ultimo ? this.time(ultimo.end_time) : null;
-    const inicio = hour ?? finAnterior ?? '08:00';
+    const weekdayBlocks = this.blocksFor(weekday ?? 1);
+    const lastWeekdayBlock = weekdayBlocks[weekdayBlocks.length - 1];
+    const previousEndTime = lastWeekdayBlock ? formatTime(lastWeekdayBlock.end_time) : null;
+    const startTime = hour ?? previousEndTime ?? '08:00';
+    this.editingBlockId.set(null);
     this.blockForm.set({
       weekday: weekday ?? 1,
-      start_time: inicio,
-      end_time: nextBlockEnd(inicio),
-      room_id: ultimo?.room_id ?? this.blocks().at(-1)?.room_id ?? null,
+      start_time: startTime,
+      end_time: nextBlockEnd(startTime),
+      room_id: lastWeekdayBlock?.room_id ?? this.blocks().at(-1)?.room_id ?? null,
+      teacher_id: group?.teacher_id ?? null,
     });
     if (!group) {
       this.toast.add({
@@ -420,16 +439,12 @@ export class CourseDetailPage {
   async saveBlock(): Promise<void> {
     const group = this.selectedGroup();
     if (!group) return;
-    const f = this.blockForm();
-    if (!f.start_time || !f.end_time) {
+    const form = this.blockForm();
+    if (!form.start_time || !form.end_time) {
       this.toast.add({ severity: 'warn', summary: 'Indica hora de inicio y de fin', life: 3000 });
       return;
     }
-    if (!f.room_id) {
-      this.toast.add({ severity: 'warn', summary: 'Indica el aula del bloque', life: 3000 });
-      return;
-    }
-    if (!validBlockRange(f.start_time, f.end_time)) {
+    if (!validBlockRange(form.start_time, form.end_time)) {
       this.toast.add({
         severity: 'warn',
         summary: 'Rango inválido',
@@ -439,23 +454,41 @@ export class CourseDetailPage {
       });
       return;
     }
+    const editingBlockId = this.editingBlockId();
     this.saving.set(true);
     try {
-      await this.api
-        .createBlock(group.id, {
-          weekday: Number(f.weekday),
-          start_time: f.start_time,
-          end_time: f.end_time,
-          room_id: f.room_id,
-        })
-        .toPromise();
-      this.toast.add({ severity: 'success', summary: 'Bloque añadido', life: 2500 });
+      if (editingBlockId !== null) {
+        await this.api
+          .updateBlock(editingBlockId, {
+            weekday: Number(form.weekday),
+            start_time: form.start_time,
+            end_time: form.end_time,
+            room_id: form.room_id,
+            teacher_id: form.teacher_id,
+          })
+          .toPromise();
+        this.toast.add({ severity: 'success', summary: 'Bloque actualizado', life: 2500 });
+      } else {
+        await this.api
+          .createBlock(group.id, {
+            weekday: Number(form.weekday),
+            start_time: form.start_time,
+            end_time: form.end_time,
+            room_id: form.room_id,
+            teacher_id: form.teacher_id,
+          })
+          .toPromise();
+        this.toast.add({ severity: 'success', summary: 'Bloque añadido', life: 2500 });
+      }
       this.blockDialogVisible = false;
+      this.editingBlockId.set(null);
       await this.loadBlocks(group.id);
     } catch (err) {
       this.toast.add({
         severity: 'error',
-        summary: 'No se pudo añadir el bloque',
+        summary: editingBlockId !== null
+          ? 'No se pudo actualizar el bloque'
+          : 'No se pudo añadir el bloque',
         detail: extractDetail(err),
         life: 6000,
       });
@@ -475,11 +508,11 @@ export class CourseDetailPage {
   }
 
   deleteLabel(): string | null {
-    const t = this.deleteTarget();
-    if (!t) return null;
-    return t.kind === 'group'
-      ? `grupo ${t.group.group_code}`
-      : `${this.dayLabel(t.block.weekday)} ${this.time(t.block.start_time)}–${this.time(t.block.end_time)}`;
+    const target = this.deleteTarget();
+    if (!target) return null;
+    return target.kind === 'group'
+      ? `grupo ${target.group.group_code}`
+      : `${weekdayLabel(target.block.weekday)} ${formatTime(target.block.start_time)}–${formatTime(target.block.end_time)}`;
   }
 
   deleteEntity(): string {
@@ -491,10 +524,10 @@ export class CourseDetailPage {
   }
 
   deleteWarning(): string | null {
-    const t = this.deleteTarget();
-    if (!t || t.kind !== 'group') return null;
-    return t.group.enrolled_count > 0
-      ? `El grupo tiene ${t.group.enrolled_count} alumno(s) matriculado(s): conservarán su historial, pero el grupo dejará de abrir sesiones.`
+    const target = this.deleteTarget();
+    if (!target || target.kind !== 'group') return null;
+    return target.group.enrolled_count > 0
+      ? `El grupo tiene ${target.group.enrolled_count} alumno(s) matriculado(s): conservarán su historial, pero el grupo dejará de abrir sesiones.`
       : null;
   }
 
@@ -527,17 +560,17 @@ export class CourseDetailPage {
   }
 
   async confirmDelete(): Promise<void> {
-    const t = this.deleteTarget();
-    if (!t) return;
+    const target = this.deleteTarget();
+    if (!target) return;
     this.deleting.set(true);
     try {
-      if (t.kind === 'group') {
-        await this.api.deactivateGroup(t.group.id).toPromise();
+      if (target.kind === 'group') {
+        await this.api.deactivateGroup(target.group.id).toPromise();
         this.toast.add({ severity: 'success', summary: 'Grupo desactivado', life: 2500 });
         this.selectedGroupId.set(null);
         await this.loadGroups();
       } else {
-        await this.api.deleteBlock(t.block.id).toPromise();
+        await this.api.deleteBlock(target.block.id).toPromise();
         this.toast.add({ severity: 'success', summary: 'Bloque eliminado', life: 2500 });
         const groupId = this.selectedGroupId();
         if (groupId !== null) await this.loadBlocks(groupId);
@@ -557,11 +590,7 @@ export class CourseDetailPage {
     }
   }
 
-  private hhmm(hour: number): string {
+  private formatHour(hour: number): string {
     return hourValue(Math.min(Math.max(hour, BLOCK_START_HOUR), BLOCK_END_HOUR - 1));
-  }
-
-  private hora(value: string | null | undefined): string | null {
-    return value ? value.slice(0, 5) : null;
   }
 }

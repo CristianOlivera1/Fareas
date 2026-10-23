@@ -11,6 +11,19 @@ export function hourValue(hour: number): string {
   return `${String(hour).padStart(2, '0')}:00`;
 }
 
+export function formatTime(value: string): string {
+  return value.slice(0, 5);
+}
+
+export function timeToMinutes(value: string): number | null {
+  const match = /^(\d{2}):(\d{2})/.exec(value);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
 export function hourNumber(value: string): number {
   return Number(value.slice(0, 2));
 }

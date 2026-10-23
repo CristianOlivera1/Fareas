@@ -77,11 +77,11 @@
   </span>
   @if (cycleSelected()) {
     <span class="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
-      {{ libres() }} h libres en el ciclo
+      {{ availableHours() }} h libres en el ciclo
     </span>
   } @else {
     <span class="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
-      {{ ocupadas() }} h de clase en el periodo
+      {{ scheduledHours() }} h de clase en el periodo
     </span>
   }
   @if (filtersActive()) {
@@ -94,36 +94,42 @@
 
 <app-schedule-table
   [entries]="entries()"
-  [hourFrom]="franja().from"
-  [hourTo]="franja().to"
+  [hourFrom]="scheduleHourRange().from"
+  [hourTo]="scheduleHourRange().to"
   [canEdit]="auth.isAdmin()"
   (blockAdd)="openCreateBlock($event.weekday, $event.hour)"
+  (blockEdit)="onBlockEdit($event)"
   (blockRemove)="onBlockRemove($event)"
 />
 
 <p class="mt-2 text-xs text-gray-400">
-  Franja de clases {{ horaInicio() }}–{{ horaFin() }} (Parámetros), de Lunes a Viernes.
+  Franja de clases {{ attendanceStartTime() }}–{{ attendanceEndTime() }} (Parámetros), de Lunes a Viernes.
   Selecciona un ciclo para ver su semana; “Todos” mezcla los ciclos del periodo.
   @if (auth.isAdmin()) {
-    Haz clic en una hora libre para añadir una clase ahí: el día y la hora ya vienen puestos y el
-    aula se prellena con la del grupo.
+    Haz clic en una hora libre para añadir una clase ahí: el día y la hora ya vienen puestos. Usa
+    el lápiz de una clase para completar su docente o aula.
   } @else {
-    Cada bloque lleva su propia aula; los choques de aula o docente los valida el sistema al crearlo.
+    Cada bloque puede llevar su propia aula; los choques se validan cuando el aula y el docente
+    están definidos.
   }
 </p>
 
-<p-dialog header="Nuevo bloque de horario" [(visible)]="blockDialogVisible" [modal]="true"
-  [style]="{ width: '460px' }">
+<p-dialog [header]="editingBlockId() !== null ? 'Editar bloque de horario' : 'Nuevo bloque de horario'"
+  [(visible)]="blockDialogVisible" [modal]="true" [style]="{ width: '460px' }">
   <div class="space-y-4 pt-2">
     <label class="block space-y-1">
       <span class="text-sm font-medium text-gray-700">Grupo <span class="text-red-500">*</span></span>
       <p-select class="w-full" appendTo="body" [options]="groupOptions()" optionLabel="label"
         optionValue="value" placeholder="Curso · grupo · docente" [filter]="true" filterBy="label"
-        [ngModel]="blockForm().group_id" (ngModelChange)="onGroup($event)" />
+        [disabled]="editingBlockId() !== null" [ngModel]="blockForm().group_id"
+        (ngModelChange)="onGroup($event)" />
+      @if (editingBlockId() !== null) {
+        <span class="text-xs text-gray-400">El bloque no cambia de grupo al editarlo.</span>
+      }
     </label>
     <label class="block space-y-1">
       <span class="text-sm font-medium text-gray-700">Día <span class="text-red-500">*</span></span>
-      <p-select class="w-full" appendTo="body" [options]="dias" optionLabel="label"
+      <p-select class="w-full" appendTo="body" [options]="weekdays" optionLabel="label"
         optionValue="value" [ngModel]="blockForm().weekday"
         (ngModelChange)="patchBlock({ weekday: $event })" />
     </label>
@@ -142,22 +148,36 @@
       </label>
     </div>
     <label class="block space-y-1">
-      <span class="text-sm font-medium text-gray-700">Aula <span class="text-red-500">*</span></span>
-      <p-select class="w-full" appendTo="body" [options]="roomOptions()" optionLabel="label"
-        optionValue="value" placeholder="Aula del bloque" [filter]="true" filterBy="label"
-        [ngModel]="blockForm().room_id" (ngModelChange)="patchBlock({ room_id: $event })" />
+      <span class="text-sm font-medium text-gray-700">Docente (opcional)</span>
+      <p-select class="w-full" appendTo="body" [options]="teacherOptions()" optionLabel="label"
+        optionValue="value" placeholder="Sin asignar" [filter]="true" filterBy="label"
+        [showClear]="true" [ngModel]="blockForm().teacher_id"
+        (ngModelChange)="patchBlock({ teacher_id: $event })" />
       <span class="text-xs text-gray-400">
-        Se prellena con el aula del último bloque del grupo; puedes cambiarla.
+        Se aplica a todo el grupo; puedes completarlo o cambiarlo después.
+      </span>
+    </label>
+    <label class="block space-y-1">
+      <span class="text-sm font-medium text-gray-700">Aula (opcional)</span>
+      <p-select class="w-full" appendTo="body" [options]="roomOptions()" optionLabel="label"
+        optionValue="value" placeholder="Sin asignar" [filter]="true" filterBy="label"
+        [showClear]="true" [ngModel]="blockForm().room_id"
+        (ngModelChange)="patchBlock({ room_id: $event })" />
+      <span class="text-xs text-gray-400">
+        Se prellena con el aula del último bloque del grupo; puedes cambiarla o dejarla vacía.
       </span>
     </label>
     <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-      Bloques de 1 h o 2 h, en horas exactas (sin minutos), entre las {{ horaInicio() }} y las
-      {{ horaFin() }}. No puede cruzarse con otro de la misma aula ni con otro del mismo docente.
+      Bloques de 1 h o 2 h, en horas exactas (sin minutos), entre las {{ attendanceStartTime() }} y las
+      {{ attendanceEndTime() }}. Sin docente o sin aula el bloque se guarda como pendiente y no abre sesiones
+      de asistencia; los choques se validan cuando ambos datos existen.
     </app-ui-alert>
   </div>
   <ng-template pTemplate="footer">
     <app-ui-button variant="ghost" (click)="blockDialogVisible = false">Cancelar</app-ui-button>
-    <app-ui-button [loading]="saving()" (click)="saveBlock()">Añadir bloque</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="saveBlock()">
+      {{ editingBlockId() !== null ? 'Guardar cambios' : 'Añadir bloque' }}
+    </app-ui-button>
   </ng-template>
 </p-dialog>
 

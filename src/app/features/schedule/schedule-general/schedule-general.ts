@@ -33,18 +33,12 @@ import {
   BLOCK_START_HOUR,
   blockEndOptions,
   blockStartOptions,
+  formatTime,
   hourValue,
   nextBlockEnd,
   validBlockRange,
 } from '../../../shared/utils/schedule-hours';
-
-const DIAS = [
-  { label: 'Lunes', value: 1 },
-  { label: 'Martes', value: 2 },
-  { label: 'Miércoles', value: 3 },
-  { label: 'Jueves', value: 4 },
-  { label: 'Viernes', value: 5 },
-];
+import { LECTURE_WEEKDAYS, weekdayLabel } from '../../../shared/utils/weekdays';
 
 interface Option<T> {
   label: string;
@@ -57,6 +51,7 @@ interface BlockForm {
   start_time: string;
   end_time: string;
   room_id: number | null;
+  teacher_id: number | null;
 }
 
 @Component({
@@ -79,7 +74,7 @@ export class ScheduleGeneralPage {
 
   private readonly deleteModal = viewChild(ModalDelete);
 
-  readonly dias = DIAS;
+  readonly weekdays = LECTURE_WEEKDAYS;
   readonly cycles = CYCLES;
   readonly roman = toRoman;
   readonly semester = this.qp.filter('semester');
@@ -100,11 +95,11 @@ export class ScheduleGeneralPage {
   readonly teacherId = signal(0);
   readonly roomId = signal(0);
 
-  readonly horaInicio = signal('07:00');
-  readonly horaFin = signal('20:00');
-  readonly franja = computed(() => ({
-    from: Number(this.horaInicio().slice(0, 2)),
-    to: Number(this.horaFin().slice(0, 2)),
+  readonly attendanceStartTime = signal('07:00');
+  readonly attendanceEndTime = signal('20:00');
+  readonly scheduleHourRange = computed(() => ({
+    from: Number(this.attendanceStartTime().slice(0, 2)),
+    to: Number(this.attendanceEndTime().slice(0, 2)),
   }));
 
   readonly filtersActive = computed(
@@ -127,37 +122,38 @@ export class ScheduleGeneralPage {
   });
 
   readonly entries = computed<ScheduleEntry[]>(() =>
-    this.visibleRows().map((r) => ({
-      id: r.id,
-      weekday: r.weekday,
-      start_time: r.start_time,
-      end_time: r.end_time,
-      course_code: r.course_code,
-      course_name: r.course_name,
-      group_code: r.group_code,
-      room_code: r.room_code,
-      teacher_name: r.teacher_name,
+    this.visibleRows().map((row) => ({
+      id: row.id,
+      weekday: row.weekday,
+      start_time: row.start_time,
+      end_time: row.end_time,
+      course_code: row.course_code,
+      course_name: row.course_name,
+      group_code: row.group_code,
+      room_code: row.room_code,
+      teacher_name: row.teacher_name,
     })),
   );
 
-  readonly ocupadas = computed(() =>
+  readonly scheduledHours = computed(() =>
     this.visibleRows().reduce(
-      (total, r) => total + (this.minutos(r.end_time) - this.minutos(r.start_time)) / 60,
+      (total, row) =>
+        total + (this.timeToMinutes(row.end_time) - this.timeToMinutes(row.start_time)) / 60,
       0,
     ),
   );
-  readonly libres = computed(() => {
-    const porDia = this.franja().to - this.franja().from;
-    return Math.max(0, porDia * DIAS.length - this.ocupadas());
+  readonly availableHours = computed(() => {
+    const hoursPerDay = this.scheduleHourRange().to - this.scheduleHourRange().from;
+    return Math.max(0, hoursPerDay * LECTURE_WEEKDAYS.length - this.scheduledHours());
   });
 
   readonly groupOptions = computed<Option<number>[]>(() => {
     const cycle = this.cycleId();
     return this.groups()
-      .filter((g) => !cycle || g.cycle === cycle)
-      .map((g) => ({
-        label: `${g.course_code} · Grupo ${g.group_code} · Ciclo ${this.roman(g.cycle)} · ${g.teacher_name}`,
-        value: g.id,
+      .filter((group) => !cycle || group.cycle === cycle)
+      .map((group) => ({
+        label: `${group.course_code} · Grupo ${group.group_code} · Ciclo ${this.roman(group.cycle)} · ${group.teacher_name ?? 'Sin docente'}`,
+        value: group.id,
       }));
   });
 
@@ -167,7 +163,9 @@ export class ScheduleGeneralPage {
     start_time: '08:00',
     end_time: '10:00',
     room_id: null,
+    teacher_id: null,
   });
+  readonly editingBlockId = signal<number | null>(null);
   readonly startHours = blockStartOptions();
   readonly endHours = computed(() => blockEndOptions(this.blockForm().start_time));
   blockDialogVisible = false;
@@ -189,27 +187,42 @@ export class ScheduleGeneralPage {
 
   private async loadContext(): Promise<void> {
     try {
-      const [cfg, labels, courses, teachers, rooms] = await Promise.all([
+      const [settings, semesterLabels, coursePage, teacherPage, roomPage] = await Promise.all([
         this.calendar.settings().toPromise(),
         this.calendar.semesters().toPromise(),
         this.api.courses({ page_size: 100 }).toPromise(),
         this.catalog.teachers({ page_size: 100 }).toPromise(),
         this.catalog.rooms({ page_size: 100 }).toPromise(),
       ]);
-      const vigente = cfg?.semester_label ?? null;
-      this.semesters.set([...new Set([vigente ?? '', ...(labels ?? [])])].filter((s) => s !== ''));
-      if (!this.semester() && vigente) {
-        await this.qp.update({ semester: vigente });
+      const currentSemester = settings?.semester_label ?? null;
+      this.semesters.set(
+        [...new Set([currentSemester ?? '', ...(semesterLabels ?? [])])]
+          .filter((semesterLabel) => semesterLabel !== ''),
+      );
+      if (!this.semester() && currentSemester) {
+        await this.qp.update({ semester: currentSemester });
       }
       this.courseOptions.set(
-        (courses?.items ?? []).map((c) => ({ label: `${c.code} · ${c.name}`, value: c.id })),
+        (coursePage?.items ?? []).map((course) => ({
+          label: `${course.code} · ${course.name}`,
+          value: course.id,
+        })),
       );
       this.teacherOptions.set(
-        (teachers?.items ?? []).map((t) => ({ label: t.full_name, value: t.id })),
+        (teacherPage?.items ?? []).map((teacher) => ({
+          label: teacher.full_name,
+          value: teacher.id,
+        })),
       );
-      this.roomOptions.set((rooms?.items ?? []).map((r) => ({ label: r.code, value: r.id })));
-      this.horaInicio.set(this.hora(cfg?.attendance_hour_start) ?? '07:00');
-      this.horaFin.set(this.hora(cfg?.attendance_hour_end) ?? '20:00');
+      this.roomOptions.set(
+        (roomPage?.items ?? []).map((room) => ({ label: room.code, value: room.id })),
+      );
+      this.attendanceStartTime.set(
+        settings?.attendance_hour_start ? formatTime(settings.attendance_hour_start) : '07:00',
+      );
+      this.attendanceEndTime.set(
+        settings?.attendance_hour_end ? formatTime(settings.attendance_hour_end) : '20:00',
+      );
     } catch (err) {
       this.toast.add({
         severity: 'warn',
@@ -224,20 +237,20 @@ export class ScheduleGeneralPage {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const sem = this.semester();
-      const [rows, groups] = await Promise.all([
+      const semester = this.semester();
+      const [scheduleRows, groupList] = await Promise.all([
         this.api
           .schedule({
-            semester: sem ?? undefined,
+            semester: semester ?? undefined,
             course_id: this.courseId() || undefined,
             teacher_id: this.teacherId() || undefined,
             room_id: this.roomId() || undefined,
           })
           .toPromise(),
-        this.api.groups({ semester: sem ?? undefined }).toPromise(),
+        this.api.groups({ semester: semester ?? undefined }).toPromise(),
       ]);
-      this.rows.set(rows ?? []);
-      this.groups.set(groups ?? []);
+      this.rows.set(scheduleRows ?? []);
+      this.groups.set(groupList ?? []);
     } catch (err) {
       this.error.set(extractDetail(err));
       this.rows.set([]);
@@ -301,42 +314,66 @@ export class ScheduleGeneralPage {
   }
 
   openCreateBlock(weekday?: number, hour?: number): void {
-    const inicio = hour !== undefined ? this.hhmm(hour) : '08:00';
+    const startTime = hour !== undefined ? this.formatHour(hour) : '08:00';
+    this.editingBlockId.set(null);
     this.blockForm.set({
       group_id: null,
       weekday: weekday ?? 1,
-      start_time: inicio,
-      end_time: nextBlockEnd(inicio),
+      start_time: startTime,
+      end_time: nextBlockEnd(startTime),
       room_id: this.roomId() || null,
+      teacher_id: null,
+    });
+    this.blockDialogVisible = true;
+  }
+
+  openEditBlock(entry: ScheduleEntry): void {
+    const row = this.rows().find((item) => item.id === entry.id);
+    if (!row) return;
+    this.editingBlockId.set(row.id);
+    this.blockForm.set({
+      group_id: row.group_id,
+      weekday: row.weekday,
+      start_time: formatTime(row.start_time),
+      end_time: formatTime(row.end_time),
+      room_id: row.room_id,
+      teacher_id: row.teacher_id,
     });
     this.blockDialogVisible = true;
   }
 
   async onGroup(value: number | null): Promise<void> {
-    this.patchBlock({ group_id: value, room_id: value ? null : this.blockForm().room_id });
+    const group = this.groups().find((item) => item.id === value);
+    this.patchBlock({
+      group_id: value,
+      teacher_id: group?.teacher_id ?? null,
+      room_id: value ? null : this.blockForm().room_id,
+    });
     if (!value) return;
     try {
       const blocks = (await this.api.blocks(value).toPromise()) ?? [];
-      const dia = this.blockForm().weekday;
-      const delDia = blocks.filter((b) => b.weekday === dia).at(-1);
-      const ultimo = blocks.at(-1);
-      const room = delDia?.room_id ?? ultimo?.room_id ?? null;
-      this.patchBlock({ room_id: room });
-    } catch {
+      const weekday = this.blockForm().weekday;
+      const lastWeekdayBlock = blocks.filter((block) => block.weekday === weekday).at(-1);
+      const lastBlock = blocks.at(-1);
+      const roomId = lastWeekdayBlock?.room_id ?? lastBlock?.room_id ?? null;
+      this.patchBlock({ room_id: roomId });
+    } catch (err) {
+      this.toast.add({
+        severity: 'error',
+        summary: 'No se pudo cargar el aula del grupo',
+        detail: extractDetail(err),
+        life: 4000,
+      });
     }
   }
 
   async saveBlock(): Promise<void> {
-    const f = this.blockForm();
-    if (!f.group_id) {
+    const form = this.blockForm();
+    if (!form.group_id) {
       this.toast.add({ severity: 'warn', summary: 'Elige el grupo del bloque', life: 3000 });
       return;
     }
-    if (!f.room_id) {
-      this.toast.add({ severity: 'warn', summary: 'Indica el aula del bloque', life: 3000 });
-      return;
-    }
-    if (!validBlockRange(f.start_time, f.end_time)) {
+    if (!validBlockRange(form.start_time, form.end_time)) {
       this.toast.add({
         severity: 'warn',
         summary: 'Rango inválido',
@@ -346,23 +383,41 @@ export class ScheduleGeneralPage {
       });
       return;
     }
+    const editingBlockId = this.editingBlockId();
     this.saving.set(true);
     try {
-      await this.api
-        .createBlock(f.group_id, {
-          weekday: Number(f.weekday),
-          start_time: f.start_time,
-          end_time: f.end_time,
-          room_id: f.room_id,
-        })
-        .toPromise();
-      this.toast.add({ severity: 'success', summary: 'Bloque añadido', life: 2500 });
+      if (editingBlockId !== null) {
+        await this.api
+          .updateBlock(editingBlockId, {
+            weekday: Number(form.weekday),
+            start_time: form.start_time,
+            end_time: form.end_time,
+            room_id: form.room_id,
+            teacher_id: form.teacher_id,
+          })
+          .toPromise();
+        this.toast.add({ severity: 'success', summary: 'Bloque actualizado', life: 2500 });
+      } else {
+        await this.api
+          .createBlock(form.group_id, {
+            weekday: Number(form.weekday),
+            start_time: form.start_time,
+            end_time: form.end_time,
+            room_id: form.room_id,
+            teacher_id: form.teacher_id,
+          })
+          .toPromise();
+        this.toast.add({ severity: 'success', summary: 'Bloque añadido', life: 2500 });
+      }
       this.blockDialogVisible = false;
+      this.editingBlockId.set(null);
       await this.load();
     } catch (err) {
       this.toast.add({
         severity: 'error',
-        summary: 'No se pudo añadir el bloque',
+        summary: editingBlockId !== null
+          ? 'No se pudo actualizar el bloque'
+          : 'No se pudo añadir el bloque',
         detail: extractDetail(err),
         life: 6000,
       });
@@ -371,8 +426,12 @@ export class ScheduleGeneralPage {
     }
   }
 
+  onBlockEdit(entry: ScheduleEntry): void {
+    this.openEditBlock(entry);
+  }
+
   onBlockRemove(entry: ScheduleEntry): void {
-    const row = this.rows().find((r) => r.id === entry.id);
+    const row = this.rows().find((scheduleRow) => scheduleRow.id === entry.id);
     if (row) {
       this.deleteTarget.set(row);
       this.deleteVisible = true;
@@ -380,18 +439,18 @@ export class ScheduleGeneralPage {
   }
 
   deleteLabel(): string | null {
-    const r = this.deleteTarget();
-    return r
-      ? `${r.course_code} G${r.group_code} · ${DIAS[r.weekday - 1]?.label ?? r.weekday} ${this.time(r.start_time)}–${this.time(r.end_time)}`
+    const row = this.deleteTarget();
+    return row
+      ? `${row.course_code} G${row.group_code} · ${weekdayLabel(row.weekday)} ${formatTime(row.start_time)}–${formatTime(row.end_time)}`
       : null;
   }
 
   async confirmDelete(): Promise<void> {
-    const r = this.deleteTarget();
-    if (!r) return;
+    const row = this.deleteTarget();
+    if (!row) return;
     this.deleting.set(true);
     try {
-      await this.api.deleteBlock(r.id).toPromise();
+      await this.api.deleteBlock(row.id).toPromise();
       this.toast.add({ severity: 'success', summary: 'Bloque eliminado', life: 2500 });
       await this.load();
     } catch (err) {
@@ -409,20 +468,12 @@ export class ScheduleGeneralPage {
     }
   }
 
-  time(value: string): string {
-    return value.slice(0, 5);
-  }
-
-  protected hhmm(hour: number): string {
+  protected formatHour(hour: number): string {
     return hourValue(Math.min(Math.max(hour, BLOCK_START_HOUR), BLOCK_END_HOUR - 1));
   }
 
-  private hora(value: string | null | undefined): string | null {
-    return value ? value.slice(0, 5) : null;
-  }
-
-  private minutos(value: string): number {
-    const [h, m] = value.slice(0, 5).split(':').map(Number);
-    return h * 60 + (m || 0);
+  private timeToMinutes(value: string): number {
+    const [hours, minutes] = formatTime(value).split(':').map(Number);
+    return hours * 60 + (minutes || 0);
   }
 }

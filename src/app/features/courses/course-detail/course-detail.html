@@ -111,7 +111,7 @@
 
             <span class="mt-3 flex items-center gap-1.5 text-xs text-gray-600">
               <iconify-icon icon="material-symbols:person-outline" width="15" class="shrink-0 text-gray-400"></iconify-icon>
-              <span class="truncate">{{ g.teacher_name }}</span>
+              <span class="truncate">{{ g.teacher_name || 'Sin docente' }}</span>
             </span>
 
             <span class="mt-3 block">
@@ -120,7 +120,7 @@
                 <span class="tabular-nums font-medium text-gray-700">{{ g.enrolled_count }}/{{ g.capacity }}</span>
               </span>
               <span class="block h-1.5 overflow-hidden rounded-full bg-gray-100">
-                <span class="block h-full rounded-full" [class]="cupoClass(g)" [style.width.%]="cupoPercent(g)"></span>
+                <span class="block h-full rounded-full" [class]="capacityClass(g)" [style.width.%]="capacityPercent(g)"></span>
               </span>
             </span>
 
@@ -172,7 +172,7 @@
       <div>
         <h2 id="schedule-title" class="text-sm font-semibold text-gray-900">Horario semanal</h2>
         <p class="mt-0.5 text-xs text-gray-500">
-          Grupo {{ g.group_code }} · {{ g.teacher_name }} · Ciclo {{ roman(g.cycle) }} · {{ g.semester_label }}
+          Grupo {{ g.group_code }} · {{ g.teacher_name || 'Sin docente' }} · Ciclo {{ roman(g.cycle) }} · {{ g.semester_label }}
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
@@ -187,13 +187,15 @@
       </div>
     </div>
 
-    <app-schedule-table [entries]="scheduleEntries()" [hourFrom]="franja().from" [hourTo]="franja().to"
-      [canEdit]="auth.isAdmin()" (blockAdd)="onBlockAdd($event)" (blockRemove)="onBlockRemove($event)" />
+    <app-schedule-table [entries]="scheduleEntries()" [hourFrom]="scheduleHourRange().from" [hourTo]="scheduleHourRange().to"
+      [canEdit]="auth.isAdmin()" (blockAdd)="onBlockAdd($event)" (blockEdit)="onBlockEdit($event)"
+      (blockRemove)="onBlockRemove($event)" />
 
     <p class="mt-2 text-xs text-gray-400">
-      Franja de clases {{ horaInicio() }}–{{ horaFin() }} (Parámetros), de Lunes a Viernes. Cada
-      bloque lleva su aula y es una sesión independiente: su apertura, su tolerancia y su cierre se
-      calculan con su propia hora de inicio y fin (RF-23/RF-26).
+      Franja de clases {{ attendanceStartTime() }}–{{ attendanceEndTime() }} (Parámetros), de Lunes a Viernes. Cada
+      bloque puede llevar su propia aula y es una sesión independiente: su apertura, su tolerancia
+      y su cierre se calculan con su propia hora de inicio y fin (RF-23/RF-26). Si falta el docente
+      o el aula, el bloque queda pendiente y no abre sesiones.
     </p>
   </section>
 }
@@ -220,12 +222,12 @@
   </ng-template>
 </p-dialog>
 
-<p-dialog header="Nuevo bloque de horario" [(visible)]="blockDialogVisible" [modal]="true"
-  [style]="{ width: '92vw', maxWidth: '440px' }">
+<p-dialog [header]="editingBlockId() !== null ? 'Editar bloque de horario' : 'Nuevo bloque de horario'"
+  [(visible)]="blockDialogVisible" [modal]="true" [style]="{ width: '92vw', maxWidth: '440px' }">
   <div class="space-y-4 pt-2">
     <label class="block space-y-1">
       <span class="text-sm font-medium text-gray-700">Día <span class="text-red-500">*</span></span>
-      <p-select class="w-full" appendTo="body" [options]="dias" optionLabel="label" optionValue="value"
+      <p-select class="w-full" appendTo="body" [options]="weekdays" optionLabel="label" optionValue="value"
         [ngModel]="blockForm().weekday" (ngModelChange)="patchBlock({ weekday: $event })" />
     </label>
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -243,21 +245,31 @@
       </label>
     </div>
     <label class="block space-y-1">
-      <span class="text-sm font-medium text-gray-700">Aula <span class="text-red-500">*</span></span>
+      <span class="text-sm font-medium text-gray-700">Docente (opcional)</span>
+      <p-select class="w-full" appendTo="body" [options]="teacherOptions()" optionLabel="label"
+        optionValue="value" placeholder="Sin asignar" [filter]="true" filterBy="label"
+        [showClear]="true" [ngModel]="blockForm().teacher_id"
+        (ngModelChange)="patchBlock({ teacher_id: $event })" />
+      <span class="text-xs text-gray-400">Se aplica a todo el grupo.</span>
+    </label>
+    <label class="block space-y-1">
+      <span class="text-sm font-medium text-gray-700">Aula (opcional)</span>
       <p-select class="w-full" appendTo="body" [options]="roomOptions()" optionLabel="label" optionValue="value"
-        placeholder="Aula del bloque" [filter]="true" filterBy="label" [ngModel]="blockForm().room_id"
-        (ngModelChange)="patchBlock({ room_id: $event })" />
+        placeholder="Sin asignar" [filter]="true" filterBy="label" [showClear]="true"
+        [ngModel]="blockForm().room_id" (ngModelChange)="patchBlock({ room_id: $event })" />
       <span class="text-xs text-gray-400">Se prellena con el aula del último bloque del grupo.</span>
     </label>
     <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-      Bloques de 1 h o 2 h, en horas exactas (sin minutos), entre las {{ horaInicio() }} y las
-      {{ horaFin() }} y dentro de la semana de Lunes a Viernes. El bloque no puede cruzarse con
-      otro de la misma aula ni con otro del mismo docente.
+      Bloques de 1 h o 2 h, en horas exactas (sin minutos), entre las {{ attendanceStartTime() }} y las
+      {{ attendanceEndTime() }} y dentro de la semana de Lunes a Viernes. Sin docente o sin aula el bloque
+      queda pendiente y no abre sesiones de asistencia.
     </app-ui-alert>
   </div>
   <ng-template pTemplate="footer">
     <app-ui-button variant="ghost" (click)="blockDialogVisible = false">Cancelar</app-ui-button>
-    <app-ui-button [loading]="saving()" (click)="saveBlock()">Añadir bloque</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="saveBlock()">
+      {{ editingBlockId() !== null ? 'Guardar cambios' : 'Añadir bloque' }}
+    </app-ui-button>
   </ng-template>
 </p-dialog>
 

@@ -6,6 +6,8 @@ import {
   input,
   output,
 } from '@angular/core';
+import { formatTime, hourValue } from '../../utils/schedule-hours';
+import { weekdayLabel } from '../../utils/weekdays';
 
 export interface ScheduleEntry {
   readonly id: number | string;
@@ -32,9 +34,7 @@ interface Row {
   readonly cells: Cell[];
 }
 
-const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-
-const TONOS = 8;
+const TONE_COUNT = 8;
 
 @Component({
   selector: 'app-schedule-table',
@@ -50,100 +50,116 @@ export class ScheduleTable {
   readonly days = input<readonly number[]>([1, 2, 3, 4, 5]);
   readonly hourFrom = input(7);
   readonly hourTo = input(20);
-  protected readonly horaRem = 4;
+  protected readonly hourHeightRem = 4;
   readonly canEdit = input(false);
   readonly blockAdd = output<{ weekday: number; hour: number }>();
+  readonly blockEdit = output<ScheduleEntry>();
   readonly blockRemove = output<ScheduleEntry>();
+  protected readonly formatTime = formatTime;
+  protected readonly weekdayLabel = weekdayLabel;
 
-  protected readonly dayLabels = computed(() =>
-    this.days().map((value) => ({ value, label: DIAS[value - 1] ?? `Día ${value}` })),
+  protected readonly weekdayOptions = computed(() =>
+    this.days().map((value) => ({ value, label: weekdayLabel(value) })),
   );
 
   protected readonly rows = computed(() => this.build(this.entries()));
 
-  protected dayLabel(weekday: number): string {
-    return DIAS[weekday - 1] ?? `Día ${weekday}`;
+  protected cellHeight(rowspan: number): number {
+    return rowspan * this.hourHeightRem;
   }
 
-  protected altoCelda(rowspan: number): number {
-    return rowspan * this.horaRem;
-  }
-
-  protected hhmm(value: string): string {
-    return value.slice(0, 5);
-  }
-
-  protected tono(courseCode: string): number {
+  protected courseColorIndex(courseCode: string): number {
     let hash = 0;
     for (const ch of courseCode) hash = (hash * 31 + ch.charCodeAt(0)) % 9973;
-    return hash % TONOS;
+    return hash % TONE_COUNT;
   }
 
   private minutes(value: string): number {
-    const [h, m] = this.hhmm(value).split(':').map(Number);
-    return h * 60 + m;
-  }
-
-  private hora(hour: number): string {
-    return `${String(hour).padStart(2, '0')}:00`;
+    const [hours, minutes] = formatTime(value).split(':').map(Number);
+    return hours * 60 + minutes;
   }
 
   private build(entries: readonly ScheduleEntry[]): Row[] {
-    const dias = this.days();
-    const bloques = entries.map((e) => {
-      const desde = Math.floor(this.minutes(e.start_time) / 60);
-      const hasta = Math.max(desde + 1, Math.ceil(this.minutes(e.end_time) / 60));
-      return { e, desde, hasta };
+    const weekdays = this.days();
+    const scheduleBlocks = entries.map((entry) => {
+      const startHour = Math.floor(this.minutes(entry.start_time) / 60);
+      const endHour = Math.max(startHour + 1, Math.ceil(this.minutes(entry.end_time) / 60));
+      return { entry, startHour, endHour };
     });
 
-    const inicio = bloques.length ? Math.min(this.hourFrom(), ...bloques.map((b) => b.desde)) : this.hourFrom();
-    const fin = bloques.length ? Math.max(this.hourTo(), ...bloques.map((b) => b.hasta)) : this.hourTo();
+    const startHour = scheduleBlocks.length
+      ? Math.min(this.hourFrom(), ...scheduleBlocks.map((block) => block.startHour))
+      : this.hourFrom();
+    const endHour = scheduleBlocks.length
+      ? Math.max(this.hourTo(), ...scheduleBlocks.map((block) => block.endHour))
+      : this.hourTo();
 
-    const porDia = new Map<number, Cell[]>(
-      dias.map((d) => [d, this.cellsDelDia(bloques.filter((b) => b.e.weekday === d), inicio, fin, d)]),
+    const cellsByWeekday = new Map<number, Cell[]>(
+      weekdays.map((weekday) => [
+        weekday,
+        this.buildWeekdayCells(
+          scheduleBlocks.filter((block) => block.entry.weekday === weekday),
+          startHour,
+          endHour,
+          weekday,
+        ),
+      ]),
     );
 
     const rows: Row[] = [];
-    for (let hour = inicio; hour < fin; hour++) {
+    for (let hour = startHour; hour < endHour; hour++) {
       rows.push({
         hour,
-        label: `${this.hora(hour)} – ${this.hora(hour + 1)}`,
-        cells: dias.map((d) => porDia.get(d)?.[hour - inicio] as Cell),
+        label: `${hourValue(hour)} – ${hourValue(hour + 1)}`,
+        cells: weekdays.map((weekday) => cellsByWeekday.get(weekday)?.[hour - startHour] as Cell),
       });
     }
     return rows;
   }
 
-  private cellsDelDia(
-    bloques: { e: ScheduleEntry; desde: number; hasta: number }[],
-    inicio: number,
-    fin: number,
+  private buildWeekdayCells(
+    scheduleBlocks: { entry: ScheduleEntry; startHour: number; endHour: number }[],
+    startHour: number,
+    endHour: number,
     weekday: number,
   ): Cell[] {
-    const celdas: Cell[] = [];
-    const pintadas = new Set<number>();
+    const cells: Cell[] = [];
+    const coveredHours = new Set<number>();
 
-    for (let hour = inicio; hour < fin; hour++) {
-      if (pintadas.has(hour)) {
-        celdas.push({ weekday, entries: [], rowspan: 1, covered: true });
+    for (let hour = startHour; hour < endHour; hour++) {
+      if (coveredHours.has(hour)) {
+        cells.push({ weekday, entries: [], rowspan: 1, covered: true });
         continue;
       }
-      const aqui = bloques.filter((b) => b.desde === hour);
-      if (aqui.length === 0) {
-        celdas.push({ weekday, entries: [], rowspan: 1, covered: false });
+      const startingBlocks = scheduleBlocks.filter((block) => block.startHour === hour);
+      if (startingBlocks.length === 0) {
+        cells.push({ weekday, entries: [], rowspan: 1, covered: false });
         continue;
       }
-      const primero = aqui[0];
-      const span = primero.hasta - primero.desde;
-      const solapado =
-        aqui.length > 1 || bloques.some((b) => b !== primero && b.desde > primero.desde && b.desde < primero.hasta);
-      if (span > 1 && !solapado) {
-        for (let k = 1; k < span; k++) pintadas.add(hour + k);
-        celdas.push({ weekday, entries: [primero.e], rowspan: span, covered: false });
+      const firstBlock = startingBlocks[0];
+      const durationHours = firstBlock.endHour - firstBlock.startHour;
+      const hasOverlap =
+        startingBlocks.length > 1 ||
+        scheduleBlocks.some(
+          (block) =>
+            block !== firstBlock &&
+            block.startHour > firstBlock.startHour &&
+            block.startHour < firstBlock.endHour,
+        );
+      if (durationHours > 1 && !hasOverlap) {
+        for (let offset = 1; offset < durationHours; offset++) {
+          coveredHours.add(hour + offset);
+        }
+        cells.push({ weekday, entries: [firstBlock.entry], rowspan: durationHours, covered: false });
       } else {
-        celdas.push({ weekday, entries: aqui.map((b) => b.e), rowspan: 1, covered: false });
+        cells.push({
+          weekday,
+          entries: startingBlocks.map((block) => block.entry),
+          rowspan: 1,
+          covered: false,
+        });
       }
     }
-    return celdas;
+    return cells;
   }
 }
