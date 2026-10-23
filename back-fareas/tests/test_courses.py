@@ -1,8 +1,19 @@
+from datetime import date
+
 import pytest
 from httpx import AsyncClient
 from sqlmodel import delete, select
 
-from app.tables import AppUser, AuditLog, Course, CourseGroup, Enrollment, Room, ScheduleBlock
+from app.tables import (
+    AppUser,
+    AttendanceSession,
+    AuditLog,
+    Course,
+    CourseGroup,
+    Enrollment,
+    Room,
+    ScheduleBlock,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -424,6 +435,48 @@ async def test_bloque_fuera_de_la_franja_de_clases(
                                json={"end_time": "09:00"})
         assert r.status_code == 200, r.text
     finally:
+        await _cleanup_course(db_session)
+        await _limpiar_propios(db_session)
+
+async def test_cannot_delete_block_with_sessions(
+    client: AsyncClient, admin_headers: dict, db_session
+):
+    group = await _grupo_propio(client, admin_headers, db_session)
+    session = None
+    try:
+        r = await client.post(
+            f"{API}/groups/{group['id']}/blocks",
+            headers=admin_headers,
+            json={"weekday": 4, "start_time": "08:00", "end_time": "10:00",
+                  "room_id": group["room_id"]},
+        )
+        assert r.status_code == 201, r.text
+        block = r.json()
+
+        session = AttendanceSession(block_id=block["id"], session_date=date.today())
+        db_session.add(session)
+        await db_session.commit()
+        await db_session.refresh(session)
+
+        r = await client.delete(f"{API}/blocks/{block['id']}", headers=admin_headers)
+        assert r.status_code == 409, r.text
+        assert "sesion" in r.json()["detail"].lower()
+
+        blocks = (
+            await client.get(f"{API}/groups/{group['id']}/blocks", headers=admin_headers)
+        ).json()
+        assert any(item["id"] == block["id"] for item in blocks)
+
+        await db_session.delete(session)
+        await db_session.commit()
+        session = None
+
+        r = await client.delete(f"{API}/blocks/{block['id']}", headers=admin_headers)
+        assert r.status_code == 200, r.text
+    finally:
+        if session is not None:
+            await db_session.delete(session)
+            await db_session.commit()
         await _cleanup_course(db_session)
         await _limpiar_propios(db_session)
 

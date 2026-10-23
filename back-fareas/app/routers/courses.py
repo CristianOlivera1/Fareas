@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import func, select
 
 from app.core.deps import DbSession, RequireRole
@@ -16,7 +17,16 @@ from app.services.ocr_extract import MAX_PESO_ARCHIVO, leer_documento_async
 from app.services.ocr_schedule import BloqueExtraido, extraer_horarios_documento
 from app.services.schedule import add_block, update_block
 from app.services.settings import semestre_vigente
-from app.tables import AppUser, Course, CourseGroup, Enrollment, Room, ScheduleBlock, UserRole
+from app.tables import (
+    AppUser,
+    AttendanceSession,
+    Course,
+    CourseGroup,
+    Enrollment,
+    Room,
+    ScheduleBlock,
+    UserRole,
+)
 
 router = APIRouter(tags=["courses"])
 
@@ -366,12 +376,32 @@ async def delete_block(
     block_id: int, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> dict:
     block = await _get_or_404(db, ScheduleBlock, block_id, "Bloque horario")
+    session_id = (
+        await db.exec(
+            select(AttendanceSession.id)
+            .where(AttendanceSession.block_id == block_id)
+            .limit(1)
+        )
+    ).first()
+    if session_id is not None:
+        raise errors.ConflictError(
+            "No se puede eliminar un bloque con sesiones de asistencia registradas"
+        )
+
     old = {"group_id": block.group_id, "room_id": block.room_id, "weekday": block.weekday,
            "start_time": str(block.start_time), "end_time": str(block.end_time)}
     await db.delete(block)
     await audit(db, admin, action="bloque_eliminado", entity="schedule_block", entity_id=block_id,
                 old_value=old, ip_address=_client_ip(request))
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if getattr(exc.orig, "sqlstate", None) == "23503":
+            raise errors.ConflictError(
+                "No se puede eliminar un bloque con sesiones de asistencia registradas"
+            ) from exc
+        raise
     return {"message": f"Bloque #{block_id} eliminado"}
 
 class ScheduleRowOut(BaseModel):
