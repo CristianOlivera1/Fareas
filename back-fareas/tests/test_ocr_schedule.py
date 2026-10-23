@@ -4,7 +4,8 @@ import pytest
 from reportlab.pdfgen import canvas as rl_canvas
 from sqlmodel import delete, select
 
-from app.services.ocr_schedule import extraer_horarios
+from app.services.ocr_extract import DocumentoLeido, ItemTexto
+from app.services.ocr_schedule import extraer_horarios, extraer_horarios_documento
 from app.tables import Course, CourseGroup, ScheduleBlock
 from tests.helpers_b6 import crear, limpiar
 
@@ -61,6 +62,66 @@ async def escenario(db_session):
                 await db_session.delete(g)
             await db_session.delete(curso)
             await db_session.commit()
+
+def _item(
+    texto: str, x: float, y: float, ancho: float, alto: float = 20.0, confianza: float = 0.99
+) -> ItemTexto:
+    return ItemTexto(
+        texto=texto, x=x, y=y, ancho=ancho, alto=alto, confianza=confianza, pagina=1
+    )
+
+
+def test_extraer_horarios_tabla_por_columnas():
+    items = [
+        _item("GRUPO A", 9, 10, 60),
+        _item("Lunes", 220, 30, 60),
+        _item("Martes", 470, 30, 60),
+        _item("Miércoles", 720, 30, 78),
+        _item("Jueves", 960, 30, 60),
+        _item("Viernes", 1150, 30, 65),
+        _item("07:00 - 08:00", 9, 110, 95),
+        _item("ISA903 Inteligencia Artificial I (LAB 304)", 105, 90, 260),
+        _item("AQUINO CRUZ, Mario (Mag.)", 105, 110, 200),
+        _item("ISA901 Computación Gráfica", 390, 75, 190),
+        _item("(LAB 401)", 390, 95, 70),
+        _item("MAMANI VILCA, Eddy (Dr.)", 390, 110, 180),
+        _item("ISA903 Inteligencia Artificial I (LAB 304)", 610, 90, 260),
+        _item("AQUINO CRUZ, Mario (Mag.)", 610, 110, 200),
+        _item("ISA901 Computación", 890, 60, 150),
+        _item("Gráfica (LAB 401)", 890, 80, 130),
+        _item("MAMANI VILCA, Eddy", 890, 100, 155),
+        _item("(Dr.)", 890, 115, 38),
+        _item("ISA904 Programación Paralela", 1070, 90, 200),
+        _item("(LAB 304)", 1070, 110, 70),
+        _item("08:00 - 09:00", 9, 190, 95),
+        _item("ISA905 Metodología de la Investigación Científica (LAB 305)", 105, 170, 260),
+        _item("CARI INCAHUANACO, Francisco (Mag.)", 105, 190, 260),
+        _item("Tutoría", 390, 170, 60),
+        _item("09:00 - 10:00", 9, 280, 95),
+        _item("ISA906 Interacción Humano Computador (LAB 304)", 610, 260, 260),
+        _item("ROJAS ENRIQUEZ, Hermenegildo (Dr.)", 610, 280, 260),
+    ]
+    documento = DocumentoLeido(tipo="imagen", paginas=1, items=items, lineas=[])
+    bloques = extraer_horarios_documento(documento)
+
+    assert len(bloques) == 7
+    assert all(bloque.group_code == "A" and bloque.confiable for bloque in bloques)
+    assert all(bloque.nota is None for bloque in bloques)
+    assert {(b.weekday, b.course_code) for b in bloques} == {
+        (1, "ISA903"),
+        (2, "ISA901"),
+        (3, "ISA903"),
+        (4, "ISA901"),
+        (5, "ISA904"),
+        (1, "ISA905"),
+        (3, "ISA906"),
+    }
+    por_curso = {bloque.course_code: bloque for bloque in bloques}
+    assert por_curso["ISA903"].course_name == "Inteligencia Artificial I"
+    assert por_curso["ISA901"].course_name == "Computación Gráfica"
+    assert por_curso["ISA906"].start_time == "09:00"
+    assert por_curso["ISA906"].end_time == "10:00"
+
 
 def test_extraer_horarios_pdf_simulado():
     bloques, paginas = extraer_horarios(_pdf_matricula())

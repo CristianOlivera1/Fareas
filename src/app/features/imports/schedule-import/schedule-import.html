@@ -1,0 +1,331 @@
+<app-page-header title="Importar horario"
+  subtitle="Sube el horario de un ciclo y revísalo antes de guardarlo (RF-07)">
+</app-page-header>
+
+<ol class="mb-5 grid gap-2 sm:grid-cols-3" aria-label="Pasos de la importación">
+  @for (item of steps; track item.number) {
+    <li [class]="
+      'flex items-center gap-2.5 rounded-xl border px-3 py-2.5 ' +
+      (step() === item.number
+        ? 'border-(--fareas-primary) bg-blue-50'
+        : step() > item.number
+          ? 'border-green-200 bg-green-50'
+          : 'border-gray-200 bg-white')
+    ">
+      <span [class]="
+        'grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold ' +
+        (step() === item.number
+          ? 'bg-(--fareas-primary) text-white'
+          : step() > item.number
+            ? 'bg-green-100 text-green-700'
+            : 'bg-gray-100 text-gray-500')
+      ">
+        @if (step() > item.number) {
+          <iconify-icon icon="material-symbols:check" width="16"></iconify-icon>
+        } @else {
+          {{ item.number }}
+        }
+      </span>
+      <span class="min-w-0">
+        <span class="block text-xs font-medium text-gray-500">Paso {{ item.number }}</span>
+        <span class="block truncate text-sm font-semibold text-gray-900">{{ item.label }}</span>
+      </span>
+    </li>
+  }
+</ol>
+
+@if (step() === 1) {
+  <section class="max-w-3xl rounded-xl border border-gray-200 bg-white p-5 shadow-xs">
+    <h2 class="text-sm font-semibold text-gray-900">1. Archivo y contexto</h2>
+    <p class="mt-1 text-sm text-gray-500">
+      Una importación corresponde a un solo ciclo de un periodo. Si el horario tiene varios ciclos,
+      repite el proceso para cada uno.
+    </p>
+
+    <div class="mt-4">
+      <app-file-drop [file]="file()" (fileChange)="onFile($event)" (fileError)="onFileError($event)" />
+    </div>
+
+    <div class="mt-4 grid gap-3 sm:grid-cols-2">
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Periodo <span class="text-red-500">*</span></span>
+        <p-select class="w-full" appendTo="body" [options]="semesters()" placeholder="Periodo académico"
+          [ngModel]="semester()" (ngModelChange)="semester.set($event)" />
+        <span class="text-xs text-gray-400">Vigente: {{ currentSemester() ?? 'sin configurar' }}</span>
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Ciclo <span class="text-red-500">*</span></span>
+        <p-select class="w-full" appendTo="body" [options]="cycleOptions" optionLabel="label"
+          optionValue="value" placeholder="Ciclo de la malla" [ngModel]="cycle()"
+          (ngModelChange)="cycle.set($event)" />
+        <span class="text-xs text-gray-400">Los cursos nuevos se crean en este ciclo.</span>
+      </label>
+    </div>
+
+    <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline" class="mt-4">
+      Acepta PDF con texto, PDF escaneado, JPG, PNG y WEBP de hasta 10 MB. El OCR puede tardar unos
+      segundos; la previsualización no guarda nada.
+    </app-ui-alert>
+
+    @if (error(); as message) {
+      <app-ui-alert variant="danger" title="No se pudo leer el archivo" class="mt-4 block">
+        {{ message }}
+      </app-ui-alert>
+    }
+
+    <div class="mt-5 flex justify-end">
+      <app-ui-button icon="material-symbols:document-scanner-outline" [loading]="loading()"
+        [disabled]="!canRead()" (click)="readSchedule()">
+        Leer horario
+      </app-ui-button>
+    </div>
+  </section>
+}
+
+@if (step() === 2) {
+  @if (preview(); as p) {
+    <section class="rounded-xl border border-gray-200 bg-white p-4 shadow-xs">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-900">2. Revisa los bloques detectados</h2>
+          <p class="mt-0.5 text-sm text-gray-500">
+            {{ typeLabel() }} · {{ p.paginas }} página(s) · asigna docente y aula antes de confirmar.
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-2 text-xs">
+          <span class="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">
+            {{ p.total }} bloque(s)
+          </span>
+          <span class="rounded-full bg-green-50 px-2.5 py-1 font-medium text-green-700">
+            {{ p.confiables }} confiable(s)
+          </span>
+          <span class="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
+            {{ p.ambiguousos }} por revisar
+          </span>
+        </div>
+      </div>
+
+      <div class="mt-4 flex flex-wrap items-end gap-3 border-t border-gray-100 pt-4">
+        <label class="flex items-center gap-2 pb-2 text-sm text-gray-700">
+          <input type="checkbox" class="size-4 rounded border-gray-300 accent-blue-600"
+            [checked]="onlyReview()" [disabled]="reviewCount() === 0 && !onlyReview()"
+            (change)="onReviewToggle($event)" />
+          Solo revisar ({{ reviewCount() }})
+        </label>
+        <label class="block space-y-1">
+          <span class="text-xs font-medium text-gray-500">Docente por defecto</span>
+          <p-select class="w-52" appendTo="body" [options]="teachers()" optionLabel="label"
+            optionValue="value" [filter]="true" filterBy="label" placeholder="Selecciona"
+            [ngModel]="defaultTeacherId()" (ngModelChange)="defaultTeacherId.set($event)" />
+        </label>
+        <label class="block space-y-1">
+          <span class="text-xs font-medium text-gray-500">Aula por defecto</span>
+          <p-select class="w-32" appendTo="body" [options]="rooms()" optionLabel="label"
+            optionValue="value" [filter]="true" filterBy="label" placeholder="Selecciona"
+            [ngModel]="defaultRoomId()" (ngModelChange)="defaultRoomId.set($event)" />
+        </label>
+        <app-ui-button variant="ghost" size="sm" icon="material-symbols:add" (click)="addRow()">
+          Añadir fila
+        </app-ui-button>
+      </div>
+
+      <p class="mt-2 text-xs text-gray-400">
+        La fila puede sobrescribir el docente o el aula con sus propios selectores. Un grupo ya
+        existente conserva su docente y no se reasigna desde la importación.
+      </p>
+
+      @if (groups().length === 0) {
+        <div class="mt-4 rounded-xl border border-dashed border-gray-300 p-8 text-center">
+          <iconify-icon icon="material-symbols:event-available-outline" width="32"
+            class="text-gray-300"></iconify-icon>
+          <p class="mt-2 text-sm font-medium text-gray-900">No hay filas para mostrar</p>
+          <p class="mt-1 text-sm text-gray-500">
+            Desactiva «Solo revisar» o añade una fila manual.
+          </p>
+        </div>
+      } @else {
+        <div class="mt-3 overflow-hidden rounded-xl border border-gray-200">
+          <div class="max-h-[62vh] overflow-auto">
+            <table class="w-full min-w-[1180px] border-collapse text-left text-sm">
+              <thead class="sticky top-0 z-10 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500 shadow-xs">
+                <tr>
+                  <th class="px-2 py-2.5">Código</th>
+                  <th class="px-2 py-2.5">Curso</th>
+                  <th class="px-2 py-2.5">Grupo</th>
+                  <th class="px-2 py-2.5">Día</th>
+                  <th class="px-2 py-2.5">Inicio</th>
+                  <th class="px-2 py-2.5">Fin</th>
+                  <th class="px-2 py-2.5">Docente</th>
+                  <th class="px-2 py-2.5">Aula</th>
+                  <th class="px-2 py-2.5">Estado</th>
+                  <th class="px-2 py-2.5"></th>
+                </tr>
+              </thead>
+              @for (group of groups(); track group.code) {
+                <tbody class="divide-y divide-gray-100">
+                  <tr class="bg-blue-50/50">
+                    <td colspan="10" class="px-3 py-2">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="font-mono text-xs font-semibold text-gray-900">{{ group.code }}</span>
+                        <span class="text-xs text-gray-600">{{ group.name }}</span>
+                        <span class="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-500">
+                          {{ group.rows.length }} bloque(s)
+                        </span>
+                        @if (groupNeedsReview(group)) {
+                          <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                            Revisar
+                          </span>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                  @for (row of group.rows; track row.key) {
+                    <tr [class]="
+                      'align-top transition-colors hover:bg-gray-50/50 ' +
+                      (rowIssues(row).length > 0 ? 'bg-red-50/40' : '')
+                    ">
+                      <td class="px-2 py-2">
+                        <input [value]="row.course_code" (input)="onCodeInput(row.key, $event, 'course_code')"
+                          maxlength="20" aria-label="Código del curso"
+                          class="w-24 rounded-md border border-gray-300 px-2 py-1.5 font-mono text-xs uppercase focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+                      </td>
+                      <td class="px-2 py-2">
+                        <input [value]="row.course_name" (input)="onTextInput(row.key, $event)"
+                          maxlength="160" [title]="row.linea" aria-label="Nombre del curso"
+                          class="w-44 rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+                      </td>
+                      <td class="px-2 py-2">
+                        <input [value]="row.group_code" (input)="onCodeInput(row.key, $event, 'group_code')"
+                          maxlength="5" aria-label="Grupo" placeholder="A"
+                          class="w-16 rounded-md border border-gray-300 px-2 py-1.5 text-xs uppercase focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+                      </td>
+                      <td class="px-2 py-2">
+                        <p-select class="w-28" appendTo="body" [options]="days" optionLabel="label"
+                          optionValue="value" [ngModel]="row.weekday"
+                          (ngModelChange)="updateRow(row.key, { weekday: $event })" />
+                      </td>
+                      <td class="px-2 py-2">
+                        <input type="time" step="900" [value]="row.start_time"
+                          (input)="onTimeInput(row.key, 'start_time', $event)" aria-label="Hora de inicio"
+                          class="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+                      </td>
+                      <td class="px-2 py-2">
+                        <input type="time" step="900" [value]="row.end_time"
+                          (input)="onTimeInput(row.key, 'end_time', $event)" aria-label="Hora de fin"
+                          class="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
+                      </td>
+                      <td class="px-2 py-2">
+                        <p-select class="w-44" appendTo="body" [options]="teachers()" optionLabel="label"
+                          optionValue="value" [filter]="true" filterBy="label" placeholder="Por defecto"
+                          [showClear]="true" [ngModel]="row.teacher_id"
+                          (ngModelChange)="updateRow(row.key, { teacher_id: $event })" />
+                      </td>
+                      <td class="px-2 py-2">
+                        <p-select class="w-28" appendTo="body" [options]="rooms()" optionLabel="label"
+                          optionValue="value" placeholder="Por defecto" [showClear]="true"
+                          [ngModel]="row.room_id"
+                          (ngModelChange)="updateRow(row.key, { room_id: $event })" />
+                      </td>
+                      <td class="px-2 py-2">
+                        @if (rowIssues(row).length > 0) {
+                          <span class="inline-flex max-w-32 items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700"
+                            [title]="issuesText(row)">
+                            <iconify-icon icon="material-symbols:error-outline" width="13"></iconify-icon>
+                            Corregir
+                          </span>
+                        } @else if (!row.confiable || row.nota) {
+                          <span class="inline-flex max-w-32 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800"
+                            [title]="row.nota ?? row.linea">
+                            <iconify-icon icon="material-symbols:warning-outline" width="13"></iconify-icon>
+                            Revisar
+                          </span>
+                        } @else {
+                          <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700">
+                            <iconify-icon icon="material-symbols:check-circle-outline" width="13"></iconify-icon>
+                            Listo
+                          </span>
+                        }
+                      </td>
+                      <td class="px-2 py-2 text-right">
+                        <button type="button" (click)="removeRow(row.key)"
+                          class="grid size-7 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                          [attr.aria-label]="'Eliminar bloque ' + row.course_code" title="Eliminar fila">
+                          <iconify-icon icon="material-symbols:delete-outline" width="16"></iconify-icon>
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              }
+            </table>
+          </div>
+        </div>
+      }
+
+      <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p class="text-xs text-gray-500">
+          {{ rows().length }} fila(s) · {{ reviewCount() }} por revisar
+          @if (!canConfirm()) {
+            <span class="text-red-600">· completa docente y aula por defecto</span>
+          }
+        </p>
+        <div class="flex flex-wrap items-center gap-2">
+          <app-ui-button variant="ghost" (click)="goToStep(1)">Atrás</app-ui-button>
+          <app-ui-button icon="material-symbols:save-outline" [loading]="confirming()"
+            [disabled]="!canConfirm()" (click)="confirm()">
+            Confirmar importación
+          </app-ui-button>
+        </div>
+      </div>
+    </section>
+  }
+}
+
+@if (step() === 3) {
+  @if (result(); as r) {
+    <section class="max-w-2xl rounded-xl border border-green-200 bg-white p-6 shadow-xs">
+      <span class="grid size-12 place-items-center rounded-full bg-green-50 text-green-600">
+        <iconify-icon icon="material-symbols:event-available-outline" width="28"></iconify-icon>
+      </span>
+      <h2 class="mt-4 text-lg font-semibold text-gray-900">Horario importado</h2>
+      <p class="mt-1 text-sm text-gray-500">
+        Los bloques ya están en el horario general del periodo {{ semester() }}, ciclo
+        {{ roman(cycle() ?? 0) }}.
+      </p>
+
+      <dl class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="rounded-xl bg-gray-50 p-3">
+          <dt class="text-xs text-gray-500">Cursos</dt>
+          <dd class="mt-0.5 text-lg font-semibold text-gray-900">{{ r.cursos_creados.length }}</dd>
+        </div>
+        <div class="rounded-xl bg-gray-50 p-3">
+          <dt class="text-xs text-gray-500">Grupos</dt>
+          <dd class="mt-0.5 text-lg font-semibold text-gray-900">{{ r.grupos_creados.length }}</dd>
+        </div>
+        <div class="rounded-xl bg-gray-50 p-3">
+          <dt class="text-xs text-gray-500">Bloques</dt>
+          <dd class="mt-0.5 text-lg font-semibold text-gray-900">{{ r.bloques_creados }}</dd>
+        </div>
+        <div class="rounded-xl bg-gray-50 p-3">
+          <dt class="text-xs text-gray-500">Omitidos</dt>
+          <dd class="mt-0.5 text-lg font-semibold text-gray-900">{{ r.omitidos }}</dd>
+        </div>
+      </dl>
+
+      @if (r.omitidos > 0) {
+        <app-ui-alert variant="warning" [inline]="true" class="mt-4" icon="material-symbols:info-outline">
+          {{ r.omitidos }} bloque(s) ya existían con el mismo grupo, día y hora; no se duplicaron.
+        </app-ui-alert>
+      }
+
+      <div class="mt-6 flex flex-wrap gap-2">
+        <app-ui-button icon="material-symbols:calendar-view-week" (click)="viewSchedule()">
+          Ver horario
+        </app-ui-button>
+        <app-ui-button variant="outline" icon="material-symbols:upload-file-outline" (click)="reset()">
+          Importar otro archivo
+        </app-ui-button>
+      </div>
+    </section>
+  }
+}

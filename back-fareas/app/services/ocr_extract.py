@@ -137,11 +137,66 @@ def _items_de_ocr(imagen: np.ndarray, pagina: int) -> list[ItemTexto]:
     return items
 
 
-def _imagen_ocr(imagen: Image.Image) -> np.ndarray:
+def _normalizar_imagen(imagen: Image.Image) -> Image.Image:
     imagen = ImageOps.exif_transpose(imagen).convert("RGB")
     if max(imagen.size) > MAX_LADO_PX:
         imagen.thumbnail((MAX_LADO_PX, MAX_LADO_PX), Image.Resampling.LANCZOS)
-    return np.asarray(imagen)
+    return imagen
+
+
+def _se_solapan(izquierda: ItemTexto, derecha: ItemTexto) -> bool:
+    centro_x = izquierda.x + izquierda.ancho / 2
+    centro_y = izquierda.y + izquierda.alto / 2
+    otro_x = derecha.x + derecha.ancho / 2
+    otro_y = derecha.y + derecha.alto / 2
+    return (
+        abs(centro_x - otro_x) < max(min(izquierda.ancho, derecha.ancho) * 0.5, 8)
+        and abs(centro_y - otro_y) < max(min(izquierda.alto, derecha.alto) * 0.6, 6)
+    )
+
+
+def _reintentar_baja_confianza(
+    imagen: Image.Image, items: list[ItemTexto], pagina: int
+) -> list[ItemTexto]:
+    dudosos = sorted(
+        (
+            item for item in items
+            if item.confianza < 0.6 and len(item.texto.strip()) >= 4
+        ),
+        key=lambda item: item.confianza,
+    )[:4]
+    if not dudosos:
+        return items
+
+    resultado = list(items)
+    for item in dudosos:
+        izquierda = max(0, int(item.x) - 4)
+        arriba = max(0, int(item.y) - int(item.alto) - 8)
+        derecha = min(imagen.width, int(item.x + item.ancho) + 16)
+        abajo = min(imagen.height, int(item.y + item.alto * 2) + 8)
+        if derecha - izquierda < 20 or abajo - arriba < 10:
+            continue
+
+        recorte = imagen.crop((izquierda, arriba, derecha, abajo))
+        nuevos = _items_de_ocr(np.asarray(recorte), pagina)
+        if not nuevos:
+            continue
+        limite_derecho = item.x + item.ancho + 8
+        otros = [existente for existente in resultado if existente is not item]
+        reemplazos: list[ItemTexto] = []
+        for nuevo in nuevos:
+            nuevo.x += izquierda
+            nuevo.y += arriba
+            if nuevo.x + nuevo.ancho / 2 > limite_derecho:
+                continue
+            if any(_se_solapan(nuevo, existente) for existente in otros):
+                continue
+            reemplazos.append(nuevo)
+        if not reemplazos:
+            continue
+        resultado = [existente for existente in resultado if existente is not item]
+        resultado.extend(reemplazos)
+    return sorted(resultado, key=lambda item: (item.pagina, item.y, item.x))
 
 
 def _items_de_pdf_escaneado(raw: bytes) -> tuple[list[ItemTexto], int]:
@@ -154,8 +209,9 @@ def _items_de_pdf_escaneado(raw: bytes) -> tuple[list[ItemTexto], int]:
         escala = DPI_OCR / 72
         for numero in range(paginas):
             pagina = documento[numero]
-            imagen = pagina.render(scale=escala).to_pil()
-            items.extend(_items_de_ocr(_imagen_ocr(imagen), numero + 1))
+            imagen = _normalizar_imagen(pagina.render(scale=escala).to_pil())
+            encontrados = _items_de_ocr(np.asarray(imagen), numero + 1)
+            items.extend(_reintentar_baja_confianza(imagen, encontrados, numero + 1))
     finally:
         documento.close()
     return items, paginas
@@ -164,7 +220,9 @@ def _items_de_pdf_escaneado(raw: bytes) -> tuple[list[ItemTexto], int]:
 def _items_de_imagen(raw: bytes) -> list[ItemTexto]:
     try:
         with Image.open(io.BytesIO(raw)) as imagen:
-            return _items_de_ocr(_imagen_ocr(imagen), 1)
+            normalizada = _normalizar_imagen(imagen)
+            encontrados = _items_de_ocr(np.asarray(normalizada), 1)
+            return _reintentar_baja_confianza(normalizada, encontrados, 1)
     except Image.UnidentifiedImageError as exc:
         raise ValueError("Formato no soportado; sube un PDF, JPG, PNG o WEBP") from exc
 

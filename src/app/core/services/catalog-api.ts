@@ -1,6 +1,11 @@
 import { Injectable } from '@angular/core';
-import { BaseApi, Page, ListParams } from '../api/api-url';
+import { apiUrl, BaseApi, Page, ListParams } from '../api/api-url';
 import { Device, DeviceType, Person, Room } from '../models/catalog';
+import {
+  StudentImportConfirmIn,
+  StudentImportPreview,
+  StudentImportResult,
+} from '../models/imports';
 
 @Injectable({ providedIn: 'root' })
 export class CatalogApi extends BaseApi {
@@ -63,5 +68,15 @@ export class CatalogApi extends BaseApi {
   }
   resendCredentials(id: number) {
     return this.post<{ message: string }>(`/accounts/${id}/send-temp-password`);
+  }
+
+  importStudentsPreview(file: File, defaultSemester: number) {
+    const body = new FormData();
+    body.append('file', file);
+    body.append('default_semester', String(defaultSemester));
+    return this.http.post<StudentImportPreview>(apiUrl('/students/import-preview'), body);
+  }
+  importStudentsConfirm(body: StudentImportConfirmIn) {
+    return this.post<StudentImportResult>('/students/import-confirm', body);
   }
 }

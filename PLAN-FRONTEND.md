@@ -1,6 +1,6 @@
 # PLAN DE IMPLEMENTACIÓN - FRONTEND FAREAS (Angular 21 + PrimeNG + Tailwind 4)
 
-> Complemento de `PLAN-BACKEND.md` (bloques 1-9 ✅). El backend ya expone TODOS los
+> Complemento de `PLAN-BACKEND.md` (bloques 1-15 ✅). El backend ya expone TODOS los
 > endpoints necesarios; este plan conecta la interfaz a datos reales por bloques,
 > cada uno terminando en algo navegable y verificable.
 > Principio rector: **profesional y técnico, no empresarial**. Sin SSR, sin PWA,
@@ -22,8 +22,9 @@
 | Asistencia mock | `features/attendance` con tabla estática |
 | Cursos y matrículas REALES (F2, 2026-10-12) | `features/courses` (lista de cursos + detalle con grupos y grilla semanal) y `features/enrollments` (cupo 40, retiro y transferencia) conectados a la API |
 | Horarios por ciclo (F2b, 2026-10-22) | Cursos con ciclo I–X, filtro por ciclo y pestañas por ciclo en `/schedule`; el grupo hereda el ciclo del curso y los choques siguen siendo del periodo |
+| Importación OCR (F6b/F6c, 2026-10-23) | `/imports` importa horarios (PDF/foto, 3 pasos, tabla editable) y `/students` incorpora «Importar nómina» (diálogo 3 pasos, correo generado y matrícula opcional); ambos consumen los endpoints reales y son solo admin |
 | Host global de toasts (2026-10-12) | `app.html` incluye `<p-toast>`; sin él, TODOS los `toast.add()` de la app (errores 409 incluidos) quedaban invisibles |
-| Build OK | `ng build --configuration development` pasa; `dist/fareas` generado |
+| Build y tests OK | `ng build --configuration development` pasa; `dist/fareas` generado. `npm test` 7/7 (2026-10-23) |
 
 **Stack fijo:** Angular 21 (standalone + signals + OnPush), PrimeNG 20, Tailwind 4,
 Chart.js 4, material-symbols/akar-icons ya en uso.
@@ -53,6 +54,11 @@ Chart.js 4, material-symbols/akar-icons ya en uso.
 7. **No comentarios en el código**: no incluir comentarios salvo que sean estrictamente
    necesarios para explicar una lógica compleja. El código debe ser autoexplicativo
    (nombres claros, funciones pequeñas).
+8. **Código en inglés desde ahora**: los identificadores nuevos (componentes, servicios,
+   signals, funciones, variables, modelos, archivos y tests) deben escribirse en inglés.
+   Los textos de interfaz, mensajes al usuario y contenido de dominio existente pueden
+   permanecer en español. No se renombra código existente dentro de features nuevas;
+   cualquier normalización se hace en un refactor aparte.
 
 ## 2. Estructura de rutas objetivo (Bloque F1 las crea; F2-F6 las llenan)
 
@@ -381,12 +387,10 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   (`GET /reports/group-matrix.xlsx?group_id=` → matriz alumnos × fechas con **A/T/F/FJ/—**)
   y "Riesgo DPI" (`GET /reports/dpi-risk.xlsx?course_id=` → alumnos en alerta/límite con
   faltas restantes). El estado `FJ` = falta justificada (no cuenta para el 30 %).
-- [ ] **Importar horario** `/imports` (RF-07, 2 pasos): subir PDF → tabla editable de la
-  previsualización (`POST /courses/import-pdf`) con filas ambiguas resaltadas (chip "Ambiguo"
-  + `nota`), select de docente y aula → confirmar → `POST /courses/import-pdf/confirm`
-  → resumen de creados (cursos/grupos/bloques) y manejo del 409 de choque (todo-o-nada).
-  **Ampliado en F6b:** acepta foto o PDF escaneado (RapidOCR), pide periodo + ciclo y
-  permite docente/aula por fila, no uno para todo el archivo.
+- [x] **Importar horario** `/imports` (RF-07): implementado en F6b (3 pasos, PDF/foto,
+  tabla editable y confirmación transaccional con resumen).
+- [x] **Importar nómina de alumnos** en `/students` (RF-02/RF-03/RF-08): implementado en
+  F6c (diálogo de 3 pasos, correo generado, matrícula opcional y errores por fila).
 - [ ] **Bitácora** `/audit` (admin): tabla paginada `GET /audit-log` con filtros
   action/entity/entity_id/actor/**actor_role**/since (backend ya los soporta) + visor de
   old/new_value (JSON); la respuesta trae `actor_name` y `actor_role` para la columna "Quién".
@@ -394,79 +398,93 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   matrícula retirada/transferida, rostro eliminado, consentimiento, feriado por rango).
 - **Entregable:** tesis puede mostrar: subir PDF real → propuesta → confirmar → bloques en horario.
 
-### F6b - Importar horario desde PDF o foto (RF-07) - **PLANIFICADO (1 día)**
-> **Backend listo (Bloque 14, 2026-10-22):** `POST /courses/import-pdf` y
-> `/confirm` ya aceptan PDF/JPG/PNG/WEBP, periodo/ciclo y docente/aula por fila.
-> Falta esta UI. Una importación = un ciclo de un periodo; la pantalla permite
-> revisar y corregir cada bloque antes de guardar.
+### F6b - Importar horario desde PDF o foto (RF-07) - **✅ LISTO (2026-10-23)**
+> **Backend (Bloque 14):** `POST /courses/import-pdf` y `/confirm` aceptan
+> PDF/JPG/PNG/WEBP, periodo/ciclo y docente/aula por fila. Una importación = un
+> ciclo de un periodo; la pantalla permite revisar y corregir cada bloque antes
+> de guardar.
 
 **Pantalla `/imports` (admin, 3 pasos)**
-1. **Archivo y contexto:** dropzone (PDF/JPG/PNG, ≤10 MB) + selector de periodo
-   (de `GET /settings/semesters`, vigente por defecto) + ciclo I–X en romanos.
-   Aviso: «sube el horario de un ciclo; repite para otros ciclos». Botón «Leer
-   horario» con estado de carga (el OCR puede tardar varios segundos).
-2. **Vista previa:** `POST /courses/import-pdf`. Cabecera con `tipo` («PDF con
-   texto» / «OCR de imagen»), páginas, confiables y ambiguos. Tabla editable
-   agrupada por curso: código, nombre (editable si `curso_nuevo`), grupo, día,
-   inicio, fin, docente y aula. Chips **Listo** / **Revisar** con tooltip de
-   `nota` y la línea OCR original; filtro «solo revisar». Acciones: «aplicar
-   docente al curso», «aplicar aula a las filas marcadas», añadir y eliminar
-   fila. **Nada se persiste en este paso.**
+1. **Archivo y contexto:** dropzone (PDF/JPG/PNG/WEBP, ≤10 MB) + selector de
+   periodo (`GET /settings/semesters`, vigente por defecto) + ciclo I–X en
+   romanos. Aviso: «sube el horario de un ciclo; repite para otros ciclos».
+   Botón «Leer horario» con estado de carga (el OCR puede tardar varios segundos).
+2. **Vista previa:** `POST /courses/import-pdf`. Cabecera con `tipo`
+   (`pdf_texto` → «PDF con texto», `pdf_ocr` → «PDF escaneado (OCR)», `imagen` →
+   «Foto (OCR)»), páginas, confiables y ambiguos. Tabla editable agrupada por
+   curso: código, nombre, grupo, día, inicio, fin, docente y aula. Chips
+   **Listo** / **Revisar** / **Corregir** con tooltip de `nota` y la línea OCR
+   original; filtro «solo revisar». Docente y aula por defecto para las filas que
+   no eligen uno propio; acciones para añadir y eliminar filas. **Nada se
+   persiste en este paso.**
 3. **Confirmar:** resumen (cursos nuevos, grupos, bloques, omitidos) +
-   `POST .../confirm`; botón deshabilitado si hay filas inválidas; el 409 muestra
-   el choque y mantiene la tabla; el éxito enlaza a
-   `/schedule?semester=...&cycle=...`.
+   `POST .../confirm`; botón deshabilitado si hay filas inválidas o falta el
+   docente/aula por defecto; el 409/422 muestra el choque y mantiene la tabla;
+   el éxito enlaza a `/admin/schedule?semester=...&cycle=...`.
 
-**Detalles de UI**
-- Validación local: fin > inicio, dentro de la franja de `GET /settings`,
-  docente/aula obligatorios, código y grupo en mayúsculas.
-- Si el grupo ya existe, su docente se muestra bloqueado (no se reasigna por
-  importación).
-- Componentes: `features/imports/schedule-import` (ruta lazy) y
-  `shared/components/file-drop`; extender `courses-api.ts` y
-  `core/models/course-import.ts`. Sin librerías nuevas.
+**Detalles implementados**
+- Validación local: código de curso 3–20, grupo 1–5, día L–V, fin > inicio,
+  duración ≤ 2 h y dentro de la franja de `GET /settings`; código y grupo en
+  mayúsculas.
+- Si el grupo ya existe, el backend conserva su docente y rechaza la
+  reasignación; la UI lo recuerda en el paso 2.
+- Componentes: `features/imports/schedule-import` (ruta lazy
+  `/admin/imports`), `shared/components/file-drop`,
+  `core/models/imports.ts` y métodos `importSchedule` /
+  `confirmScheduleImport` en `courses-api.ts`. Sin librerías nuevas.
 - Responsive: tabla con scroll horizontal, inputs compactos y cabecera fija.
+- **Verificación (2026-10-23):** `npm run build -- --configuration development`
+  OK; `npm test -- --watch=false` 7/7. Flujo real en navegador con una foto de
+  horario generada: el OCR devolvió 3 bloques, se asignaron docente y aula por
+  defecto y el botón «Confirmar importación» se habilitó. No se confirmó para no
+  crear datos de prueba en la BD; `schedule-import.spec.ts` verifica el cuerpo
+  exacto de `POST /courses/import-pdf/confirm`.
 
-### F6c - Importar nómina de alumnos (RF-02/RF-03/RF-08) - **PLANIFICADO (1 día)**
-> **Backend listo (Bloque 15, 2026-10-22):** `POST /students/import-preview` y
-> `/confirm` ya devuelven las filas editables y crean las cuentas. Falta esta UI.
-> Vive en la pantalla de estudiantes: el OCR rellena, el admin corrige en la
-> tabla y recién confirma.
+### F6c - Importar nómina de alumnos (RF-02/RF-03/RF-08) - **✅ LISTO (2026-10-23)**
+> **Backend (Bloque 15):** `POST /students/import-preview` y `/confirm`
+> devuelven las filas editables y crean las cuentas. Vive en la pantalla de
+> estudiantes: el OCR rellena, el admin corrige en la tabla y recién confirma.
 
 **Entrada:** botón «Importar nómina» (solo admin) junto a «Nuevo estudiante» en
 `features/catalog/students`. Abre un diálogo ancho de 3 pasos.
 
-**Paso 1 - Archivo:** dropzone PDF/JPG/PNG (≤10 MB) + «Ciclo por defecto» (1–12)
-para las filas sin columna CICLO. Ayuda: nómina impresa en tabla, foto recta;
-manuscrito no soportado. Botón «Leer nómina».
+**Paso 1 - Archivo:** dropzone PDF/JPG/PNG/WEBP (≤10 MB) + «Ciclo por defecto»
+(1–12) para las filas sin columna CICLO. Ayuda: nómina impresa en tabla, foto
+recta; manuscrito no soportado. Botón «Leer nómina».
 
-**Paso 2 - Revisión:** `POST /students/import-preview` → tabla editable con
-código, DNI, apellidos y nombres, correo, ciclo y estado. Cada fila muestra:
-- chip Listo / Corregir / Duplicado y el motivo;
+**Paso 2 - Revisión:** `POST /students/import-preview` (multipart con `file` y
+`default_semester`) → tabla editable con código, DNI, apellidos y nombres,
+correo, ciclo y estado. Cada fila muestra:
+- chip Listo / Corregir / Revisar y el motivo;
 - correo autogenerado con chip «generado» (editable);
-- validación en vivo (6/8 dígitos, correo, duplicado local);
-- la línea OCR original en un tooltip o fila expandible.
+- validación en vivo (6/8 dígitos, correo, duplicado local) y los `errores` del
+  backend (código/DNI/correo ya registrados);
+- la línea OCR original en el tooltip del nombre.
 
-Acciones: aplicar ciclo a todos, quitar filas con error, eliminar fila, añadir
-fila manual. La confirmación se deshabilita mientras haya filas inválidas.
+Acciones: aplicar ciclo a todas, quitar filas con error, eliminar fila, añadir
+fila manual y elegir «Matricular en grupo» (opcional; solo grupos del periodo
+vigente, R8). La confirmación se deshabilita mientras haya filas inválidas.
 
 **Paso 3 - Resultado:** `POST /students/import-confirm` con las filas corregidas
-y, opcionalmente, «Matricular en grupo» (periodo → curso → grupo, apagado por
-defecto; R8). Panel con creados / omitidos / matriculados / errores por fila;
-refresca la tabla de estudiantes al cerrar. Si el OCR devuelve 0 filas: empty
-state con tips y enlace al alta manual.
+y el `group_id` opcional. Panel con creados / omitidos / matriculados / errores
+por fila; refresca la tabla de estudiantes al cerrar. Si el OCR devuelve 0
+filas, el backend responde 422 y se muestra el mensaje con tips.
 
-**Implementación:** extender `features/catalog/students/students.ts` y `.html`
-+ `students-import.dialog.ts/.html` (standalone, en la misma carpeta); métodos
-`importStudentsPreview(file, semester)` e `importStudentsConfirm(rows, groupId?)`
-en `catalog-api.ts`; modelos en `core/models/student-import.ts`. Reutiliza
-`app-ui-alert`, `p-dialog`, `p-select` y `extractDetail`; sin librerías nuevas.
-El botón se oculta con `auth.isAdmin()` y el backend vuelve a validar el rol.
+**Implementación:** `features/catalog/students/students-import.dialog.ts/.html`
+(standalone, en la misma carpeta), integrado en `students.ts/.html` con
+`[(visible)]` y el output `imported`; métodos `importStudentsPreview(file,
+defaultSemester)` e `importStudentsConfirm(body)` en `catalog-api.ts`; modelos en
+`core/models/imports.ts`. Reutiliza `app-ui-alert`, `app-file-drop`, `p-dialog`,
+`p-select` y `extractDetail`; sin librerías nuevas. El botón se oculta con
+`auth.isAdmin()` y el backend vuelve a validar el rol.
 
-**Verificación:** nómina de prueba de 35 filas (1 DNI repetido, 1 correo
-ausente): corregir, confirmar, ver 34/35 en la tabla y el error; recargar la
-página; con rol docente el botón no aparece y el endpoint responde 403. Probar
-PDF y foto.
+**Verificación (2026-10-23):** `npm run build -- --configuration development`
+OK, con el chunk lazy `schedule-import` y el de `students`; `npm test --
+--watch=false` 7/7. Flujo real en navegador con una foto de nómina generada: el
+OCR devolvió 2 filas editables, con correo y ciclo corregibles, y el botón de
+confirmación se habilitó. No se confirmó para no crear cuentas de prueba;
+`students-import.dialog.spec.ts` verifica el cuerpo de `POST
+/students/import-confirm` (incluido `group_id` opcional).
 
 ### F7 - DISPOSITIVOS REALES: cámara + ESP32 (1-1.5 días) — guía completa de armado
 > Orden: primero la CÁMARA (solo configuración de red, sin soldar nada),

@@ -29,6 +29,7 @@
 3. **Sin Docker** - todo nativo en Windows: PostgreSQL (instalador oficial), Python en `.venv`, OpenCV/ONNX Runtime vía pip. Docker queda descartado para este proyecto.
 4. **No se entrena ningún modelo** - pesos preentrenados buffalo_l; el "aprendizaje" del sistema es el enrolamiento (RF-04).
 5. **No comentarios en el código** - no incluir comentarios salvo que sean estrictamente necesarios para explicar una lógica compleja. El código debe ser autoexplicativo (nombres claros, funciones pequeñas).
+6. **Código en inglés desde ahora** - los identificadores nuevos (funciones, variables, clases, parámetros, archivos y tests) deben escribirse en inglés. Los textos visibles al usuario, los mensajes de error de la API, los valores de dominio existentes y la documentación pueden permanecer en español. No se renombra código existente dentro de features nuevas; cualquier normalización se hace en un refactor aparte.
 
 ---
 

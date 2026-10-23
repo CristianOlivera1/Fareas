@@ -23,6 +23,7 @@ import { DataTable } from '../../../shared/components/data-table/data-table';
 import { DataTableCellDirective } from '../../../shared/components/data-table/data-table-cell.directive';
 import { TableColumn } from '../../../core/models/table-column';
 import { Person } from '../../../core/models/catalog';
+import { StudentsImportDialog } from './students-import.dialog';
 import { extractDetail } from '../rooms/rooms';
 
 const CICLOS = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}`, value: i + 1 }));
@@ -42,7 +43,7 @@ interface StudentForm {
   selector: 'app-students-page',
   imports: [
     FormsModule, PageHeader, UiButton, UiInput, UiAlert, DataTable, DataTableCellDirective,
-    DialogModule, InputTextModule, SelectModule, ToggleSwitchModule,
+    DialogModule, InputTextModule, SelectModule, ToggleSwitchModule, StudentsImportDialog,
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './students.html',
@@ -82,6 +83,7 @@ export class StudentsPage {
   });
 
   dialogVisible = false;
+  importVisible = false;
 
   constructor() {
     effect(() => {
@@ -112,6 +114,10 @@ export class StudentsPage {
   openCreate(): void {
     this.form.set({ id: null, full_name: '', email: '', dni: '', code: '', semester: null, whatsapp: '', is_active: true });
     this.dialogVisible = true;
+  }
+
+  openImport(): void {
+    this.importVisible = true;
   }
 
   openEdit(s: Person): void {

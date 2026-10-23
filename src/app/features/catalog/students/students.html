@@ -1,5 +1,8 @@
 <app-page-header title="Estudiantes" subtitle="Directorio de matriculados (RF-03)">
   @if (auth.isAdmin()) {
+    <app-ui-button variant="outline" icon="material-symbols:upload-file-outline" (click)="openImport()">
+      Importar nómina
+    </app-ui-button>
     <app-ui-button icon="material-symbols:person-add" (click)="openCreate()">
       Nuevo estudiante
     </app-ui-button>
@@ -121,3 +124,5 @@
     <app-ui-button [loading]="saving()" (click)="save()">Guardar</app-ui-button>
   </ng-template>
 </p-dialog>
+
+<app-students-import-dialog [(visible)]="importVisible" (imported)="reload()" />
