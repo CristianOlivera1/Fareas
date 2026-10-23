@@ -1,4 +1,4 @@
-<app-page-header title="Dispositivos" subtitle="Cámaras RTSP y nodos ESP32 por aula (RF-05, RF-35)">
+<app-page-header title="Dispositivos" subtitle="Registra las cámaras y dispositivos de asistencia por aula, y consulta su conexión.">
   @if (isMonitoreo()) {
     <span class="mr-2 inline-flex items-center gap-1.5 text-xs text-gray-500">
       <span class="size-2 animate-pulse rounded-full bg-green-500"></span>
@@ -12,29 +12,17 @@
   }
 </app-page-header>
 
-<div class="mb-4 flex w-fit items-center gap-2 rounded-xl bg-gray-100 p-1">
-  <button type="button" (click)="setTab('catalogo')"
-    class="rounded-lg px-4 py-1.5 text-sm font-medium transition-colors"
-    [class.bg-white]="!isMonitoreo()" [class.shadow-sm]="!isMonitoreo()"
-    [class.text-gray-900]="!isMonitoreo()" [class.text-gray-500]="isMonitoreo()">
-    Catálogo
-  </button>
-  <button type="button" (click)="setTab('monitoreo')"
-    class="rounded-lg px-4 py-1.5 text-sm font-medium transition-colors"
-    [class.bg-white]="isMonitoreo()" [class.shadow-sm]="isMonitoreo()"
-    [class.text-gray-900]="isMonitoreo()" [class.text-gray-500]="!isMonitoreo()">
-    <span class="inline-flex items-center gap-1.5">
-      Monitoreo
-      <span class="rounded-full px-1.5 text-xs font-semibold"
-        [class.bg-green-100]="onlineCount() > 0" [class.text-green-700]="onlineCount() > 0"
-        [class.bg-gray-200]="onlineCount() === 0" [class.text-gray-500]="onlineCount() === 0">
-        {{ onlineCount() }}/{{ statusList().length }}
-      </span>
-    </span>
-  </button>
-</div>
+<app-tabs
+  class="mb-4"
+  idPrefix="devices"
+  ariaLabel="Vistas de dispositivos"
+  [tabs]="viewTabs()"
+  [activeTab]="isMonitoreo() ? 'monitoreo' : 'catalogo'"
+  (activeTabChange)="setTab($event)"
+/>
 
-@if (!isMonitoreo()) {
+<section [hidden]="isMonitoreo()" id="devices-panel-catalogo" role="tabpanel"
+  aria-labelledby="devices-tab-catalogo" tabindex="0">
   <div class="mb-4 flex flex-wrap items-center gap-3">
     <p-select class="w-52" appendTo="body" [options]="aulas()" placeholder="Todas las aulas"
       showClear optionLabel="label" optionValue="value"
@@ -54,7 +42,7 @@
     [columns]="columns" [data]="devices()" mode="server"
     [serverPage]="page()" [serverTotal]="total()" [serverPageSize]="pageSize()"
     [loading]="loading()" [errorMessage]="error()"
-    emptyTitle="Sin dispositivos" emptyMessage="Registra la primera cámara o nodo ESP32."
+    emptyTitle="Sin dispositivos" emptyMessage="Registra la primera cámara o dispositivo de asistencia."
     emptyIcon="material-symbols:videocam-outline"
     (pageChange)="onPage($event)" (perPageChange)="onPageSize($event)" (retry)="reload()"
   >
@@ -100,7 +88,10 @@
       </div>
     </ng-template>
   </app-data-table>
-} @else {
+  </section>
+
+<section [hidden]="!isMonitoreo()" id="devices-panel-monitoreo" role="tabpanel"
+  aria-labelledby="devices-tab-monitoreo" tabindex="0">
   <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
     @for (d of statusList(); track d.id) {
       <div class="rounded-xl border bg-white p-4 shadow-xs"
@@ -114,7 +105,7 @@
             </span>
             <div class="min-w-0">
               <div class="truncate text-sm font-semibold text-gray-900">{{ d.name || d.device_key }}</div>
-              <div class="text-xs text-gray-500">{{ d.room_code }} · {{ d.device_type }}</div>
+              <div class="text-xs text-gray-500">{{ d.room_code }} · {{ d.device_type === 'camara' ? 'Cámara' : 'ESP32' }}</div>
             </div>
           </div>
           @if (d.is_online) {
@@ -123,14 +114,14 @@
             </span>
           } @else {
             <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
-              <span class="size-1.5 rounded-full bg-gray-400"></span> Caído
+              <span class="size-1.5 rounded-full bg-gray-400"></span> Sin conexión
             </span>
           }
         </div>
         <div class="mt-3 flex items-center justify-between text-xs text-gray-500">
           <span class="font-mono">{{ d.ip_address || d.device_key }}</span>
-          <span [title]="d.last_heartbeat ?? 'sin latidos'">
-            @if (d.last_heartbeat) { latido {{ shortTime(d.last_heartbeat) }} } @else { sin latidos }
+          <span [title]="d.last_heartbeat ?? 'Sin comunicación registrada'">
+            @if (d.last_heartbeat) { Última comunicación: {{ shortTime(d.last_heartbeat) }} } @else { Sin comunicación }
           </span>
         </div>
       </div>
@@ -141,7 +132,7 @@
       </div>
     }
   </div>
-}
+</section>
 
 <p-dialog [header]="form().id ? 'Editar dispositivo' : 'Nuevo dispositivo'"
   [(visible)]="dialogVisible" [modal]="true" [style]="{ width: '460px' }">
@@ -157,18 +148,18 @@
         <p-select class="w-full" appendTo="body" [options]="aulas()" optionLabel="label" optionValue="value"
           placeholder="Aula del dispositivo" [ngModel]="form().room_id" (ngModelChange)="patch({ room_id: $event })" />
       </label>
-      <app-ui-input [label]="form().device_type === 'esp32' ? 'Device key del nodo' : 'Device key de la cámara'"
+      <app-ui-input [label]="form().device_type === 'esp32' ? 'Clave del dispositivo' : 'Clave de la cámara'"
         [required]="true" [mono]="true"
         [placeholder]="form().device_type === 'esp32' ? 'esp32-lab305' : 'cam-lab305'"
-        hint="Debe coincidir con el firmware del ESP32 (RF-33)"
+        hint="Escribe la clave configurada en el dispositivo para identificarlo en el sistema."
         [ngModel]="form().device_key" (ngModelChange)="patch({ device_key: $event })" />
     }
     <app-ui-input label="Nombre" placeholder="Cámara puerta LAB 305"
       [ngModel]="form().name" (ngModelChange)="patch({ name: $event })" />
     @if (form().device_type === 'camara') {
-      <app-ui-input label="URL RTSP" [required]="true" [mono]="true"
+      <app-ui-input label="Dirección de transmisión de la cámara (RTSP)" [required]="true" [mono]="true"
         placeholder="rtsp://admin:clave@10.14.5.11:554/Streaming/Channels/102"
-        hint="Sub-stream 102 recomendado (menos CPU)"
+        hint="Usa la dirección RTSP proporcionada por la cámara."
         [ngModel]="form().rtsp_url" (ngModelChange)="patch({ rtsp_url: $event })" />
     }
     @if (form().id !== null) {

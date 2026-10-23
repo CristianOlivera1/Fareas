@@ -1,0 +1,40 @@
+<div
+  class="inline-flex max-w-full items-center gap-2 overflow-x-auto rounded-xl bg-gray-100 p-1"
+  role="tablist"
+  [attr.aria-label]="ariaLabel()"
+>
+  @for (tab of tabs(); track tab.id; let index = $index) {
+    <button
+      #tabButton
+      type="button"
+      role="tab"
+      [id]="tabId(tab.id)"
+      [attr.aria-controls]="panelId(tab.id)"
+      [attr.aria-selected]="activeTab() === tab.id"
+      [attr.tabindex]="activeTab() === tab.id ? 0 : -1"
+      class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-(--fareas-primary)"
+      [class.bg-white]="activeTab() === tab.id"
+      [class.shadow-sm]="activeTab() === tab.id"
+      [class.text-gray-900]="activeTab() === tab.id"
+      [class.text-gray-500]="activeTab() !== tab.id"
+      (click)="selectTab(tab.id)"
+      (keydown)="onKeydown($event, index)"
+    >
+      @if (tab.icon) {
+        <iconify-icon [icon]="tab.icon" width="18" aria-hidden="true"></iconify-icon>
+      }
+      <span>{{ tab.label }}</span>
+      @if (tab.badge !== undefined) {
+        <span
+          class="rounded-full px-1.5 text-xs font-semibold"
+          [class.bg-green-100]="tab.badgeTone === 'success'"
+          [class.text-green-700]="tab.badgeTone === 'success'"
+          [class.bg-gray-200]="tab.badgeTone !== 'success'"
+          [class.text-gray-500]="tab.badgeTone !== 'success'"
+        >
+          {{ tab.badge }}
+        </span>
+      }
+    </button>
+  }
+</div>
