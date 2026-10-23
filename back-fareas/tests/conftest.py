@@ -48,6 +48,7 @@ def _no_smtp(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr("app.routers.auth.send_otp", _noop)
     monkeypatch.setattr("app.routers.auth.send_password_changed_notice", _noop)
+    monkeypatch.setattr("app.services.accounts.send_temporary_credentials", _noop)
 
 @pytest.fixture
 def app_instance() -> FastAPI:

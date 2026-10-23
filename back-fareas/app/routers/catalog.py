@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from typing import Annotated
+
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlmodel import func, select
 
@@ -8,6 +10,14 @@ from app.schemas.common import Page
 from app.services.accounts import create_account, resend_credentials
 from app.services.audit import audit
 from app.services.formats import validar_whatsapp
+from app.services.ocr_extract import MAX_PESO_ARCHIVO
+from app.services.students_import import (
+    ImportacionAlumnosIn,
+    ImportacionAlumnosOut,
+    ImportacionAlumnosPreviewOut,
+    confirmar_nomina,
+    preview_nomina,
+)
 from app.tables import AppUser, Device, DeviceType, FaceEmbedding, Room, UserRole
 
 router = APIRouter(tags=["catalog"])
@@ -400,6 +410,61 @@ async def create_student(
         ip=_client_ip(request),
     )
     return person_out(user)
+
+@router.post("/students/import-preview", response_model=ImportacionAlumnosPreviewOut)
+async def students_import_preview(
+    request: Request,
+    db: DbSession,
+    admin: RequireRole(UserRole.ADMIN),
+    file: Annotated[UploadFile, File(description="Nómina en PDF, JPG, PNG o WEBP")],
+    default_semester: Annotated[int, Form(ge=1, le=12)] = 1,
+) -> ImportacionAlumnosPreviewOut:
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            detail="El archivo está vacío")
+    if len(raw) > MAX_PESO_ARCHIVO:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                            detail="El archivo supera el máximo de 10 MB")
+    try:
+        documento, alumnos = await preview_nomina(db, raw, file.filename, default_semester)
+    except ValueError as exc:
+        detalle = str(exc)
+        codigo = (status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+                  if detalle.startswith("Formato no soportado") else
+                  status.HTTP_422_UNPROCESSABLE_CONTENT)
+        raise HTTPException(status_code=codigo, detail=detalle) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            detail="No se pudo leer la nómina; ¿es una tabla impresa válida?") from exc
+    if not alumnos:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=("No se detectaron filas con código y nombre. Revisa que sea una nómina "
+                    "impresa en tabla, derecha y con buena luz, o registra a los alumnos a mano."),
+        )
+    await audit(db, admin, action="importacion_alumnos_preview", entity="app_user",
+                new_value={"archivo": file.filename, "tipo": documento.tipo,
+                           "paginas": documento.paginas, "filas": len(alumnos)},
+                ip_address=_client_ip(request))
+    await db.commit()
+    listos = sum(1 for alumno in alumnos if alumno.confiable and not alumno.errores)
+    con_error = sum(1 for alumno in alumnos if alumno.errores)
+    return ImportacionAlumnosPreviewOut(
+        tipo=documento.tipo,
+        paginas=documento.paginas,
+        total=len(alumnos),
+        listos=listos,
+        con_error=con_error,
+        alumnos=alumnos,
+    )
+
+@router.post("/students/import-confirm", response_model=ImportacionAlumnosOut)
+async def students_import_confirm(
+    body: ImportacionAlumnosIn, request: Request, db: DbSession,
+    admin: RequireRole(UserRole.ADMIN),
+) -> ImportacionAlumnosOut:
+    return await confirmar_nomina(db, admin, body, ip=_client_ip(request))
 
 @router.get("/accounts/{user_id}", response_model=PersonOut)
 async def get_account(
