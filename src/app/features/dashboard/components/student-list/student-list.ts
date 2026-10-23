@@ -2,18 +2,24 @@ import {
   ChangeDetectionStrategy,
   Component,
   CUSTOM_ELEMENTS_SCHEMA,
+  DestroyRef,
   inject,
   signal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { catchError, interval, map, of, startWith, switchMap } from 'rxjs';
 import { Router } from '@angular/router';
 import { DataTable } from '../../../../shared/components/data-table/data-table';
 import { DataTableCellDirective } from '../../../../shared/components/data-table/data-table-cell.directive';
 import { UiButton } from '../../../../shared/components/ui-button/ui-button';
 import { TableColumn } from '../../../../core/models/table-column';
+import { AttendanceToday } from '../../../../core/models/catalog';
+import { AttendanceApi } from '../../../../core/services/attendance-api';
 
-type StudentStatus = 'Asistió' | 'Tardanza' | 'Sin registro' | 'Falta';
+type StudentStatus = 'Asistió' | 'Tardanza' | 'Falta' | 'Falta justificada';
 
 interface StudentRow {
+  recordId: number;
   code: string;
   name: string;
   initials: string;
@@ -23,21 +29,40 @@ interface StudentRow {
   time: string;
 }
 
-const MOCK_STUDENTS: StudentRow[] = [
-  { code: '221181', name: 'Raul Montesinos Valdivia', initials: 'RM', status: 'Asistió', course: 'Metodología de la Investigación Científica', room: 'LAB 305', time: '9:02 am' },
-  { code: '231204', name: 'Razib Rahman Ttito', initials: 'RT', status: 'Tardanza', course: 'Metodología de la Investigación Científica', room: 'LAB 305', time: '9:18 am' },
-  { code: '221105', name: 'Lucía Fernández Quispe', initials: 'LF', status: 'Asistió', course: 'Metodología de la Investigación Científica', room: 'LAB 305', time: '9:01 am' },
-  { code: '222046', name: 'Valentina Sosa Apaza', initials: 'VS', status: 'Asistió', course: 'Sistemas Distribuidos', room: 'LAB 304', time: '9:00 am' },
-  { code: '223014', name: 'Diego Torres Mamani', initials: 'DT', status: 'Falta', course: 'Sistemas Distribuidos', room: 'LAB 304', time: '-' },
-  { code: '231150', name: 'Luis Navarro Cusihuaranga', initials: 'LN', status: 'Sin registro', course: 'Sistemas Distribuidos', room: 'LAB 304', time: '-' },
-];
+const REFRESH_MS = 30_000;
 
 const STATUS_DOT: Record<StudentStatus, string> = {
   Asistió: 'bg-green-500',
   Tardanza: 'bg-amber-500',
-  'Sin registro': 'bg-gray-400',
   Falta: 'bg-red-500',
+  'Falta justificada': 'bg-blue-500',
 };
+
+function toRow(record: AttendanceToday): StudentRow {
+  const status: StudentStatus =
+    record.status === 'asistio'
+      ? 'Asistió'
+      : record.status === 'tardanza'
+        ? 'Tardanza'
+        : record.is_justified
+          ? 'Falta justificada'
+          : 'Falta';
+  return {
+    recordId: record.record_id,
+    code: record.student_code ?? '—',
+    name: record.student_name,
+    initials: record.student_name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join(''),
+    status,
+    course: record.course_name,
+    room: record.room_code,
+    time: record.marked_at && record.marked_at.length >= 16 ? record.marked_at.slice(11, 16) : '—',
+  };
+}
 
 @Component({
   selector: 'app-student-list',
@@ -49,6 +74,8 @@ const STATUS_DOT: Record<StudentStatus, string> = {
 })
 export class StudentList {
   private readonly router = inject(Router);
+  private readonly api = inject(AttendanceApi);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly columns: TableColumn[] = [
     { id: 'index', header: 'N°', align: 'center', width: '3rem' },
@@ -58,13 +85,33 @@ export class StudentList {
     { id: 'course', header: 'Curso', hiddenOnMobile: true },
     { id: 'room', header: 'Aula', align: 'center', hiddenOnMobile: true },
     { id: 'time', header: 'Hora' },
-    { id: 'actions', header: 'Acciones', align: 'right' },
   ];
 
-  readonly students = signal(MOCK_STUDENTS);
+  readonly students = signal<StudentRow[]>([]);
+  readonly loading = signal(true);
+  readonly error = signal<string | null>(null);
 
-  trackByCode(_index: number, row: unknown): unknown {
-    return (row as StudentRow).code;
+  constructor() {
+    interval(REFRESH_MS)
+      .pipe(
+        startWith(0),
+        switchMap(() =>
+          this.api.today().pipe(
+            map((records) => ({ rows: records.map(toRow), failed: false })),
+            catchError(() => of({ rows: null, failed: true })),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(({ rows, failed }) => {
+        if (rows) this.students.set(rows);
+        this.error.set(failed ? 'No se pudo cargar la lista de asistencias.' : null);
+        this.loading.set(false);
+      });
+  }
+
+  trackByRecord(_index: number, row: unknown): unknown {
+    return (row as StudentRow).recordId;
   }
 
   statusDot(status: StudentStatus): string {
