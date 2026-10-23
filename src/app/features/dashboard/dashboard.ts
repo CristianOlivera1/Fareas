@@ -39,12 +39,12 @@ export class Dashboard {
     {
       title: 'Cámaras activas',
       value: '14 / 16',
-      detail: '2 streams RTSP caídos',
+      detail: '2 cámaras sin conexión',
       icon: 'material-symbols:videocam-outline',
       accent: 'text-(--fareas-primary)',
     },
     {
-      title: 'Alertas críticas DPI',
+      title: 'Exceso de inasistencias',
       value: '3',
       detail: 'Alumnos con >30% faltas',
       icon: 'akar-icons:triangle-alert-fill',

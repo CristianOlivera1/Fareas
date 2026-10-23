@@ -192,10 +192,9 @@
       (blockRemove)="onBlockRemove($event)" />
 
     <p class="mt-2 text-xs text-gray-400">
-      Franja de clases {{ attendanceStartTime() }}–{{ attendanceEndTime() }} (Parámetros), de Lunes a Viernes. Cada
-      bloque puede llevar su propia aula y es una sesión independiente: su apertura, su tolerancia
-      y su cierre se calculan con su propia hora de inicio y fin (RF-23/RF-26). Si falta el docente
-      o el aula, el bloque queda pendiente y no abre sesiones.
+      Las clases pueden programarse de lunes a viernes entre {{ attendanceStartTime() }} y
+      {{ attendanceEndTime() }}. Cada bloque tiene su propia aula y se gestiona como una sesión
+      independiente. Si no tiene docente o aula asignados, queda pendiente y no genera una sesión.
     </p>
   </section>
 }

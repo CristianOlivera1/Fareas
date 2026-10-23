@@ -1,5 +1,5 @@
 <app-page-header title="Importar horario"
-  subtitle="Sube el horario de un ciclo y revísalo antes de guardarlo (RF-07)">
+  subtitle="Carga el horario de un ciclo, revisa los bloques detectados y confirma antes de guardarlos.">
 </app-page-header>
 
 <ol class="mb-5 grid gap-2 sm:grid-cols-3" aria-label="Pasos de la importación">
@@ -63,8 +63,8 @@
     </div>
 
     <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline" class="mt-4">
-      Acepta PDF con texto, PDF escaneado, JPG, PNG y WEBP de hasta 10 MB. El OCR puede tardar unos
-      segundos; la previsualización no guarda nada.
+      Puedes subir un PDF con texto, un PDF escaneado o una imagen JPG, PNG o WEBP de hasta 10 MB.
+      El sistema puede tardar unos segundos en leerlo; la vista previa no guarda ningún cambio.
     </app-ui-alert>
 
     @if (error(); as message) {
@@ -132,9 +132,8 @@
       </div>
 
       <p class="mt-2 text-xs text-gray-400">
-        El docente y el aula son opcionales: si no los eliges, el bloque se guarda como “Sin
-        asignar” y puedes completarlo luego desde el calendario. Un grupo ya existente conserva su
-        docente y no se reasigna desde la importación.
+        El docente y el aula son opcionales. Si no los asignas, podrás completarlos después desde el
+        horario. La importación no cambia el docente de los grupos que ya existen.
       </p>
 
       @if (groups().length === 0) {

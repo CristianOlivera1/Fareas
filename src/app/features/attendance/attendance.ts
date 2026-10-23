@@ -324,8 +324,8 @@ export class Attendance {
       await this.api.justify(r.record_id, { reason }).toPromise();
       this.toast.add({
         severity: 'success',
-        summary: 'Falta justificada (FJ)',
-        detail: 'Deja de contar para el 30 % de inasistencias',
+        summary: 'Falta justificada',
+        detail: 'Ya no contará para el límite de inasistencias.',
         life: 4000,
       });
       this.justifyVisible = false;
@@ -357,7 +357,7 @@ export class Attendance {
       this.toast.add({
         severity: 'success',
         summary: 'Sesión cerrada',
-        detail: `Faltas generadas: ${res?.faltas ?? 0} · alertas DPI: ${res?.alertas ?? 0}`,
+        detail: `Inasistencias registradas: ${res?.faltas ?? 0} · avisos enviados: ${res?.alertas ?? 0}`,
         life: 5000,
       });
       this.closeVisible = false;
@@ -400,7 +400,7 @@ export class Attendance {
       this.toast.add({
         severity: 'success',
         summary: 'Sesión cancelada',
-        detail: 'No se generan faltas; la sesión queda fuera de las consultas y del DPI',
+        detail: 'No se generarán faltas ni se incluirá esta sesión en el cálculo de inasistencias.',
         life: 4500,
       });
       this.cancelVisible = false;

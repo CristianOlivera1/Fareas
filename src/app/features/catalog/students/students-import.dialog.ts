@@ -365,8 +365,8 @@ export class StudentsImportDialog {
 
   private documentLabel(type: string | undefined): string {
     if (type === 'pdf_texto') return 'PDF con texto';
-    if (type === 'pdf_ocr') return 'PDF escaneado (OCR)';
-    if (type === 'imagen') return 'Foto (OCR)';
+    if (type === 'pdf_ocr') return 'PDF escaneado';
+    if (type === 'imagen') return 'Imagen';
     return 'Documento';
   }
 

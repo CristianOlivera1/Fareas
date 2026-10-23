@@ -1,4 +1,4 @@
-<app-page-header title="Estudiantes" subtitle="Directorio de matriculados (RF-03)">
+<app-page-header title="Estudiantes" subtitle="Consulta y administra los estudiantes matriculados.">
   @if (auth.isAdmin()) {
     <app-ui-button variant="outline" icon="material-symbols:upload-file-outline" (click)="openImport()">
       Importar nómina
@@ -120,8 +120,8 @@
       </label>
     } @else {
       <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-        Se genera una clave temporal y se envía al correo (RF-08). El rostro se enrola
-        después en Herramientas → Enrolamiento facial.
+        Al guardar, se enviará una clave temporal al correo institucional. Después, registra el rostro
+        del estudiante en Herramientas → Enrolamiento facial.
       </app-ui-alert>
     }
   </div>
