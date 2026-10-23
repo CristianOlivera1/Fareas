@@ -1,0 +1,96 @@
+<app-page-header title="Mis asistencias" subtitle="Consulta tu historial de asistencia y tu avance frente al límite de inasistencias.">
+  <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="load()">Actualizar</app-ui-button>
+</app-page-header>
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudo cargar tu información" class="mb-4">{{ msg }}</app-ui-alert>
+}
+
+<section class="mb-6" aria-label="Inasistencias por curso">
+  <h2 class="mb-3 text-sm font-semibold tracking-tight text-gray-900">Inasistencias por curso</h2>
+  @if (!loading() && dpi().length === 0) {
+    <div class="rounded-2xl border border-dashed border-gray-200 bg-white p-6 text-center text-sm text-gray-500">
+      Aún no hay sesiones cerradas en tus cursos.
+    </div>
+  }
+  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    @for (item of dpi(); track item.course_id) {
+      <article class="rounded-2xl border border-gray-100 bg-white p-4">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
+            <span class="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">{{ item.course_code }}</span>
+            <p class="mt-2 truncate text-sm font-medium text-gray-900" [title]="item.course_name">{{ item.course_name }}</p>
+          </div>
+          <span class="shrink-0 text-xs font-semibold" [class]="style(item).text">{{ style(item).label }}</span>
+        </div>
+        <div class="mt-3 flex items-end justify-between">
+          <span class="text-2xl font-semibold tabular-nums tracking-tight text-gray-900">{{ item.absence_percent }}%</span>
+          <span class="text-xs text-gray-500">{{ item.absences }} de {{ item.sessions_held }} sesiones</span>
+        </div>
+        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100" role="progressbar"
+          [attr.aria-valuenow]="item.absence_percent" aria-valuemin="0" aria-valuemax="100">
+          <div class="h-full rounded-full transition-all" [class]="style(item).bar" [style.width.%]="barWidth(item)"></div>
+        </div>
+        <dl class="mt-3 grid grid-cols-3 gap-2 text-center text-xs text-gray-500">
+          <div><dt>Tardanzas</dt><dd class="mt-0.5 text-sm font-medium text-gray-900">{{ item.lates }}</dd></div>
+          <div><dt>Justificadas</dt><dd class="mt-0.5 text-sm font-medium text-gray-900">{{ item.justified_absences }}</dd></div>
+          <div><dt>Faltas restantes</dt><dd class="mt-0.5 text-sm font-medium text-gray-900">{{ item.faltas_restantes ?? '—' }}</dd></div>
+        </dl>
+      </article>
+    }
+  </div>
+</section>
+
+<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+  <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+    Desde
+    <input type="date" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
+      [value]="from()" [max]="to() || null" (change)="setFrom($any($event.target).value)" />
+  </label>
+  <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+    Hasta
+    <input type="date" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
+      [value]="to()" [min]="from() || null" (change)="setTo($any($event.target).value)" />
+  </label>
+  @if (hasFilters()) {
+    <app-ui-button variant="ghost" size="sm" icon="material-symbols:filter-alt-off-outline" (click)="clearFilters()">
+      Limpiar
+    </app-ui-button>
+  }
+</div>
+
+<app-data-table
+  [columns]="columns" [data]="records()" [trackBy]="trackById"
+  [loading]="loading()" [errorMessage]="error()" (retry)="load()"
+  emptyTitle="Sin registros"
+  emptyMessage="No hay asistencias para el rango elegido. Aparecerán cuando se cierren tus clases."
+>
+  <ng-template appCell="session_date" let-r>
+    <span class="text-sm tabular-nums text-gray-700">{{ r.session_date }}</span>
+  </ng-template>
+  <ng-template appCell="course_code" let-r>
+    <div class="min-w-0">
+      <span class="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">{{ r.course_code }}</span>
+      <div class="mt-1 truncate text-xs text-gray-500">{{ r.course_name }}</div>
+    </div>
+  </ng-template>
+  <ng-template appCell="group_code" let-r>
+    <span class="text-sm font-medium text-gray-700">G{{ r.group_code }}</span>
+  </ng-template>
+  <ng-template appCell="schedule" let-r>
+    <span class="text-sm tabular-nums text-gray-600">{{ schedule(r) }}</span>
+  </ng-template>
+  <ng-template appCell="status" let-r>
+    <p-tag [value]="label(r)" [severity]="severity(r)" />
+  </ng-template>
+  <ng-template appCell="method" let-r>
+    <span class="inline-flex items-center gap-1.5 text-sm text-gray-700">
+      <iconify-icon [icon]="r.method === 'manual' ? 'material-symbols:edit-outline' : 'material-symbols:face-outline'"
+        width="16" class="text-gray-400"></iconify-icon>
+      {{ r.method === 'manual' ? 'Manual' : 'Facial' }}
+    </span>
+  </ng-template>
+  <ng-template appCell="correct_reason" let-r>
+    <span class="text-sm text-gray-600">{{ r.correct_reason ?? '—' }}</span>
+  </ng-template>
+</app-data-table>

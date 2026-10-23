@@ -1,0 +1,110 @@
+<app-page-header [title]="'Hola, ' + firstName()" [subtitle]="todayLabel()" />
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudo cargar tu resumen" class="mb-4 block">{{ msg }}</app-ui-alert>
+}
+
+@if (atRisk().length > 0) {
+  <a [routerLink]="prefix + '/my-courses'"
+    class="mb-4 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition-colors hover:bg-amber-100">
+    <iconify-icon icon="material-symbols:warning-outline" width="20"></iconify-icon>
+    <span class="flex-1">
+      Tienes <strong>{{ atRisk().length }}</strong>
+      {{ atRisk().length === 1 ? 'curso' : 'cursos' }} cerca o por encima del límite de inasistencias:
+      {{ atRisk()[0].course_code }}{{ atRisk().length > 1 ? ' y otros' : '' }} ({{ atRisk()[0].absence_percent }}%).
+    </span>
+    <span class="font-medium">Ver cursos</span>
+  </a>
+}
+
+<div class="grid gap-4 lg:grid-cols-3">
+  <section class="rounded-2xl border border-gray-100 bg-white p-5 lg:col-span-2" aria-labelledby="home-today">
+    <div class="mb-3 flex items-center justify-between">
+      <h2 id="home-today" class="text-base font-semibold tracking-tight text-gray-900">Clases de hoy</h2>
+      <a [routerLink]="prefix + '/my-schedule'" class="text-sm font-medium text-(--fareas-primary) hover:underline">Ver horario</a>
+    </div>
+
+    @if (loading()) {
+      <div class="space-y-2" aria-busy="true">
+        @for (i of [1, 2]; track i) {
+          <div class="h-16 animate-pulse rounded-xl bg-gray-50"></div>
+        }
+      </div>
+    } @else if (todayClasses().length === 0) {
+      <div class="rounded-xl border border-dashed border-gray-200 p-6 text-center text-sm text-gray-500">
+        No tienes clases programadas hoy.
+      </div>
+    } @else {
+      <ul class="space-y-2">
+        @for (item of todayClasses(); track item.row.id) {
+          <li class="flex items-center gap-3 rounded-xl border border-gray-100 p-3">
+            <div class="w-24 shrink-0 text-sm font-medium tabular-nums text-gray-900">{{ hours(item.row) }}</div>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-medium text-gray-900">{{ item.row.course_name }}</p>
+              <p class="truncate text-xs text-gray-500">
+                {{ item.row.course_code }} · Grupo {{ item.row.group_code }} · {{ item.row.room_code ?? 'Aula por definir' }}
+                @if (item.row.teacher_name) { · {{ item.row.teacher_name }} }
+              </p>
+            </div>
+            <span class="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium" [class]="stateStyle(item.state).chip">
+              {{ stateStyle(item.state).label }}
+            </span>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  <section class="rounded-2xl border border-gray-100 bg-white p-5" aria-labelledby="home-recent">
+    <div class="mb-3 flex items-center justify-between">
+      <h2 id="home-recent" class="text-base font-semibold tracking-tight text-gray-900">Últimas asistencias</h2>
+      <a [routerLink]="prefix + '/my-attendance'" class="text-sm font-medium text-(--fareas-primary) hover:underline">Ver todas</a>
+    </div>
+
+    @if (!loading() && recent().length === 0) {
+      <p class="rounded-xl border border-dashed border-gray-200 p-6 text-center text-sm text-gray-500">Aún no tienes registros.</p>
+    }
+    <ul class="space-y-3">
+      @for (record of recent(); track record.record_id) {
+        <li class="flex items-center gap-3">
+          <span class="size-2.5 shrink-0 rounded-full" [class]="recordStyle(record).dot"></span>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-medium text-gray-900">{{ record.course_code }} · {{ recordStyle(record).label }}</p>
+            <p class="text-xs text-gray-500">{{ record.session_date }} · {{ record.start_time }}</p>
+          </div>
+        </li>
+      }
+    </ul>
+  </section>
+</div>
+
+<section class="mt-4 rounded-2xl border border-gray-100 bg-white p-5" aria-labelledby="home-dpi">
+  <div class="mb-3 flex items-center justify-between">
+    <h2 id="home-dpi" class="text-base font-semibold tracking-tight text-gray-900">Tu avance por curso</h2>
+    <a [routerLink]="prefix + '/my-courses'" class="text-sm font-medium text-(--fareas-primary) hover:underline">Mis cursos</a>
+  </div>
+  @if (!loading() && dpi().length === 0) {
+    <p class="rounded-xl border border-dashed border-gray-200 p-6 text-center text-sm text-gray-500">
+      Aún no hay sesiones cerradas en tus cursos.
+    </p>
+  }
+  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    @for (item of dpi(); track item.course_id) {
+      <div class="rounded-xl border border-gray-100 p-3">
+        <div class="flex items-center justify-between gap-2">
+          <span class="truncate text-sm font-medium text-gray-900" [title]="item.course_name">{{ item.course_code }}</span>
+          <span class="text-sm font-semibold tabular-nums text-gray-900">{{ item.absence_percent }}%</span>
+        </div>
+        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100">
+          <div class="h-full rounded-full"
+            [class]="item.nivel === 'limite' ? 'bg-red-500' : item.nivel === 'alerta' ? 'bg-amber-500' : 'bg-green-500'"
+            [style.width.%]="item.absence_percent > 100 ? 100 : item.absence_percent"></div>
+        </div>
+        <p class="mt-2 text-xs text-gray-500">
+          {{ item.absences }} de {{ item.sessions_held }} sesiones
+          @if (item.faltas_restantes !== null) { · {{ item.faltas_restantes }} faltas restantes }
+        </p>
+      </div>
+    }
+  </div>
+</section>

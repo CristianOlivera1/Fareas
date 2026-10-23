@@ -21,8 +21,49 @@ export interface SessionToday {
   readonly teacher_name: string;
 }
 
+export interface MyAttendance {
+  readonly record_id: number;
+  readonly session_id: number;
+  readonly session_date: string;
+  readonly start_time: string;
+  readonly end_time: string;
+  readonly course_id: number;
+  readonly course_code: string;
+  readonly course_name: string;
+  readonly group_code: string;
+  readonly status: AttendanceStatusApi;
+  readonly is_justified: boolean;
+  readonly marked_at: string | null;
+  readonly method: 'facial' | 'manual';
+  readonly correct_reason: string | null;
+}
+
+export interface MyDpi {
+  readonly course_id: number;
+  readonly course_code: string;
+  readonly course_name: string;
+  readonly sessions_held: number;
+  readonly absences: number;
+  readonly justified_absences: number;
+  readonly lates: number;
+  readonly absence_percent: number;
+  readonly nivel: 'alerta' | 'limite' | null;
+  readonly sesiones_planificadas: number | null;
+  readonly faltas_permitidas: number | null;
+  readonly faltas_restantes: number | null;
+  readonly semester_label: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AttendanceApi extends BaseApi {
+  mine(params?: { desde?: string | null; hasta?: string | null }) {
+    return this.get<MyAttendance[]>('/attendance/me', { ...params, limit: 500 });
+  }
+
+  myDpi() {
+    return this.get<MyDpi[]>('/attendance/me/dpi');
+  }
+
   today(params?: ListParams & {
     course_id?: number;
     room?: string;

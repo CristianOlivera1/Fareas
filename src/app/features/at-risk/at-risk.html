@@ -1,0 +1,49 @@
+<app-page-header title="Alumnos en riesgo" subtitle="Seguimiento de inasistencias frente al límite del periodo vigente.">
+  <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="reload()">Actualizar</app-ui-button>
+</app-page-header>
+
+<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+  <div class="inline-flex rounded-xl border border-gray-200 bg-white p-1" role="group" aria-label="Nivel de riesgo">
+    @for (item of levels; track item.value) {
+      <button type="button" (click)="level.set(item.value)" [attr.aria-pressed]="level() === item.value"
+        class="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
+        [class]="level() === item.value ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'">
+        {{ item.label }}
+      </button>
+    }
+  </div>
+  <p-select appendTo="body" class="w-full sm:w-72" [options]="courseOptions()" optionLabel="label" optionValue="value"
+    [ngModel]="courseId()" (ngModelChange)="courseId.set($event)" [filter]="true" placeholder="Todos mis cursos" aria-label="Curso" />
+  <span class="text-xs text-gray-500">{{ hint() }}</span>
+</div>
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudo cargar el seguimiento" class="mb-4 block">{{ msg }}</app-ui-alert>
+}
+
+<app-data-table
+  [columns]="columns" [data]="rows()" [trackBy]="trackRow"
+  [loading]="loading()" [errorMessage]="error()" (retry)="reload()"
+  emptyTitle="Sin alumnos en este nivel"
+  emptyMessage="Ningún alumno de los cursos seleccionados está en este nivel de riesgo."
+  emptyIcon="material-symbols:verified-outline"
+>
+  <ng-template appCell="student" let-row>
+    <div class="min-w-0">
+      <div class="truncate text-sm font-medium text-gray-900">{{ row.student_name }}</div>
+      <div class="font-mono text-xs text-gray-500">{{ row.student_code ?? '—' }}</div>
+    </div>
+  </ng-template>
+  <ng-template appCell="course_code" let-row>
+    <div class="min-w-0">
+      <span class="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">{{ row.course_code }}</span>
+      <div class="mt-1 truncate text-xs text-gray-500">{{ row.course_name }}</div>
+    </div>
+  </ng-template>
+  <ng-template appCell="absence_percent" let-row>
+    <div class="text-sm font-semibold tabular-nums" [class]="row.nivel === 'limite' ? 'text-red-600' : 'text-amber-600'">
+      {{ row.absence_percent }}%
+    </div>
+    <div class="text-xs text-gray-500">{{ row.absences }} de {{ row.sessions_held }}</div>
+  </ng-template>
+</app-data-table>
