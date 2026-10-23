@@ -29,6 +29,16 @@ import {
   ScheduleTable,
 } from '../../../shared/components/schedule-table/schedule-table';
 import { Block, Group } from '../../../core/models/catalog';
+import { cycleLabel, toRoman } from '../../../shared/utils/cycles';
+import {
+  BLOCK_END_HOUR,
+  BLOCK_START_HOUR,
+  blockEndOptions,
+  blockStartOptions,
+  hourValue,
+  nextBlockEnd,
+  validBlockRange,
+} from '../../../shared/utils/schedule-hours';
 
 const DIAS = [
   { label: 'Lunes', value: 1 },
@@ -83,11 +93,14 @@ export class CourseDetailPage {
   readonly courseId = Number(this.route.snapshot.paramMap.get('courseId'));
   private readonly queryCode = (this.route.snapshot.queryParamMap.get('code') ?? '').trim();
   private readonly queryName = (this.route.snapshot.queryParamMap.get('name') ?? '').trim();
+  private readonly queryCycle = Number(this.route.snapshot.queryParamMap.get('cycle') ?? 0);
 
   readonly dias = DIAS;
+  readonly roman = toRoman;
 
   readonly semester = this.qp.filter('semester');
 
+  readonly currentSemester = signal<string | null>(null);
   readonly semesters = signal<string[]>([]);
   readonly groups = signal<Group[]>([]);
   readonly blocks = signal<Block[]>([]);
@@ -119,6 +132,8 @@ export class CourseDetailPage {
     end_time: '10:00',
     room_id: null,
   });
+  readonly startHours = blockStartOptions();
+  readonly endHours = computed(() => blockEndOptions(this.blockForm().start_time));
 
   groupDialogVisible = false;
   blockDialogVisible = false;
@@ -134,6 +149,25 @@ export class CourseDetailPage {
     const code = this.queryCode || first?.course_code || `#${this.courseId}`;
     const name = this.queryName || first?.course_name || '';
     return name ? `${code} · ${name}` : code;
+  });
+
+  readonly courseCycle = computed(() => {
+    const first = this.groups()[0];
+    const cycle = first?.cycle ?? this.queryCycle;
+    return cycle >= 1 && cycle <= 10 ? cycle : null;
+  });
+
+  readonly subtitle = computed(() => {
+    const cycle = this.courseCycle();
+    return cycle
+      ? `${cycleLabel(cycle)} · grupos, cupo y horario semanal (RF-06)`
+      : 'Grupos, cupo y horario semanal (RF-06)';
+  });
+
+  readonly isCurrentPeriod = computed(() => {
+    const selected = this.semester();
+    const current = this.currentSemester();
+    return !selected || !current || selected === current;
   });
 
   readonly selectedGroupBlocks = computed(() =>
@@ -174,7 +208,9 @@ export class CourseDetailPage {
         this.catalog.rooms({ page_size: 100 }).toPromise(),
       ]);
       const vigente = cfg?.semester_label ?? null;
-      const opciones = [...new Set([vigente ?? '', ...(labels ?? [])])].filter((s) => s !== '');
+      const opciones = [...new Set([vigente ?? '', ...(labels ?? []), this.semester() ?? ''])]
+        .filter((s) => s !== '');
+      this.currentSemester.set(vigente);
       this.semesters.set(opciones);
       if (!this.semester() && vigente) {
         await this.qp.update({ semester: vigente });
@@ -349,6 +385,14 @@ export class CourseDetailPage {
     this.blockForm.update((f) => ({ ...f, ...p }));
   }
 
+  onStartTime(value: string): void {
+    const currentEnd = this.blockForm().end_time;
+    this.patchBlock({
+      start_time: value,
+      end_time: validBlockRange(value, currentEnd) ? currentEnd : nextBlockEnd(value),
+    });
+  }
+
   openCreateBlock(weekday?: number, hour?: string): void {
     const group = this.selectedGroup();
     const delDia = this.blocksFor(weekday ?? 1);
@@ -358,7 +402,7 @@ export class CourseDetailPage {
     this.blockForm.set({
       weekday: weekday ?? 1,
       start_time: inicio,
-      end_time: this.addHours(inicio, 2),
+      end_time: nextBlockEnd(inicio),
       room_id: ultimo?.room_id ?? this.blocks().at(-1)?.room_id ?? null,
     });
     if (!group) {
@@ -385,21 +429,13 @@ export class CourseDetailPage {
       this.toast.add({ severity: 'warn', summary: 'Indica el aula del bloque', life: 3000 });
       return;
     }
-    if (f.start_time >= f.end_time) {
+    if (!validBlockRange(f.start_time, f.end_time)) {
       this.toast.add({
         severity: 'warn',
         summary: 'Rango inválido',
-        detail: 'La hora de fin debe ser posterior al inicio',
-        life: 3500,
-      });
-      return;
-    }
-    if (f.start_time < this.horaInicio() || f.end_time > this.horaFin()) {
-      this.toast.add({
-        severity: 'warn',
-        summary: 'Fuera de la franja de clases',
-        detail: `Las clases van de ${this.horaInicio()} a ${this.horaFin()}`,
-        life: 4000,
+        detail:
+          'Elige horas exactas entre 07:00 y 20:00, sin minutos, con una duración máxima de 2 horas',
+        life: 4500,
       });
       return;
     }
@@ -522,22 +558,10 @@ export class CourseDetailPage {
   }
 
   private hhmm(hour: number): string {
-    return `${String(hour).padStart(2, '0')}:00`;
+    return hourValue(Math.min(Math.max(hour, BLOCK_START_HOUR), BLOCK_END_HOUR - 1));
   }
 
   private hora(value: string | null | undefined): string | null {
     return value ? value.slice(0, 5) : null;
-  }
-
-  private minutos(value: string): number {
-    const [h, m] = value.split(':').map(Number);
-    return h * 60 + (m || 0);
-  }
-
-  private addHours(time: string, hours: number): string {
-    const total = Math.min(this.minutos(this.horaFin()), this.minutos(time) + hours * 60);
-    const hh = String(Math.floor(total / 60)).padStart(2, '0');
-    const mm = String(total % 60).padStart(2, '0');
-    return `${hh}:${mm}`;
   }
 }
