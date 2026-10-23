@@ -20,7 +20,6 @@ import { CalendarApi } from '../../../core/services/calendar-api';
 import { AuthService } from '../../../core/services/auth/auth';
 import { PageHeader } from '../../../shared/components/page-header/page-header';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
-import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { ModalDelete } from '../../../shared/components/modal-delete/modal-delete';
 import {
@@ -28,6 +27,16 @@ import {
   ScheduleTable,
 } from '../../../shared/components/schedule-table/schedule-table';
 import { Group, ScheduleRow } from '../../../core/models/catalog';
+import { CYCLES, toRoman } from '../../../shared/utils/cycles';
+import {
+  BLOCK_END_HOUR,
+  BLOCK_START_HOUR,
+  blockEndOptions,
+  blockStartOptions,
+  hourValue,
+  nextBlockEnd,
+  validBlockRange,
+} from '../../../shared/utils/schedule-hours';
 
 const DIAS = [
   { label: 'Lunes', value: 1 },
@@ -53,7 +62,7 @@ interface BlockForm {
 @Component({
   selector: 'app-schedule-general-page',
   imports: [
-    FormsModule, PageHeader, UiButton, UiInput, UiAlert, ModalDelete,
+    FormsModule, PageHeader, UiButton, UiAlert, ModalDelete,
     DialogModule, SelectModule, ScheduleTable,
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
@@ -71,7 +80,10 @@ export class ScheduleGeneralPage {
   private readonly deleteModal = viewChild(ModalDelete);
 
   readonly dias = DIAS;
+  readonly cycles = CYCLES;
+  readonly roman = toRoman;
   readonly semester = this.qp.filter('semester');
+  readonly cycleId = this.qp.number('cycle', 0);
 
   readonly semesters = signal<string[]>([]);
   readonly rows = signal<ScheduleRow[]>([]);
@@ -98,9 +110,24 @@ export class ScheduleGeneralPage {
   readonly filtersActive = computed(
     () => this.courseId() !== 0 || this.teacherId() !== 0 || this.roomId() !== 0,
   );
+  readonly cycleSelected = computed(() => this.cycleId() !== 0);
+
+  readonly visibleRows = computed(() => {
+    const cycle = this.cycleId();
+    return cycle ? this.rows().filter((row) => row.cycle === cycle) : this.rows();
+  });
+
+  readonly cycleCounts = computed(() => {
+    const counts = new Map<number, number>();
+    for (const cycle of CYCLES) counts.set(cycle, 0);
+    for (const row of this.rows()) {
+      counts.set(row.cycle, (counts.get(row.cycle) ?? 0) + 1);
+    }
+    return counts;
+  });
 
   readonly entries = computed<ScheduleEntry[]>(() =>
-    this.rows().map((r) => ({
+    this.visibleRows().map((r) => ({
       id: r.id,
       weekday: r.weekday,
       start_time: r.start_time,
@@ -114,7 +141,7 @@ export class ScheduleGeneralPage {
   );
 
   readonly ocupadas = computed(() =>
-    this.rows().reduce(
+    this.visibleRows().reduce(
       (total, r) => total + (this.minutos(r.end_time) - this.minutos(r.start_time)) / 60,
       0,
     ),
@@ -124,12 +151,15 @@ export class ScheduleGeneralPage {
     return Math.max(0, porDia * DIAS.length - this.ocupadas());
   });
 
-  readonly groupOptions = computed<Option<number>[]>(() =>
-    this.groups().map((g) => ({
-      label: `${g.course_code} · Grupo ${g.group_code} · ${g.teacher_name}`,
-      value: g.id,
-    })),
-  );
+  readonly groupOptions = computed<Option<number>[]>(() => {
+    const cycle = this.cycleId();
+    return this.groups()
+      .filter((g) => !cycle || g.cycle === cycle)
+      .map((g) => ({
+        label: `${g.course_code} · Grupo ${g.group_code} · Ciclo ${this.roman(g.cycle)} · ${g.teacher_name}`,
+        value: g.id,
+      }));
+  });
 
   readonly blockForm = signal<BlockForm>({
     group_id: null,
@@ -138,6 +168,8 @@ export class ScheduleGeneralPage {
     end_time: '10:00',
     room_id: null,
   });
+  readonly startHours = blockStartOptions();
+  readonly endHours = computed(() => blockEndOptions(this.blockForm().start_time));
   blockDialogVisible = false;
 
   readonly deleteTarget = signal<ScheduleRow | null>(null);
@@ -219,6 +251,17 @@ export class ScheduleGeneralPage {
     void this.load();
   }
 
+  onCycle(value: number | null): void {
+    void this.qp.update({ cycle: value });
+  }
+
+  tabClass(cycle: number | null): string {
+    const active = cycle === null ? !this.cycleSelected() : this.cycleId() === cycle;
+    return active
+      ? 'flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-(--fareas-primary)'
+      : 'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800';
+  }
+
   onCourse(value: number | null): void {
     this.courseId.set(value ?? 0);
     void this.qp.update({ course: value });
@@ -249,13 +292,21 @@ export class ScheduleGeneralPage {
     this.blockForm.update((f) => ({ ...f, ...p }));
   }
 
+  onStartTime(value: string): void {
+    const currentEnd = this.blockForm().end_time;
+    this.patchBlock({
+      start_time: value,
+      end_time: validBlockRange(value, currentEnd) ? currentEnd : nextBlockEnd(value),
+    });
+  }
+
   openCreateBlock(weekday?: number, hour?: number): void {
     const inicio = hour !== undefined ? this.hhmm(hour) : '08:00';
     this.blockForm.set({
       group_id: null,
       weekday: weekday ?? 1,
       start_time: inicio,
-      end_time: this.addHours(inicio, 2),
+      end_time: nextBlockEnd(inicio),
       room_id: this.roomId() || null,
     });
     this.blockDialogVisible = true;
@@ -285,21 +336,13 @@ export class ScheduleGeneralPage {
       this.toast.add({ severity: 'warn', summary: 'Indica el aula del bloque', life: 3000 });
       return;
     }
-    if (!f.start_time || !f.end_time || f.start_time >= f.end_time) {
+    if (!validBlockRange(f.start_time, f.end_time)) {
       this.toast.add({
         severity: 'warn',
         summary: 'Rango inválido',
-        detail: 'La hora de fin debe ser posterior al inicio',
-        life: 3500,
-      });
-      return;
-    }
-    if (f.start_time < this.horaInicio() || f.end_time > this.horaFin()) {
-      this.toast.add({
-        severity: 'warn',
-        summary: 'Fuera de la franja de clases',
-        detail: `Las clases van de ${this.horaInicio()} a ${this.horaFin()}`,
-        life: 4000,
+        detail:
+          'Elige horas exactas entre 07:00 y 20:00, sin minutos, con una duración máxima de 2 horas',
+        life: 4500,
       });
       return;
     }
@@ -371,7 +414,7 @@ export class ScheduleGeneralPage {
   }
 
   protected hhmm(hour: number): string {
-    return `${String(hour).padStart(2, '0')}:00`;
+    return hourValue(Math.min(Math.max(hour, BLOCK_START_HOUR), BLOCK_END_HOUR - 1));
   }
 
   private hora(value: string | null | undefined): string | null {
@@ -381,12 +424,5 @@ export class ScheduleGeneralPage {
   private minutos(value: string): number {
     const [h, m] = value.slice(0, 5).split(':').map(Number);
     return h * 60 + (m || 0);
-  }
-
-  private addHours(time: string, hours: number): string {
-    const total = Math.min(this.minutos(this.horaFin()), this.minutos(time) + hours * 60);
-    const hh = String(Math.floor(total / 60)).padStart(2, '0');
-    const mm = String(total % 60).padStart(2, '0');
-    return `${hh}:${mm}`;
   }
 }

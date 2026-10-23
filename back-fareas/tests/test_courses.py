@@ -404,6 +404,12 @@ async def test_bloque_fuera_de_la_franja_de_clases(
                                     "room_id": grupo["room_id"]})
         assert r.status_code == 201, r.text
 
+        r = await client.post(f"{API}/groups/{grupo['id']}/blocks", headers=admin_headers,
+                              json={"weekday": 4, "start_time": "16:00", "end_time": "19:00",
+                                    "room_id": grupo["room_id"]})
+        assert r.status_code == 422, r.text
+        assert "2 horas" in r.json()["detail"]
+
         r = await client.patch(f"{API}/blocks/{bloque['id']}", headers=admin_headers,
                                json={"start_time": "05:00"})
         assert r.status_code == 422, r.text
@@ -412,6 +418,10 @@ async def test_bloque_fuera_de_la_franja_de_clases(
         assert r.status_code == 422, r.text
         r = await client.patch(f"{API}/blocks/{bloque['id']}", headers=admin_headers,
                                json={"end_time": "10:00"})
+        assert r.status_code == 422, r.text
+        assert "2 horas" in r.json()["detail"]
+        r = await client.patch(f"{API}/blocks/{bloque['id']}", headers=admin_headers,
+                               json={"end_time": "09:00"})
         assert r.status_code == 200, r.text
     finally:
         await _cleanup_course(db_session)

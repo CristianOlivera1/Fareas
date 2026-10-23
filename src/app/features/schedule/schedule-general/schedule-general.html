@@ -1,6 +1,6 @@
 <app-page-header
   title="Horario general"
-  subtitle="La semana completa de un semestre: huecos, cruces y carga en una sola vista (RF-06)"
+  subtitle="El horario de cada ciclo del periodo: huecos, cruces y carga por semana (RF-06)"
 >
   <app-ui-button variant="ghost" icon="material-symbols:refresh" (click)="load()">
     Actualizar
@@ -14,7 +14,7 @@
 
 <div class="mb-4 flex flex-wrap items-end gap-3">
   <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
-    <span>Semestre</span>
+    <span>Periodo</span>
     <p-select class="w-44" appendTo="body" [options]="semesters()" placeholder="Vigente"
       [ngModel]="semester()" (ngModelChange)="onSemester($event)" />
   </label>
@@ -44,6 +44,24 @@
   }
 </div>
 
+<div class="mb-4 rounded-xl border border-gray-200 bg-white p-2">
+  <div class="flex items-center gap-1 overflow-x-auto">
+    <span class="px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Ciclos</span>
+    <button type="button" [class]="tabClass(null)" (click)="onCycle(null)">
+      Todos
+      <span class="rounded-full bg-white/70 px-1.5 text-[10px] tabular-nums">{{ rows().length }}</span>
+    </button>
+    @for (cycle of cycles; track cycle) {
+      <button type="button" [class]="tabClass(cycle)" (click)="onCycle(cycle)">
+        {{ roman(cycle) }}
+        <span class="rounded-full bg-white/70 px-1.5 text-[10px] tabular-nums">
+          {{ cycleCounts().get(cycle) ?? 0 }}
+        </span>
+      </button>
+    }
+  </div>
+</div>
+
 @if (error(); as msg) {
   <app-ui-alert variant="danger" title="No se pudo cargar el horario" class="mb-4 block">
     {{ msg }}
@@ -52,14 +70,20 @@
 
 <div class="mb-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
   <span class="rounded-full bg-gray-100 px-2 py-0.5 font-medium text-gray-600">
-    {{ semester() || 'Semestre vigente' }}
+    {{ semester() || 'Periodo vigente' }} · {{ cycleSelected() ? 'Ciclo ' + roman(cycleId()) : 'Todos los ciclos' }}
   </span>
   <span class="rounded-full bg-blue-50 px-2 py-0.5 font-medium text-(--fareas-primary)">
-    {{ rows().length }} clase{{ rows().length === 1 ? '' : 's' }}
+    {{ visibleRows().length }} clase{{ visibleRows().length === 1 ? '' : 's' }}
   </span>
-  <span class="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
-    {{ libres() }} h libres en la franja
-  </span>
+  @if (cycleSelected()) {
+    <span class="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+      {{ libres() }} h libres en el ciclo
+    </span>
+  } @else {
+    <span class="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+      {{ ocupadas() }} h de clase en el periodo
+    </span>
+  }
   @if (filtersActive()) {
     <span class="text-gray-400">El horario muestra solo lo que pasa los filtros.</span>
   }
@@ -79,6 +103,7 @@
 
 <p class="mt-2 text-xs text-gray-400">
   Franja de clases {{ horaInicio() }}–{{ horaFin() }} (Parámetros), de Lunes a Viernes.
+  Selecciona un ciclo para ver su semana; “Todos” mezcla los ciclos del periodo.
   @if (auth.isAdmin()) {
     Haz clic en una hora libre para añadir una clase ahí: el día y la hora ya vienen puestos y el
     aula se prellena con la del grupo.
@@ -103,10 +128,18 @@
         (ngModelChange)="patchBlock({ weekday: $event })" />
     </label>
     <div class="grid grid-cols-2 gap-3">
-      <app-ui-input label="Inicio" [required]="true" type="time"
-        [ngModel]="blockForm().start_time" (ngModelChange)="patchBlock({ start_time: $event })" />
-      <app-ui-input label="Fin" [required]="true" type="time"
-        [ngModel]="blockForm().end_time" (ngModelChange)="patchBlock({ end_time: $event })" />
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Inicio <span class="text-red-500">*</span></span>
+        <p-select class="w-full" appendTo="body" [options]="startHours" optionLabel="label"
+          optionValue="value" [ngModel]="blockForm().start_time"
+          (ngModelChange)="onStartTime($event)" />
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm font-medium text-gray-700">Fin <span class="text-red-500">*</span></span>
+        <p-select class="w-full" appendTo="body" [options]="endHours()" optionLabel="label"
+          optionValue="value" [ngModel]="blockForm().end_time"
+          (ngModelChange)="patchBlock({ end_time: $event })" />
+      </label>
     </div>
     <label class="block space-y-1">
       <span class="text-sm font-medium text-gray-700">Aula <span class="text-red-500">*</span></span>
@@ -118,8 +151,8 @@
       </span>
     </label>
     <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-      El bloque debe caber entre las {{ horaInicio() }} y las {{ horaFin() }} y no puede cruzarse con
-      otro de la misma aula ni con otro del mismo docente.
+      Bloques de 1 h o 2 h, en horas exactas (sin minutos), entre las {{ horaInicio() }} y las
+      {{ horaFin() }}. No puede cruzarse con otro de la misma aula ni con otro del mismo docente.
     </app-ui-alert>
   </div>
   <ng-template pTemplate="footer">

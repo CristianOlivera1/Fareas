@@ -29,6 +29,11 @@ async def _validar_franja(db: SQLModelAsyncSession, start_time: time, end_time: 
             f"{cfg.attendance_hour_end.strftime('%H:%M')})"
         )
 
+def _validar_duracion(start_time: time, end_time: time) -> None:
+    minutos = (end_time.hour * 60 + end_time.minute) - (start_time.hour * 60 + start_time.minute)
+    if minutos > MAX_BLOCK_MINUTES:
+        raise errors.DomainError("El bloque no puede durar más de 2 horas")
+
 async def _aula_del_bloque(db: SQLModelAsyncSession, room_id: int | None) -> Room:
     if room_id is None:
         raise errors.DomainError("Indica el aula donde se dicta el bloque")
@@ -118,6 +123,7 @@ async def add_block(
     if start_time >= end_time:
         raise errors.DomainError("La hora de inicio debe ser menor que la de fin")
     await _validar_franja(db, start_time, end_time)
+    _validar_duracion(start_time, end_time)
 
     room = await _aula_del_bloque(db, room_id)
     await _raise_if_conflict(db, group, room=room, weekday=weekday,
@@ -153,6 +159,7 @@ async def update_block(db, actor, *, block_id: int, data: dict, ip: str | None =
     if start_time >= end_time:
         raise errors.DomainError("La hora de inicio debe ser menor que la de fin")
     await _validar_franja(db, start_time, end_time)
+    _validar_duracion(start_time, end_time)
 
     block_group = await db.get(CourseGroup, block.group_id)
     if block_group is None:
