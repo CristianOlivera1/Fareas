@@ -8,6 +8,7 @@ from app.core.deps import DbSession, RequireRole
 from app.routers.catalog import _client_ip
 from app.routers.enrollment_center import BlockInfo
 from app.services.attendance_engine import ahora_peru
+from app.services.audit import audit
 from app.services.course_groups import DEFAULT_CAPACITY, DEFAULT_GROUP_CODE
 from app.services.enrollment_bulk import enroll_courses_for_student, window_state
 from app.services.enrollments import matricular as enroll_one
@@ -57,6 +58,10 @@ class OfferGroupOut(BaseModel):
     current_group_code: str | None
     conflict: str | None
     will_create_group: bool = False
+
+
+class CycleBody(BaseModel):
+    cycle: int = Field(ge=1, le=10)
 
 
 class GroupBody(BaseModel):
@@ -134,6 +139,24 @@ async def my_enrollment_status(db: DbSession, student: RequireRole(UserRole.ESTU
         ),
         enrolled_groups=len(active),
     )
+
+
+@router.patch("/cycle")
+async def update_my_cycle(
+    body: CycleBody, request: Request, db: DbSession, student: RequireRole(UserRole.ESTUDIANTE)
+) -> dict:
+    await _ensure_open(db)
+    previous = student.semester
+    if previous != body.cycle:
+        student.semester = body.cycle
+        db.add(student)
+        await audit(
+            db, student, action="ciclo_actualizado", entity="app_user", entity_id=student.id,
+            old_value={"semester": previous}, new_value={"semester": body.cycle},
+            ip_address=_client_ip(request),
+        )
+        await db.commit()
+    return {"student_cycle": body.cycle}
 
 
 @router.get("/offer", response_model=list[OfferGroupOut])

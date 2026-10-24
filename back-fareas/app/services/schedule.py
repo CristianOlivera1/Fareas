@@ -19,7 +19,7 @@ from app.tables import (
 )
 
 DIAS = {1: "Lunes", 2: "Martes", 3: "Miércoles", 4: "Jueves", 5: "Viernes"}
-MAX_BLOCK_MINUTES = 120
+ALLOWED_BLOCK_MINUTES = (60, 120)
 
 
 def _validar_dia(weekday: int) -> None:
@@ -39,8 +39,8 @@ async def _validar_franja(db: SQLModelAsyncSession, start_time: time, end_time: 
 
 def _validar_duracion(start_time: time, end_time: time) -> None:
     minutos = (end_time.hour * 60 + end_time.minute) - (start_time.hour * 60 + start_time.minute)
-    if minutos > MAX_BLOCK_MINUTES:
-        raise errors.DomainError("El bloque no puede durar más de 2 horas")
+    if minutos not in ALLOWED_BLOCK_MINUTES:
+        raise errors.DomainError("El bloque debe durar exactamente 1 o 2 horas")
 
 async def _aula_del_bloque(db: SQLModelAsyncSession, room_id: int | None) -> Room | None:
     if room_id is None:
@@ -122,6 +122,32 @@ async def _raise_if_conflict(
             f"el {DIAS[weekday]} entre {start_time} y {end_time}"
         )
 
+async def _raise_if_group_overlap(
+    db: SQLModelAsyncSession,
+    group_id: int,
+    *,
+    weekday: int,
+    start_time,
+    end_time,
+    exclude_block_id: int | None = None,
+) -> None:
+    propio = (
+        await db.exec(
+            select(ScheduleBlock.id).where(
+                ScheduleBlock.group_id == group_id,
+                ScheduleBlock.weekday == weekday,
+                ScheduleBlock.start_time < end_time,
+                ScheduleBlock.end_time > start_time,
+                ScheduleBlock.id != exclude_block_id,
+            )
+        )
+    ).first()
+    if propio is not None:
+        raise errors.ConflictError(
+            f"El grupo ya tiene un bloque que se cruza el {DIAS[weekday]} "
+            f"entre {start_time} y {end_time}"
+        )
+
 async def _raise_if_teacher_conflict(
     db: SQLModelAsyncSession,
     group: CourseGroup,
@@ -199,6 +225,9 @@ async def add_block(
             raise errors.DomainError("El grupo ya tiene otro docente")
 
     room = await _aula_del_bloque(db, room_id)
+    await _raise_if_group_overlap(
+        db, group.id, weekday=weekday, start_time=start_time, end_time=end_time
+    )
     await _raise_if_conflict(db, group, room=room, weekday=weekday,
                              start_time=start_time, end_time=end_time)
     block = ScheduleBlock(group_id=group_id, room_id=room.id if room else None,
@@ -262,6 +291,10 @@ async def update_block(db, actor, *, block_id: int, data: dict, ip: str | None =
             raise errors.ConflictError(
                 "No se puede quitar el aula de un bloque con sesiones registradas"
             )
+    await _raise_if_group_overlap(
+        db, block_group.id, weekday=weekday, start_time=start_time, end_time=end_time,
+        exclude_block_id=block.id,
+    )
     await _raise_if_conflict(
         db,
         block_group,
@@ -300,3 +333,21 @@ async def update_block(db, actor, *, block_id: int, data: dict, ip: str | None =
     await db.commit()
     await db.refresh(block)
     return block
+
+
+async def validar_reactivacion(db: SQLModelAsyncSession, group: CourseGroup) -> None:
+    bloques = (
+        await db.exec(select(ScheduleBlock).where(ScheduleBlock.group_id == group.id))
+    ).all()
+    for bloque in bloques:
+        room = await db.get(Room, bloque.room_id) if bloque.room_id is not None else None
+        await _raise_if_conflict(
+            db,
+            group,
+            room=room,
+            weekday=bloque.weekday,
+            start_time=bloque.start_time,
+            end_time=bloque.end_time,
+            exclude_block_id=bloque.id,
+        )
+    await _raise_si_alumnos_chocan(db, group)

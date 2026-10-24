@@ -34,7 +34,7 @@ async def _bloques_del_grupo(db, group_id: int) -> list[ScheduleBlock]:
     return list((await db.exec(select(ScheduleBlock).where(ScheduleBlock.group_id == group_id))).all())
 
 async def _conflicto_de_alumno(
-    db, student_id: int, grupo_destino: CourseGroup
+    db, student_id: int, grupo_destino: CourseGroup, ignorar_grupo_id: int | None = None
 ) -> str | None:
     nuevos = await _bloques_del_grupo(db, grupo_destino.id)
     if not nuevos:
@@ -47,6 +47,7 @@ async def _conflicto_de_alumno(
                 Enrollment.student_id == student_id,
                 Enrollment.withdrawn_at.is_(None),
                 CourseGroup.id != grupo_destino.id,
+                CourseGroup.id != ignorar_grupo_id,
                 CourseGroup.is_active,
                 CourseGroup.semester_label == grupo_destino.semester_label,
             )
@@ -203,7 +204,7 @@ async def transferir(
     activos = await _cuenta_activos(db, destino_group_id)
     if activos >= destino.capacity:
         raise errors.ConflictError(f"Grupo destino lleno ({activos}/{destino.capacity})")
-    choque = await _conflicto_de_alumno(db, student_id, destino)
+    choque = await _conflicto_de_alumno(db, student_id, destino, ignorar_grupo_id=group_id)
     if choque:
         raise errors.ConflictError(f"El horario del grupo destino se cruza con: {choque}")
 

@@ -6,14 +6,127 @@ INSERT INTO app_settings (
 )
 VALUES (1, '2026-II', DATE '2026-08-17', DATE '2026-12-19', 0.550, 20.00, 30.00)
 ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO app_user (role, dni, code, email, full_name, whatsapp, password_hash, must_change_password, semester)
+INSERT INTO app_user (
+    role, dni, code, email, full_name, whatsapp,
+    password_hash, must_change_password, semester
+)
 VALUES
-  ('admin',      '71234567', NULL,       'admin@unamba.edu.pe',      'Admin Fareas',              '900000001', '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
-  ('docente',    '71234568', 'DOC-001',  'aquino.mario@unamba.edu.pe','Aquino Cruz, Mario (Mag.)', '900000002', '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
-  ('docente',    '71234569', 'DOC-002',  'cari.francisco@unamba.edu.pe','Cari Incahuanaco, Francisco (Mag.)', '900000003', '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
-  ('estudiante', '71234570', '221181',   '221181@unamba.edu.pe', 'Cristian Olivera Chávez', '954306632', '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, 9),
+    ('admin', '71234567', NULL, 'admin@unamba.edu.pe', 'Admin Fareas', '900000001',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('estudiante', '71234570', '221181', '221181@unamba.edu.pe', 'Cristian Olivera Chávez', '954306632',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, 9),
+
+    ('docente', '80010001', 'DOC-003', 'manuel.ibarra@unamba.edu.pe', 'Manuel Jesús Ibarra Cabrera', '900000004',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010002', 'DOC-004', 'jose.merma@unamba.edu.pe', 'Jose Luis Merma Aroni', '900000005',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010003', 'DOC-005', 'erech.ordonez@unamba.edu.pe', 'Erech Ordoñez Ramos', '900000006',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010004', 'DOC-006', 'ecler.mamani@unamba.edu.pe', 'Ecler Mamani Vilca', '900000007',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010005', 'DOC-007', 'evelyn.luque@unamba.edu.pe', 'Evelyn Naida Luque Ochoa', '900000008',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010006', 'DOC-002', 'cari.francisco@unamba.edu.pe', 'Francisco Cari Incahuanaco', '900000003',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010007', 'DOC-008', 'marleny.peralta@unamba.edu.pe', 'Marleny Peralta Ascue', '900000009',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010008', 'DOC-009', 'hesmeralda.rojas@unamba.edu.pe', 'Hesmeralda Rojas Enriquez', '900000010',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010009', 'DOC-001', 'aquino.mario@unamba.edu.pe', 'Mario Aquino Cruz', '900000002',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010010', 'DOC-010', 'nora.echegaray@unamba.edu.pe', 'Nora Gladys Echegaray Peña', '900000011',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010011', 'DOC-011', 'lintol.contreras@unamba.edu.pe', 'Lintol Contreras Salas', '900000012',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010012', 'DOC-012', 'maryluz.cuentas@unamba.edu.pe', 'Maryluz Cuentas Toledo', '900000013',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010013', 'DOC-013', 'ebert.gomez@unamba.edu.pe', 'Ebert Gomez Aiquipa', '900000014',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010014', 'DOC-014', 'ronald.renteria@unamba.edu.pe', 'Ronald Alberto Renteria Ayquipa', '900000015',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010015', 'DOC-015', 'rafael.quispe@unamba.edu.pe', 'Rafael Ricardo Quispe Merma', '900000016',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010016', 'DOC-016', 'kevin.arias@unamba.edu.pe', 'Kevin Arnold Arias Figueroa', '900000017',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010017', 'DOC-017', 'yonatan.mamani@unamba.edu.pe', 'Yonatan Mamani Coaquira', '900000018',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010018', 'DOC-018', 'virgilio.martinez@unamba.edu.pe', 'Virgilio Martinez Duran', '900000019',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010019', 'DOC-019', 'yhon.fuentes@unamba.edu.pe', 'Yhon Fuentes Huaman', '900000020',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010020', 'DOC-020', 'wilson.mamani@unamba.edu.pe', 'Wilson Mamani Rodrigo', '900000021',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010021', 'DOC-021', 'luz.criado@unamba.edu.pe', 'Luz Liliana Criado Huaylla', '900000022',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010022', 'DOC-022', 'jezzy.pinto@unamba.edu.pe', 'Jezzy Pinto Espinoza', '900000023',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010023', 'DOC-023', 'julio.lloclli@unamba.edu.pe', 'Julio Cesar Lloclli Champi', '900000024',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010024', 'DOC-024', 'jorge.campos@unamba.edu.pe', 'Jorge Francisco Campos Malpartida', '900000025',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010025', 'DOC-025', 'yuliana.tomaylla@unamba.edu.pe', 'Yuliana Miriam Tomaylla Gutierrez', '900000026',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010026', 'DOC-026', 'alejandrina.huaylla@unamba.edu.pe', 'Alejandrina Huaylla Quispe', '900000027',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010027', 'DOC-027', 'betsabe.ccolqque@unamba.edu.pe', 'Betsabe Milagros Ccolqque Ruiz', '900000028',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010028', 'DOC-028', 'danyra.contreras@unamba.edu.pe', 'Danyra Contreras Meza', '900000029',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010029', 'DOC-029', 'harrison.ochoa@unamba.edu.pe', 'Harrison Ochoa Rivas', '900000030',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010030', 'DOC-030', 'cristhian.serrano@unamba.edu.pe', 'Cristhian Serrano Juro', '900000031',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010031', 'DOC-031', 'john.aguirre@unamba.edu.pe', 'John Abraham Aguirre Carrasco', '900000032',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010032', 'DOC-032', 'daryl.huamani@unamba.edu.pe', 'Daryl Andres Huamani Lopez', '900000033',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010033', 'DOC-033', 'wilber.quispe@unamba.edu.pe', 'Wilber Quispe Moscoso', '900000034',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010034', 'DOC-034', 'miguel.aquino@unamba.edu.pe', 'Miguel Angel Aquino Cruz', '900000035',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010035', 'DOC-035', 'eddy.orosco@unamba.edu.pe', 'Eddy Arnold Orosco Prada', '900000036',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL),
+
+    ('docente', '80010036', 'DOC-036', 'hernan.ortega@unamba.edu.pe', 'Hernan Ortega Caceres', '900000037',
+     '$argon2id$v=19$m=65536,t=3,p=4$Y83Nb/c+S4sUpDNl7+HSiQ$XPBBd5UN7GK+59zLDtUTjOMhy009pp3JDf/g5xazJ4k', FALSE, NULL)
+
 ON CONFLICT (email) DO NOTHING;
+
 
 INSERT INTO room (code, name, building) VALUES
   ('LAB 103', 'Laboratorio 103', 'Facultad de Informática'),
