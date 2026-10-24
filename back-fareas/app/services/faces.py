@@ -1,5 +1,6 @@
 import base64
 import binascii
+import contextlib
 import os
 
 import cv2
@@ -104,9 +105,9 @@ async def enrolar(
         photo_key = None
 
     viejos = (await db.exec(select(FaceEmbedding).where(FaceEmbedding.student_id == student_id))).all()
+    replaced_photo_keys = [viejo.photo_url for viejo in viejos if viejo.photo_url]
     for viejo in viejos:
-        viejo.is_current = False
-        db.add(viejo)
+        await db.delete(viejo)
 
     fila = FaceEmbedding(
         student_id=student_id,
@@ -137,6 +138,9 @@ async def enrolar(
     await db.commit()
     await db.refresh(fila)
 
+    for key in replaced_photo_keys:
+        await _discard_photo(storage, key)
+
     await recargar_galeria(db)
 
     return {
@@ -147,6 +151,14 @@ async def enrolar(
         "photo_url": await storage.url(photo_key),
         "embedding_id": fila.id,
     }
+
+async def _discard_photo(storage, key: str) -> None:
+    if key.startswith("storage/"):
+        with contextlib.suppress(OSError):
+            os.remove(key)
+    with contextlib.suppress(Exception):
+        await storage.delete(key)
+
 
 async def eliminar_rostro(
     db: SQLModelAsyncSession,
@@ -163,16 +175,8 @@ async def eliminar_rostro(
         await db.exec(select(FaceEmbedding).where(FaceEmbedding.student_id == student_id))
     ).all()
     for fila in filas:
-        if fila.photo_url and fila.photo_url.startswith("storage/"):
-            try:
-                os.remove(fila.photo_url)
-            except OSError:
-                pass
-        elif fila.photo_url:
-            try:
-                await storage.delete(fila.photo_url)
-            except Exception:
-                pass
+        if fila.photo_url:
+            await _discard_photo(storage, fila.photo_url)
         await db.delete(fila)
 
     tenia_consentimiento = student.face_consent_at is not None
