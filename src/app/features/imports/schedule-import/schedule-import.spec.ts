@@ -43,6 +43,13 @@ describe('ScheduleImportPage', () => {
       page: 1,
       page_size: 100,
     });
+    httpMock.expectOne(`${API}/courses?page_size=100`).flush({
+      items: [{ id: 4, code: 'TSTUI901', name: 'ALGEBRA LINEAL', cycle: 9 }],
+      total: 1,
+      page: 1,
+      page_size: 100,
+    });
+    await Promise.resolve();
     await Promise.resolve();
   });
 
@@ -87,8 +94,10 @@ describe('ScheduleImportPage', () => {
     expect(component.rows()[0].room_id).toBeNull();
     expect(component.canConfirm()).toBe(true);
 
-    component.defaultTeacherId.set(3);
-    component.defaultRoomId.set(7);
+    component.onDefaultTeacher(3);
+    component.onDefaultRoom(7);
+    expect(component.rows()[0].teacher_id).toBe(3);
+    expect(component.rows()[0].room_id).toBe(7);
     expect(component.canConfirm()).toBe(true);
 
     const confirming = component.confirm();
@@ -107,8 +116,8 @@ describe('ScheduleImportPage', () => {
           weekday: 1,
           start_time: '07:00',
           end_time: '09:00',
-          teacher_id: null,
-          room_id: null,
+          teacher_id: 3,
+          room_id: 7,
         },
       ],
     });
@@ -123,6 +132,49 @@ describe('ScheduleImportPage', () => {
 
     expect(component.step()).toBe(3);
     expect(component.result()?.bloques_creados).toBe(1);
+  });
+
+  it('el docente y el aula por defecto no pisan los elegidos a mano', async () => {
+    component.onFile(new File(['horario'], 'horario.png', { type: 'image/png' }));
+    component.semester.set('2026-II');
+    component.cycle.set(9);
+
+    const reading = component.readSchedule();
+    const block = {
+      course_code: 'TSTUI901',
+      course_name: 'ALGEBRA LINEAL',
+      group_code: 'A',
+      start_time: '07:00',
+      end_time: '09:00',
+      confiable: true,
+      nota: null,
+      linea: '',
+      pagina: 1,
+      confianza: 0.98,
+    };
+    httpMock.expectOne(`${API}/courses/import-pdf`).flush({
+      tipo: 'imagen',
+      paginas: 1,
+      total: 2,
+      confiables: 2,
+      ambiguousos: 0,
+      bloques: [
+        { ...block, weekday: 1 },
+        { ...block, weekday: 2, room_code: 'LAB 3O5', room_id: null },
+      ],
+    });
+    await reading;
+
+    const [first, second] = component.rows();
+    expect(component.hintsFor(second).rooms[0]?.value).toBe(7);
+    component.onRowRoom(first.key, 7);
+    component.onDefaultRoom(9);
+
+    expect(component.rows().find((row) => row.key === first.key)?.room_id).toBe(7);
+    expect(component.rows().find((row) => row.key === second.key)?.room_id).toBe(9);
+
+    component.onRowRoom(first.key, null);
+    expect(component.rows().find((row) => row.key === first.key)?.room_id).toBe(9);
   });
 
   it('resuelve una sugerencia de curso antes de confirmar', async () => {
@@ -171,9 +223,9 @@ describe('ScheduleImportPage', () => {
     expect(component.rows()[0].teacher_id).toBe(3);
     expect(component.rows()[0].room_id).toBe(7);
     expect(component.canConfirm()).toBe(false);
-    expect(component.pendingSuggestion(component.rows()[0])).toBe(true);
+    expect(component.pendingSuggestion(component.groups()[0])).toBe(true);
 
-    component.applyCourseSuggestion(component.rows()[0]);
+    component.applyCourseSuggestion(component.groups()[0]);
 
     expect(component.rows()[0].course_code).toBe('TSTUI901');
     expect(component.canConfirm()).toBe(true);

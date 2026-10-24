@@ -63,8 +63,9 @@ export function scheduleImportRowIssues(
     if (startMinutes >= endMinutes) {
       issues.push('La hora de inicio debe ser menor que la de fin');
     }
-    if (endMinutes - startMinutes > 120) {
-      issues.push('El bloque no puede durar más de 2 horas');
+    const duration = endMinutes - startMinutes;
+    if (duration > 0 && duration !== 60 && duration !== 120) {
+      issues.push('El bloque debe durar exactamente 1 o 2 horas');
     }
     if (earliestMinutes !== null && startMinutes < earliestMinutes) {
       issues.push(`La clase empieza antes de ${hourFrom}`);

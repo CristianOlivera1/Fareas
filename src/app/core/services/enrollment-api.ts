@@ -61,6 +61,10 @@ export class EnrollmentApi extends BaseApi {
     });
   }
 
+  updateMyCycle(cycle: number) {
+    return this.patch<{ student_cycle: number }>('/me/enrollment/cycle', { cycle });
+  }
+
   enrollSelection(items: SelectionItem[]) {
     return this.post<SelectionOutcome>('/me/enrollment/bulk', { items });
   }

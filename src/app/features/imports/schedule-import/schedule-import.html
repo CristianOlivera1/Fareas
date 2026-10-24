@@ -98,34 +98,28 @@
             {{ p.total }} bloque(s)
           </span>
           <span class="rounded-full bg-green-50 px-2.5 py-1 font-medium text-green-700">
-            {{ p.confiables }} confiable(s)
+            {{ rows().length - reviewCount() }} listo(s)
           </span>
           <span class="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
-            {{ p.ambiguousos }} por revisar
+            {{ reviewCount() }} por revisar
           </span>
         </div>
       </div>
 
       <div class="mt-4 flex flex-wrap items-end gap-3 border-t border-gray-100 pt-4">
-        <label class="flex items-center gap-2 pb-2 text-sm text-gray-700">
-          <input type="checkbox" class="size-4 rounded border-gray-300 accent-blue-600"
-            [checked]="onlyReview()" [disabled]="reviewCount() === 0 && !onlyReview()"
-            (change)="onReviewToggle($event)" />
-          Solo revisar ({{ reviewCount() }})
-        </label>
         <label class="flex flex-col gap-1">
           <span class="text-xs font-medium text-gray-500">Docente por defecto (opcional)</span>
-          <p-select class="w-52" appendTo="body" [options]="teachers()" optionLabel="label"
+          <p-select class="w-56" appendTo="body" [options]="teachers()" optionLabel="label"
             optionValue="value" [filter]="true" filterBy="label" placeholder="Sin asignar"
             [showClear]="true" [ngModel]="defaultTeacherId()"
-            (ngModelChange)="defaultTeacherId.set($event)" />
+            (ngModelChange)="onDefaultTeacher($event)" />
         </label>
         <label class="flex flex-col gap-1">
           <span class="text-xs font-medium text-gray-500">Aula por defecto (opcional)</span>
-          <p-select class="w-32" appendTo="body" [options]="rooms()" optionLabel="label"
+          <p-select class="w-36" appendTo="body" [options]="rooms()" optionLabel="label"
             optionValue="value" [filter]="true" filterBy="label" placeholder="Sin asignar"
             [showClear]="true" [ngModel]="defaultRoomId()"
-            (ngModelChange)="defaultRoomId.set($event)" />
+            (ngModelChange)="onDefaultRoom($event)" />
         </label>
         <app-ui-button variant="ghost" size="sm" icon="material-symbols:add" (click)="addRow()">
           Añadir fila
@@ -133,8 +127,9 @@
       </div>
 
       <p class="mt-2 text-xs text-gray-400">
-        El docente y el aula son opcionales. Si no los asignas, podrás completarlos después desde el
-        horario. La importación no cambia el docente de los grupos que ya existen.
+        El docente y el aula por defecto se aplican a todas las filas que no tengan uno propio. Son
+        opcionales: podrás completarlos después desde el horario. La importación no cambia el docente
+        de los grupos que ya existen.
       </p>
 
       @if (groups().length === 0) {
@@ -142,9 +137,7 @@
           <iconify-icon icon="material-symbols:event-available-outline" width="32"
             class="text-gray-300"></iconify-icon>
           <p class="mt-2 text-sm font-medium text-gray-900">No hay filas para mostrar</p>
-          <p class="mt-1 text-sm text-gray-500">
-            Desactiva «Solo revisar» o añade una fila manual.
-          </p>
+          <p class="mt-1 text-sm text-gray-500">Añade una fila manual para empezar.</p>
         </div>
       } @else {
         <div class="mt-3 overflow-hidden rounded-xl border border-gray-200">
@@ -174,12 +167,44 @@
                         <span class="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-500">
                           {{ group.rows.length }} bloque(s)
                         </span>
+                        @if (courseInfo(group).registered; as registered) {
+                          <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700"
+                            [title]="'Ya existe: ' + registered.code + ' · ' + registered.name">
+                            <iconify-icon icon="material-symbols:check-circle-outline" width="13"></iconify-icon>
+                            Curso registrado
+                          </span>
+                        } @else {
+                          <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                            Curso nuevo
+                          </span>
+                        }
                         @if (groupNeedsReview(group)) {
                           <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
                             Revisar
                           </span>
                         }
+                        <p-select class="ml-auto w-72" appendTo="body" [options]="courseOptions()"
+                          optionLabel="label" optionValue="value" [filter]="true" filterBy="label"
+                          placeholder="Usar un curso registrado" [ngModel]="courseInfo(group).registered?.id ?? null"
+                          (ngModelChange)="chooseCourse(group, $event)" />
                       </div>
+                      @if (pendingSuggestion(group) && courseInfo(group).suggestion; as s) {
+                        <div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-amber-800">
+                          <iconify-icon icon="material-symbols:help-outline" width="14"></iconify-icon>
+                          <span>
+                            «{{ group.code }}» se parece a un curso registrado. ¿Es
+                            <strong>{{ s.code }} · {{ s.name }}</strong>?
+                          </span>
+                          <button type="button" class="rounded bg-amber-100 px-2 py-0.5 font-medium hover:bg-amber-200"
+                            (click)="applyCourseSuggestion(group)">
+                            Sí, usar ese
+                          </button>
+                          <button type="button" class="text-gray-500 underline hover:text-gray-800"
+                            (click)="keepAsNewCourse(group)">
+                            No, crear {{ group.code }}
+                          </button>
+                        </div>
+                      }
                     </td>
                   </tr>
                   @for (row of group.rows; track row.key) {
@@ -191,20 +216,6 @@
                         <input [value]="row.course_code" (input)="onCodeInput(row.key, $event, 'course_code')"
                           maxlength="20" aria-label="Código del curso"
                           class="w-28 rounded-md border border-gray-300 px-2 py-1.5 font-mono text-xs uppercase focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
-                        @if (pendingSuggestion(row) && row.course_suggestion; as s) {
-                          <div class="mt-1 flex flex-wrap items-center gap-1 text-[10px] leading-tight">
-                            <button type="button" class="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800 hover:bg-amber-200"
-                              [title]="s.motivo + ' (' + (s.score * 100).toFixed(0) + '%)'"
-                              (click)="applyCourseSuggestion(row)">
-                              ¿{{ s.code }}?
-                            </button>
-                            <button type="button" class="text-gray-400 hover:text-gray-700"
-                              title="Mantener el código escrito y crear o usar ese curso"
-                              (click)="dismissCourseSuggestion(row)">
-                              Es otro
-                            </button>
-                          </div>
-                        }
                       </td>
                       <td class="px-2 py-2">
                         <input [value]="row.course_name" (input)="onTextInput(row.key, $event)"
@@ -232,17 +243,40 @@
                           class="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
                       </td>
                       <td class="px-2 py-2">
-                        <p-select class="w-44" appendTo="body" [options]="teachers()" optionLabel="label"
+                        <p-select class="w-48" appendTo="body" [options]="teachers()" optionLabel="label"
                           optionValue="value" [filter]="true" filterBy="label"
                           [placeholder]="row.teacher_name || 'Sin asignar'"
                           [showClear]="true" [ngModel]="row.teacher_id"
-                          (ngModelChange)="updateRow(row.key, { teacher_id: $event })" />
+                          (ngModelChange)="onRowTeacher(row.key, $event)" />
+                        @if (row.teacher_id === null && row.teacher_name) {
+                          <div class="mt-1 flex w-48 flex-wrap items-center gap-1 text-[10px] leading-tight text-amber-800">
+                            <span>No registrado: «{{ row.teacher_name }}»</span>
+                            @for (hint of hintsFor(row).teachers; track hint.value) {
+                              <button type="button" class="rounded bg-amber-100 px-1.5 py-0.5 font-medium hover:bg-amber-200"
+                                (click)="onRowTeacher(row.key, hint.value)">
+                                ¿{{ hint.label }}?
+                              </button>
+                            }
+                          </div>
+                        }
                       </td>
                       <td class="px-2 py-2">
-                        <p-select class="w-28" appendTo="body" [options]="rooms()" optionLabel="label"
-                          optionValue="value" [placeholder]="row.room_code || 'Sin asignar'"
+                        <p-select class="w-32" appendTo="body" [options]="rooms()" optionLabel="label"
+                          optionValue="value" [filter]="true" filterBy="label"
+                          [placeholder]="row.room_code || 'Sin asignar'"
                           [showClear]="true" [ngModel]="row.room_id"
-                          (ngModelChange)="updateRow(row.key, { room_id: $event })" />
+                          (ngModelChange)="onRowRoom(row.key, $event)" />
+                        @if (row.room_id === null && row.room_code) {
+                          <div class="mt-1 flex w-32 flex-wrap items-center gap-1 text-[10px] leading-tight text-amber-800">
+                            <span>No registrada: «{{ row.room_code }}»</span>
+                            @for (hint of hintsFor(row).rooms; track hint.value) {
+                              <button type="button" class="rounded bg-amber-100 px-1.5 py-0.5 font-medium hover:bg-amber-200"
+                                (click)="onRowRoom(row.key, hint.value)">
+                                ¿{{ hint.label }}?
+                              </button>
+                            }
+                          </div>
+                        }
                       </td>
                       <td class="px-2 py-2">
                         @if (rowIssues(row).length > 0) {
@@ -251,17 +285,11 @@
                             <iconify-icon icon="material-symbols:error-outline" width="13"></iconify-icon>
                             Corregir
                           </span>
-                        } @else if (!row.confiable || row.nota) {
+                        } @else if (!row.confiable) {
                           <span class="inline-flex max-w-32 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800"
                             [title]="row.nota ?? row.linea">
                             <iconify-icon icon="material-symbols:warning-outline" width="13"></iconify-icon>
                             Revisar
-                          </span>
-                        } @else if (pendingSuggestion(row)) {
-                          <span class="inline-flex max-w-32 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800"
-                            [title]="'¿Quisiste decir ' + row.course_suggestion?.code + '?'">
-                            <iconify-icon icon="material-symbols:help-outline" width="13"></iconify-icon>
-                            ¿Curso?
                           </span>
                         } @else {
                           <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700">
@@ -290,7 +318,10 @@
         <p class="text-xs text-gray-500">
           {{ rows().length }} fila(s) · {{ reviewCount() }} por revisar
           @if (!canConfirm()) {
-            <span class="text-red-600">· corrige las filas pendientes o resuelve las sugerencias</span>
+            <span class="text-red-600">
+              · corrige las filas pendientes
+              @if (pendingGroups() > 0) { y resuelve las {{ pendingGroups() }} sugerencia(s) de curso }
+            </span>
           }
         </p>
         <div class="flex flex-wrap items-center gap-2">

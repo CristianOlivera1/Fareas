@@ -12,10 +12,10 @@ function createRow(overrides: Partial<ScheduleImportRow> = {}): ScheduleImportRo
     end_time: '10:00',
     teacher_id: null,
     room_id: null,
+    teacher_manual: false,
+    room_manual: false,
     teacher_name: null,
     room_code: null,
-    course_suggestion: null,
-    suggestion_dismissed: true,
     confiable: true,
     nota: null,
     linea: '',
@@ -66,8 +66,18 @@ describe('schedule import utilities', () => {
     expect(issues).toContain('Código de curso de 3 a 20 caracteres');
     expect(issues).toContain('Grupo de 1 a 5 caracteres');
     expect(issues).toContain('Día de lunes a viernes');
-    expect(issues).toContain('El bloque no puede durar más de 2 horas');
+    expect(issues).toContain('El bloque debe durar exactamente 1 o 2 horas');
     expect(issues).toContain('La clase empieza antes de 07:00');
+  });
+
+  it('rejects blocks that do not last exactly one or two hours', () => {
+    const issuesFor = (start: string, end: string) =>
+      scheduleImportRowIssues(createRow({ start_time: start, end_time: end }), '07:00', '20:00');
+
+    expect(issuesFor('08:00', '09:30')).toContain('El bloque debe durar exactamente 1 o 2 horas');
+    expect(issuesFor('08:00', '08:30')).toContain('El bloque debe durar exactamente 1 o 2 horas');
+    expect(issuesFor('08:00', '09:00')).not.toContain('El bloque debe durar exactamente 1 o 2 horas');
+    expect(issuesFor('08:00', '10:00')).not.toContain('El bloque debe durar exactamente 1 o 2 horas');
   });
 
   it('rejects malformed times', () => {
