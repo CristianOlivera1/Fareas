@@ -19,7 +19,7 @@ from app.tables import AppUser, FaceEmbedding, UserRole
 
 MIN_PHOTOS = 3
 MAX_PHOTOS = 5
-INTRA_MIN_SIMILARITY = 0.55
+INTRA_MIN_SIMILARITY = 0.40
 DETECT_THRESHOLD = 0.5
 
 
@@ -44,6 +44,21 @@ def _embedding_de_foto(det: ScrfdDetector, emb: ArcFaceEmbedder, img: np.ndarray
         raise errors.DomainError(f"Foto {idx}: se detectaron {len(faces)} rostros; debe ser solo el alumno")
     return emb.get(img, faces[0].kps)
 
+def group_consistency(embeddings: list[np.ndarray]) -> tuple[float, int, float]:
+    worst_similarity, worst_index = 1.0, 0
+    for index, vector in enumerate(embeddings):
+        others = np.mean([e for i, e in enumerate(embeddings) if i != index], axis=0)
+        similarity = float(vector @ (others / np.linalg.norm(others)))
+        if similarity < worst_similarity:
+            worst_similarity, worst_index = similarity, index
+    min_pair = min(
+        float(embeddings[a] @ embeddings[b])
+        for a in range(len(embeddings))
+        for b in range(a + 1, len(embeddings))
+    )
+    return worst_similarity, worst_index, min_pair
+
+
 async def enrolar(
     db: SQLModelAsyncSession,
     actor: AppUser,
@@ -66,14 +81,11 @@ async def enrolar(
     det, emb = get_detector(), get_embedder()
     embeddings = [_embedding_de_foto(det, emb, _decode_photo(p), i + 1) for i, p in enumerate(photos_b64)]
 
-    min_sim = 1.0
-    for a in range(len(embeddings)):
-        for b in range(a + 1, len(embeddings)):
-            min_sim = min(min_sim, float(embeddings[a] @ embeddings[b]))
-    if min_sim < INTRA_MIN_SIMILARITY:
+    group_sim, worst_index, min_pair = group_consistency(embeddings)
+    if group_sim < INTRA_MIN_SIMILARITY:
         raise errors.DomainError(
-            f"Las fotos no parecen ser de la misma persona (consistencia mínima {min_sim:.2f} < {INTRA_MIN_SIMILARITY}); "
-            "repite el enrolamiento con mejores tomas"
+            f"La foto {worst_index + 1} no coincide con las demás (similitud {group_sim:.2f} < {INTRA_MIN_SIMILARITY}); "
+            "reemplázala por otra toma del mismo estudiante con buena luz y rostro de frente"
         )
 
     promedio = np.mean(embeddings, axis=0)
@@ -118,7 +130,8 @@ async def enrolar(
     await audit(
         db, actor, action="enrolamiento_facial", entity="face_embedding", entity_id=fila.id,
         new_value={"student_id": student_id, "fotos": len(embeddings),
-                   "consistencia_min": round(min_sim, 3), "photo_key": photo_key},
+                   "consistencia_grupo": round(group_sim, 3), "consistencia_min_par": round(min_pair, 3),
+                   "photo_key": photo_key},
         ip_address=ip,
     )
     await db.commit()
@@ -129,7 +142,8 @@ async def enrolar(
     return {
         "student_id": student_id,
         "photos": len(embeddings),
-        "min_pair_similarity": round(min_sim, 3),
+        "min_pair_similarity": round(min_pair, 3),
+        "min_group_similarity": round(group_sim, 3),
         "photo_url": await storage.url(photo_key),
         "embedding_id": fila.id,
     }

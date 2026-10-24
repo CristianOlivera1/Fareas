@@ -246,7 +246,7 @@ export class FacesPage {
       );
       this.success.set(
         `Rostro enrolado con ${result.photos} fotos (consistencia ${Math.round(
-          result.min_pair_similarity * 100,
+          result.min_group_similarity * 100,
         )} %).`,
       );
       this.toast.add({

@@ -10,6 +10,7 @@ export interface FaceEnrollment {
   readonly student_id: number;
   readonly photos: number;
   readonly min_pair_similarity: number;
+  readonly min_group_similarity: number;
   readonly photo_url: string | null;
   readonly embedding_id: number;
 }
