@@ -21,6 +21,7 @@ import { CYCLES, toRoman } from '../../../shared/utils/cycles';
 import { FileDrop } from '../../../shared/components/file-drop/file-drop';
 import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
+import { ScanLoader } from '../../../shared/components/scan-loader/scan-loader';
 
 type CycleFilter = 'all' | number;
 
@@ -49,7 +50,7 @@ const DEFAULT_CYCLE_OPTIONS: Option<number | null>[] = [
 
 @Component({
   selector: 'app-courses-import-dialog',
-  imports: [FormsModule, DialogModule, SelectModule, UiButton, UiAlert, FileDrop],
+  imports: [FormsModule, DialogModule, SelectModule, UiButton, UiAlert, FileDrop, ScanLoader],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './courses-import.dialog.html',
   changeDetection: ChangeDetectionStrategy.OnPush,

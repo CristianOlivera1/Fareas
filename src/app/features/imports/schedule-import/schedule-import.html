@@ -68,6 +68,10 @@
       El sistema puede tardar unos segundos en leerlo; la vista previa no guarda ningún cambio.
     </app-ui-alert>
 
+    @if (loading()) {
+      <app-scan-loader label="Leyendo horario…" />
+    }
+
     @if (error(); as message) {
       <app-ui-alert variant="danger" title="No se pudo leer el archivo" class="mt-4 block">
         {{ message }}
@@ -75,9 +79,9 @@
     }
 
     <div class="mt-5 flex justify-end">
-      <app-ui-button icon="material-symbols:document-scanner-outline" [loading]="loading()"
+      <app-ui-button icon="material-symbols:document-scanner-outline"
         [disabled]="!canRead()" (click)="readSchedule()">
-        Leer horario
+        {{ loading() ? 'Leyendo…' : 'Leer horario' }}
       </app-ui-button>
     </div>
   </section>
