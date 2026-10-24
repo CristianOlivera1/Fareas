@@ -1,3 +1,4 @@
+import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
@@ -9,6 +10,7 @@ from app.core.pagination import PageParams, PageParamsDep
 from app.schemas.common import Page
 from app.services.accounts import create_account, resend_credentials
 from app.services.audit import audit
+from app.services.avatars import avatar_url
 from app.services.formats import validar_whatsapp
 from app.services.ocr_extract import MAX_PESO_ARCHIVO
 from app.services.refresh_tokens import revoke_all_for_user
@@ -293,8 +295,9 @@ class PersonOut(BaseModel):
     is_active: bool
     must_change_password: bool
     enrolled: bool | None = None
+    avatar_url: str | None = None
 
-def person_out(u: AppUser) -> PersonOut:
+async def person_out(u: AppUser, enrolled: bool | None = None) -> PersonOut:
     return PersonOut(
         id=u.id,
         role=u.role.value,
@@ -306,6 +309,8 @@ def person_out(u: AppUser) -> PersonOut:
         semester=u.semester,
         is_active=u.is_active,
         must_change_password=u.must_change_password,
+        enrolled=enrolled,
+        avatar_url=await avatar_url(u.avatar_key),
     )
 
 def _people_stmt(role: UserRole, q: str | None):
@@ -333,7 +338,8 @@ async def _paged_people(db, role: UserRole, page: PageParams, q: str | None) -> 
     people = (
         await db.exec(stmt.order_by(AppUser.full_name).offset(page.offset).limit(page.limit))
     ).all()
-    return Page(items=[person_out(p) for p in people], total=total, page=page.page, page_size=page.page_size)
+    items = await asyncio.gather(*(person_out(person) for person in people))
+    return Page(items=items, total=total, page=page.page, page_size=page.page_size)
 
 @router.get("/teachers", response_model=Page[PersonOut])
 async def list_teachers(
@@ -352,7 +358,7 @@ async def create_teacher(
         db, admin, role=UserRole.DOCENTE, full_name=body.full_name, email=body.email.lower(),
         dni=body.dni, whatsapp=body.whatsapp, ip=_client_ip(request),
     )
-    return person_out(user)
+    return await person_out(user)
 
 class StudentIn(BaseModel):
     full_name: str = Field(min_length=3, max_length=160)
@@ -404,22 +410,15 @@ async def list_students(
         ).all()
         enrolled_ids = {r[0] if isinstance(r, tuple) else r for r in filas}
     items = [
-        PersonOut(
-            id=s.id,
-            role=s.role.value,
-            full_name=s.full_name,
-            email=s.email,
-            dni=s.dni,
-            code=s.code,
-            whatsapp=s.whatsapp,
-            semester=s.semester,
-            is_active=s.is_active,
-            must_change_password=s.must_change_password,
-            enrolled=(s.id in enrolled_ids) if with_face else None,
-        )
+        person_out(s, (s.id in enrolled_ids) if with_face else None)
         for s in students
     ]
-    return Page(items=items, total=total, page=page.page, page_size=page.page_size)
+    return Page(
+        items=await asyncio.gather(*items),
+        total=total,
+        page=page.page,
+        page_size=page.page_size,
+    )
 
 @router.post("/students", response_model=PersonOut, status_code=status.HTTP_201_CREATED)
 async def create_student(
@@ -430,7 +429,7 @@ async def create_student(
         dni=body.dni, code=body.code, semester=body.semester, whatsapp=body.whatsapp,
         ip=_client_ip(request),
     )
-    return person_out(user)
+    return await person_out(user)
 
 @router.post("/students/import-preview", response_model=ImportacionAlumnosPreviewOut)
 async def students_import_preview(
@@ -498,7 +497,7 @@ async def get_account(
         ).first()
         if taught is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="La cuenta no pertenece a tus grupos")
-    return person_out(account)
+    return await person_out(account)
 
 @router.patch("/accounts/{user_id}", response_model=PersonOut)
 async def update_account(
@@ -520,7 +519,7 @@ async def update_account(
                 old_value=old, ip_address=_client_ip(request))
     await db.commit()
     await db.refresh(user)
-    return person_out(user)
+    return await person_out(user)
 
 @router.post("/accounts/{user_id}/send-temp-password")
 async def account_send_temp_password(

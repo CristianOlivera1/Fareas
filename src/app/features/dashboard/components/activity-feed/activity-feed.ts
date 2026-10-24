@@ -12,6 +12,7 @@ import {
 
 import { CatalogApi } from '../../../../core/services/catalog-api';
 import { LiveFeed, LiveStatus, LiveVerdict, VerdictKind } from '../../../../core/services/live-feed';
+import { Avatar } from '../../../../shared/components/avatar/avatar';
 
 interface VerdictStyle {
   readonly label: string;
@@ -68,17 +69,9 @@ const STATUS_TEXT: Record<LiveStatus, { label: string; dot: string }> = {
   reconnecting: { label: 'Reconectando…', dot: 'bg-amber-400 animate-pulse' },
 };
 
-function initialsOf(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
-}
-
 @Component({
   selector: 'app-activity-feed',
+  imports: [Avatar],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './activity-feed.html',
   providers: [LiveFeed],
@@ -90,7 +83,9 @@ export class ActivityFeed {
   private readonly catalog = inject(CatalogApi);
 
   private readonly lastVerdict = signal<LiveVerdict | null>(null);
-  private readonly names = signal<Record<number, { name: string; code: string | null }>>({});
+  private readonly names = signal<
+    Record<number, { name: string; code: string | null; avatarUrl: string | null }>
+  >({});
   private readonly roomCodes = signal<Record<number, string>>({});
   private readonly requested = new Set<number>();
 
@@ -106,7 +101,8 @@ export class ActivityFeed {
     return {
       style: VERDICT_STYLES[verdict.verdict],
       name,
-      initials: verdict.student_id !== null ? initialsOf(name) : '?',
+      studentId: verdict.student_id,
+      avatarUrl: person?.avatarUrl ?? null,
       code: person?.code ?? null,
       room: this.roomCodes()[verdict.room_id] ?? `Aula #${verdict.room_id}`,
       similarity: Math.round(verdict.similarity * 1000) / 10,
@@ -140,7 +136,11 @@ export class ActivityFeed {
       next: (person) =>
         this.names.update((current) => ({
           ...current,
-          [studentId]: { name: person.full_name, code: person.code },
+          [studentId]: {
+            name: person.full_name,
+            code: person.code,
+            avatarUrl: person.avatar_url ?? null,
+          },
         })),
       error: () => undefined,
     });

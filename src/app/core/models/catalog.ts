@@ -34,6 +34,7 @@ export interface Person {
   readonly is_active: boolean;
   readonly must_change_password: boolean;
   readonly enrolled?: boolean | null;
+  readonly avatar_url?: string | null;
 }
 
 export interface Course {
@@ -97,6 +98,7 @@ export interface EnrolledStudent {
   readonly enrolled_at: string | null;
   readonly withdrawn_at: string | null;
   readonly has_face: boolean | null;
+  readonly avatar_url?: string | null;
 }
 
 export interface Holiday {

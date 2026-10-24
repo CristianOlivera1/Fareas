@@ -36,9 +36,14 @@
 
       <div class="rounded-lg bg-(--fareas-canvas) p-4 flex flex-col gap-3">
         <div class="flex items-center gap-3">
-          <div class="grid size-12 shrink-0 place-items-center rounded-xl bg-(--fareas-primary)/10 text-base font-bold text-(--fareas-primary)">
-            {{ e.initials }}
+        @if (e.studentId !== null) {
+          <app-avatar [name]="e.name" [src]="e.avatarUrl" size="md" />
+        } @else {
+          <div
+            class="grid size-12 shrink-0 place-items-center rounded-full bg-(--fareas-primary) text-base font-bold text-white">
+            ?
           </div>
+        }
           <div class="min-w-0">
             <p class="truncate text-sm font-semibold text-gray-900">{{ e.name }}</p>
             <p class="text-xs text-gray-500 font-mono">Código: {{ e.code ?? '—' }}</p>

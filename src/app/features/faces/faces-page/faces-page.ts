@@ -5,13 +5,14 @@ import {
   DestroyRef,
   ElementRef,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
 import { MessageService } from 'primeng/api';
 import { Subject, debounceTime, distinctUntilChanged, firstValueFrom } from 'rxjs';
 
@@ -20,11 +21,13 @@ import { FaceStatus } from '../../../core/models/faces';
 import { CatalogApi } from '../../../core/services/catalog-api';
 import { FacesApi } from '../../../core/services/faces-api';
 import { ModalDelete } from '../../../shared/components/modal-delete/modal-delete';
+import { Avatar } from '../../../shared/components/avatar/avatar';
 import { PageHeader } from '../../../shared/components/page-header/page-header';
 import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
 import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { extractDetail } from '../../../shared/utils/api-error';
+import { QueryParams } from '../../../shared/utils/query-params';
 
 const MIN_PHOTOS = 3;
 const MAX_PHOTOS = 5;
@@ -46,6 +49,7 @@ const POSES = [
     UiInput,
     UiAlert,
     ModalDelete,
+    Avatar,
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './faces-page.html',
@@ -55,7 +59,7 @@ const POSES = [
 export class FacesPage {
   private readonly api = inject(FacesApi);
   private readonly catalog = inject(CatalogApi);
-  private readonly route = inject(ActivatedRoute);
+  private readonly queryParams = inject(QueryParams);
   private readonly toast = inject(MessageService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly deleteModal = viewChild(ModalDelete);
@@ -66,6 +70,8 @@ export class FacesPage {
   readonly slots = Array.from({ length: MAX_PHOTOS }, (_, index) => index);
 
   readonly search = signal('');
+  private readonly studentParam = this.queryParams.filter('student');
+  private readonly queryStudentId = this.queryParams.integer('student', 0);
   readonly results = signal<Person[]>([]);
   readonly searching = signal(false);
   readonly selected = signal<Person | null>(null);
@@ -112,23 +118,13 @@ export class FacesPage {
 
     this.destroyRef.onDestroy(() => this.stopCamera());
 
-    const initial = Number(this.route.snapshot.queryParamMap.get('student'));
-    if (Number.isInteger(initial) && initial > 0) {
-      void this.selectById(initial);
-    }
+    effect(() => this.syncStudentSelection());
     void this.searchStudents('');
   }
 
   onSearch(value: string): void {
     this.search.set(value);
     this.search$.next(value.trim());
-  }
-
-  initials(name: string): string {
-    const parts = name.trim().split(/\s+/);
-    return parts.length >= 2
-      ? `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-      : name.slice(0, 2).toUpperCase();
   }
 
   async select(person: Person): Promise<void> {
@@ -139,6 +135,10 @@ export class FacesPage {
     this.consent.set(false);
     this.error.set(null);
     this.success.set(null);
+    if (this.queryStudentId() !== person.id) {
+      await this.queryParams.update({ student: person.id });
+    }
+    if (this.selected()?.id !== person.id) return;
     await this.loadStatus(person.id);
   }
 
@@ -313,13 +313,56 @@ export class FacesPage {
   }
 
   private async selectById(studentId: number): Promise<void> {
+    if (untracked(() => this.selected()?.id) === studentId) return;
+
     try {
       const person = await firstValueFrom(this.catalog.account(studentId));
+      if (this.queryStudentId() !== studentId) return;
+      if (person.id !== studentId || person.role !== 'estudiante') {
+        this.clearSelection();
+        this.error.set('El usuario solicitado no es un estudiante válido.');
+        void this.queryParams.update({ student: null });
+        return;
+      }
       await this.select(person);
     } catch (err) {
+      if (this.queryStudentId() !== studentId) return;
       this.error.set(extractDetail(err));
       void this.searchStudents('');
     }
+  }
+
+  private syncStudentSelection(): void {
+    const rawStudentId = this.studentParam();
+    const studentId = this.queryStudentId();
+    const selectedId = untracked(() => this.selected()?.id);
+
+    if (rawStudentId !== null && studentId === 0) {
+      this.clearSelection();
+      this.error.set('El enlace contiene un identificador de estudiante inválido.');
+      void this.queryParams.update({ student: null });
+      return;
+    }
+
+    if (studentId === selectedId) return;
+    if (studentId > 0) {
+      void this.selectById(studentId);
+      return;
+    }
+    this.clearSelection();
+  }
+
+  private clearSelection(): void {
+    if (!this.selected()) return;
+
+    this.stopCamera();
+    this.selected.set(null);
+    this.status.set(null);
+    this.loadingStatus.set(false);
+    this.photos.set([]);
+    this.consent.set(false);
+    this.error.set(null);
+    this.success.set(null);
   }
 
   private async searchStudents(query: string): Promise<void> {
@@ -343,11 +386,12 @@ export class FacesPage {
   private async loadStatus(studentId: number): Promise<void> {
     this.loadingStatus.set(true);
     try {
-      this.status.set(await firstValueFrom(this.api.status(studentId)));
+      const status = await firstValueFrom(this.api.status(studentId));
+      if (this.selected()?.id === studentId) this.status.set(status);
     } catch (err) {
-      this.error.set(extractDetail(err));
+      if (this.selected()?.id === studentId) this.error.set(extractDetail(err));
     } finally {
-      this.loadingStatus.set(false);
+      if (this.selected()?.id === studentId) this.loadingStatus.set(false);
     }
   }
 

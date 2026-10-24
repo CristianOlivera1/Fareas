@@ -27,6 +27,7 @@ import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { DataTable } from '../../../shared/components/data-table/data-table';
 import { DataTableCellDirective } from '../../../shared/components/data-table/data-table-cell.directive';
+import { Avatar } from '../../../shared/components/avatar/avatar';
 import { PageHeader } from '../../../shared/components/page-header/page-header';
 import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
@@ -51,7 +52,7 @@ const CICLOS = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}`, value:
   imports: [
     FormsModule, ReactiveFormsModule, PageHeader, UiButton, UiInput, UiAlert, DataTable,
     DataTableCellDirective, DialogModule, InputTextModule, SelectModule, ToggleSwitchModule,
-    StudentsImportDialog,
+    StudentsImportDialog, Avatar,
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './students.html',
@@ -144,13 +145,6 @@ export class StudentsPage {
           this.studentForm.controls.code.setValue(digits);
         }
       });
-  }
-
-  initials(name: string): string {
-    const parts = name.trim().split(/\s+/);
-    return parts.length >= 2
-      ? `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-      : name.slice(0, 2).toUpperCase();
   }
 
   onSearch(value: string): void { void this.qp.update({ q: value || null, page: null }); }
