@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   CUSTOM_ELEMENTS_SCHEMA,
+  computed,
   effect,
   inject,
   signal,
@@ -43,13 +44,15 @@ export class HolidaysPage {
   private readonly toast = inject(MessageService);
   private readonly deleteModal = viewChild(ModalDelete);
 
-  readonly columns: TableColumn[] = [
+  readonly columns = computed<TableColumn[]>(() => [
     { id: 'index', header: 'N°', width: '60px', align: 'center' },
     { id: 'fecha', header: 'Fecha' },
     { id: 'dia', header: 'Día', hiddenOnMobile: true },
     { id: 'description', header: 'Motivo' },
-    { id: 'actions', header: 'Acciones', align: 'right', width: '90px' },
-  ];
+    ...(this.auth.isAdmin()
+      ? [{ id: 'actions', header: 'Acciones', align: 'right' as const, width: '90px' }]
+      : []),
+  ]);
 
   readonly currentYear = new Date().getFullYear();
   readonly yearOptions: Array<{ label: string; value: number }> = [
