@@ -14,6 +14,7 @@ from app.routers import (
     calendar_admin,
     catalog,
     courses,
+    curriculum,
     dashboard,
     dpi,
     enrollment_faces,
@@ -85,6 +86,7 @@ def create_app() -> FastAPI:
     app.include_router(ws_devices.router, prefix=settings.API_V1_PREFIX)
     app.include_router(catalog.router, prefix=settings.API_V1_PREFIX)
     app.include_router(courses.router, prefix=settings.API_V1_PREFIX)
+    app.include_router(curriculum.router, prefix=settings.API_V1_PREFIX)
     app.include_router(calendar_admin.router, prefix=settings.API_V1_PREFIX)
     app.include_router(audit.router, prefix=settings.API_V1_PREFIX)
     app.include_router(dpi.router, prefix=settings.API_V1_PREFIX)

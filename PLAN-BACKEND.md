@@ -830,3 +830,22 @@ La matriz por pantalla está en `PLAN-FRONTEND.md` §7. Pendientes del lado back
 - **Estado de las cámaras (RF-35):** `camera_loop` marca `device.is_online` y `last_heartbeat` al abrir el stream, lo refresca cada 30 s y lo apaga si la fuente se cae; al arrancar deja todas en fuera de línea. `GET /dashboard/summary` cuenta ahora cámaras realmente en línea (`tests/test_camera_status.py`).
 - **Alcance del docente en riesgo:** `GET /dpi/at-risk` y las alertas del dashboard usan los alumnos matriculados en **sus grupos** del periodo, no todos los del curso (`tests/test_dpi_teacher_scope.py`).
 - **Enrolamiento facial:** solo se guarda en R2 la primera foto como portada (las demás se descartan tras generar el embedding). Al reenrolar se borran el registro y la foto anteriores; antes quedaban acumuladas (`tests/test_enroll_replace.py`). La validación de consistencia compara cada foto con el promedio de las demás (≥ 0.40).
+
+---
+
+## 11. Bloque 17 - Importación de la malla curricular (2026-10-24) - ✅ COMPLETADO Y VERIFICADO
+
+> Motivo: registrar de una vez todos los cursos (código, nombre y ciclo) de una malla impresa en la que cada ciclo es una
+> columna, en vez de dar de alta un curso por vez. Reutiliza el motor de lectura del Bloque 14 (`ocr_extract`).
+
+- **Endpoints (solo admin, `routers/curriculum.py`):**
+  - `POST /courses/import-curriculum` (multipart: `file` y `default_cycle` opcional) → previsualización **sin escribir nada**: por curso `code`, `name`, `cycle`, `confiable`, `nota`, `linea`, `pagina`, `ya_existe` y el curso existente. Resumen: `total`, `listos`, `por_revisar`, `ya_existentes` y `ciclos`.
+  - `POST /courses/import-curriculum/confirm` → recibe `{cursos: [{code, name, cycle}]}` (máx. 200), rechaza códigos repetidos (422), **omite los que ya existen sin modificarlos** y crea el resto en una sola transacción. Auditoría `importacion_malla_preview` / `importacion_malla_confirmada`.
+- **Parser (`services/ocr_curriculum.py`):**
+  1. Detecta los títulos de ciclo («PRIMER CICLO», «SÉPTIMO CICLO», «CICLO IV», «III CICLO», «2° CICLO», «CICLO 9»), incluso partidos en varias palabras (PDF con texto).
+  2. **Columnas:** si los títulos están en una misma franja, cada código (`AIS11`, `AGG20`: 2-5 letras y 1-3 dígitos) se asigna a la columna más cercana, y su nombre son las líneas de texto de esa columna entre el código anterior y el suyo (máx. ~6 alturas de código hacia arriba). Las flechas y los símbolos sueltos (confianza < 0.5, sin letras, de un solo carácter salvo «a/e/o/u/y» y números romanos) se descartan.
+  3. **Secciones:** si los títulos están en vertical, cada fila con un código toma el resto de la fila como nombre y las filas de continuación se anexan.
+  4. Sin títulos: varias columnas de códigos → ciclos por posición (I, II, III…) marcados «por verificar»; una sola columna → usa `default_cycle`, y si no hay, deja el ciclo vacío para que el usuario lo indique.
+  5. Marca como no confiable: nombre vacío o muy corto, lectura con confianza < 0.85, ciclo estimado y códigos repetidos en el archivo.
+- **Verificación:** `tests/test_ocr_curriculum.py` (23): casos sintéticos (columnas, nombres de varias líneas, ruido, duplicados, sin títulos, lista vertical), PDF con texto, **la imagen real de la malla** (`tests/fixtures/malla_ais.png`: 63 cursos, `7-6-6-6-6-6-7-7-6-6` por ciclo) y los endpoints (preview, confirm, permisos, 415/422). Contra el servidor real: 63 cursos, 62 listos, 1 por revisar.
+- **Límites:** la imagen debe verse nítida y recta; un diagrama muy borroso o con códigos tapados por flechas saldrá «por revisar». No se actualizan cursos existentes (para cambiar un nombre o ciclo se edita el curso).
