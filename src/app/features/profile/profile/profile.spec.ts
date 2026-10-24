@@ -51,9 +51,11 @@ describe('ProfilePage', () => {
 
     password.setValue('soloLetras');
 
+    expect(password.valid).toBe(true);
+    password.setValue('12345678');
     expect(password.invalid).toBe(true);
     expect(component.fieldError('new_password')).toBe(
-      'Usa entre 8 y 128 caracteres, con al menos una letra y un número.',
+      'Usa entre 8 y 128 caracteres e incluye al menos una letra.',
     );
   });
 
@@ -87,13 +89,13 @@ describe('ProfilePage', () => {
 
     const request = httpMock.expectOne(`${API}/auth/change-password`);
     request.flush(
-      { detail: 'new_password: Value error, La contraseña debe tener al menos 8 caracteres e incluir letras y números' },
+      { detail: 'new_password: Value error, La contraseña debe tener al menos 8 caracteres e incluir al menos una letra' },
       { status: 422, statusText: 'Unprocessable Entity' },
     );
 
     expect(component.errorMessage()).not.toContain('new_password');
     expect(component.fieldError('new_password')).toBe(
-      'Usa entre 8 y 128 caracteres, con al menos una letra y un número.',
+      'Usa entre 8 y 128 caracteres e incluye al menos una letra.',
     );
   });
 

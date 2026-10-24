@@ -287,14 +287,14 @@ async def test_recuperacion_otp_flujo_completo(
 
     r = await client.post(
         f"{API}/recover/reset",
-        json={"email": email, "code": "123456", "new_password": "Reseteada99"},
+        json={"email": email, "code": "123456", "new_password": "Reseteada"},
     )
     assert r.status_code == 200
 
     used = await _otp_row(db_session, temp_user.id, otp.OtpPurpose.RECOVER)
     assert used is not None and used.consumed_at is not None
 
-    r = await _login(client, email, "Reseteada99")
+    r = await _login(client, email, "Reseteada")
     assert r.status_code == 200
     assert r.json()["user"]["must_change_password"] is False
 
@@ -401,8 +401,8 @@ async def test_reset_rejects_weak_password(client: AsyncClient, temp_user: AppUs
         json={
             "email": temp_user.email,
             "code": "123456",
-            "new_password": "sololetras",
+            "new_password": "12345678",
         },
     )
     assert r.status_code == 422
-    assert "letras y números" in r.text
+    assert "al menos una letra" in r.text

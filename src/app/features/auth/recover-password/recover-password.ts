@@ -25,7 +25,7 @@ import {
 
 type RecoverStep = 'email' | 'otp' | 'reset';
 
-const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+const PASSWORD_PATTERN = /^(?=.*[A-Za-z]).{8,}$/;
 const DEFAULT_RESEND_SECONDS = 60;
 
 function passwordsMatch(group: AbstractControl): ValidationErrors | null {
@@ -196,7 +196,7 @@ export class RecoverPassword {
     if (!control.errors) return '';
     if (control.errors['required']) return 'Este campo es obligatorio.';
     if (control.errors['minlength']) return 'Mínimo 8 caracteres.';
-    if (control.errors['pattern']) return 'Usa al menos 8 caracteres con letras y números.';
+    if (control.errors['pattern']) return 'Usa al menos 8 caracteres e incluye una letra.';
     return '';
   }
 

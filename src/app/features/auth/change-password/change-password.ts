@@ -13,7 +13,7 @@ import { ROLE_HOME } from '../../../core/constants/nav';
 import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
 
-const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+const PASSWORD_PATTERN = /^(?=.*[A-Za-z]).{8,}$/;
 
 function passwordsMatch(group: AbstractControl): ValidationErrors | null {
   const newPassword = group.get('new_password')?.value;
@@ -61,7 +61,7 @@ export class ChangePassword {
     if (control.errors['minlength']) {
       return field === 'current_password' ? 'Mínimo 6 caracteres.' : 'Mínimo 8 caracteres.';
     }
-    if (control.errors['pattern']) return 'Usa al menos 8 caracteres con letras y números.';
+    if (control.errors['pattern']) return 'Usa al menos 8 caracteres e incluye una letra.';
     return '';
   }
 

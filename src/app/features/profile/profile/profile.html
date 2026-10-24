@@ -68,10 +68,6 @@
           <dt class="text-sm text-gray-500">Rol</dt>
           <dd class="truncate text-sm font-medium text-gray-900">{{ roleLabel() }}</dd>
         </div>
-        <div class="flex items-center justify-between gap-4 py-3">
-          <dt class="text-sm text-gray-500">ID de cuenta</dt>
-          <dd class="text-sm font-medium text-gray-900 tabular-nums">{{ u.id }}</dd>
-        </div>
       </dl>
     }
   </section>
@@ -222,7 +218,7 @@
           <app-ui-input formControlName="new_password" label="Nueva contraseña" type="password"
             icon="material-symbols:lock-reset" placeholder="8 a 128 caracteres" autocomplete="new-password"
             [customId]="'profile-new-password'" [showPasswordToggle]="true" [maxlength]="128"
-            hint="Usa entre 8 y 128 caracteres, con al menos una letra y un número."
+            hint="Usa entre 8 y 128 caracteres e incluye al menos una letra."
             [error]="fieldError('new_password')" />
 
           <app-ui-input formControlName="confirm_password" label="Confirmar nueva contraseña" type="password"

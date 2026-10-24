@@ -23,7 +23,7 @@ import { extractDetail } from '../../../shared/utils/api-error';
 
 const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const AVATAR_MAX_MB = 5;
-const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d).+$/;
+const PASSWORD_PATTERN = /^(?=.*[A-Za-z]).+$/;
 
 type PasswordStep = 1 | 2 | 3;
 type PasswordField = 'current_password' | 'otp_code' | 'new_password' | 'confirm_password';
@@ -221,7 +221,7 @@ export class ProfilePage {
     if (control.errors['required']) return 'Este campo es obligatorio.';
     if (control.errors['maxlength']) return 'No puede superar los 128 caracteres.';
     if (control.errors['serverPolicy'] || (field === 'new_password' && control.errors['pattern'])) {
-      return 'Usa entre 8 y 128 caracteres, con al menos una letra y un número.';
+      return 'Usa entre 8 y 128 caracteres e incluye al menos una letra.';
     }
     if (control.errors['pattern']) return 'Ingresa los 6 dígitos del código.';
     if (control.errors['mismatch']) return 'Las contraseñas no coinciden.';
