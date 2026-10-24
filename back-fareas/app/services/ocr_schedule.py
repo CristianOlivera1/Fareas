@@ -4,6 +4,7 @@ import io
 import re
 import unicodedata
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from statistics import median
 
 import pdfplumber
@@ -45,7 +46,7 @@ RE_AULA = re.compile(
     re.IGNORECASE,
 )
 RE_DOCENTE = re.compile(
-    r"([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]{2,},\s*[A-Za-zÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑ\s.]{0,60})"
+    r"([A-ZÀ-ÖØ-Þ][A-ZÀ-ÖØ-Þ\s]{2,},\s*[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ\s.]{0,60})"
 )
 
 MAX_PESO_PDF = 10 * 1024 * 1024
@@ -307,7 +308,7 @@ def _bloque_de_celda(
 ) -> BloqueExtraido | None:
     ordenados = [item for fila in agrupar_filas(items) for item in fila]
     texto = re.sub(r"\s+", " ", " ".join(item.texto for item in ordenados)).strip()
-    texto = texto.strip(" -–—:;,")
+    texto = unicodedata.normalize("NFC", texto).strip(" -–—:;,")
     match_curso = RE_CURSO.search(texto.upper())
     if match_curso is None:
         return None
@@ -603,11 +604,71 @@ def extraer_horarios(pdf_bytes: bytes) -> tuple[list[BloqueExtraido], int]:
     return _parsear_lineas(lineas), paginas
 
 
+def _minutos(hhmm: str) -> int:
+    hora, minuto = hhmm.split(":")
+    return int(hora) * 60 + int(minuto)
+
+
+def _compacto(valor: str | None) -> str:
+    return re.sub(r"[^A-Z0-9]", "", _sin_tildes(valor or ""))
+
+
+def _parecidos(izquierda: str | None, derecha: str | None, minimo: float) -> bool:
+    primero, segundo = _compacto(izquierda), _compacto(derecha)
+    if not primero or not segundo:
+        return True
+    return SequenceMatcher(None, primero, segundo).ratio() >= minimo
+
+
+MAX_MINUTOS_BLOQUE = 120
+
+
+def _se_fusionan(anterior: BloqueExtraido, bloque: BloqueExtraido) -> bool:
+    return (
+        _compacto(anterior.course_code) == _compacto(bloque.course_code)
+        and (anterior.group_code or "").upper() == (bloque.group_code or "").upper()
+        and anterior.weekday == bloque.weekday
+        and anterior.pagina == bloque.pagina
+        and anterior.end_time == bloque.start_time
+        and _minutos(bloque.end_time) - _minutos(anterior.start_time) <= MAX_MINUTOS_BLOQUE
+        and _parecidos(anterior.room_code, bloque.room_code, 0.85)
+        and _parecidos(anterior.teacher_name, bloque.teacher_name, 0.8)
+    )
+
+
+def fusionar_contiguos(bloques: list[BloqueExtraido]) -> list[BloqueExtraido]:
+    ordenados = sorted(
+        bloques,
+        key=lambda item: (
+            item.pagina, _compacto(item.course_code), (item.group_code or ""), item.weekday,
+            _minutos(item.start_time),
+        ),
+    )
+    resultado: list[BloqueExtraido] = []
+    for bloque in ordenados:
+        anterior = resultado[-1] if resultado else None
+        if anterior is not None and _se_fusionan(anterior, bloque):
+            notas = [nota for nota in (anterior.nota, bloque.nota) if nota]
+            resultado[-1] = anterior.model_copy(
+                update={
+                    "end_time": bloque.end_time,
+                    "confiable": anterior.confiable and bloque.confiable,
+                    "nota": "; ".join(dict.fromkeys(notas)) or None,
+                    "confianza": min(anterior.confianza, bloque.confianza),
+                    "teacher_name": anterior.teacher_name or bloque.teacher_name,
+                    "room_code": anterior.room_code or bloque.room_code,
+                }
+            )
+            continue
+        resultado.append(bloque)
+    return sorted(resultado, key=lambda item: (item.pagina, item.weekday, _minutos(item.start_time)))
+
+
 def extraer_horarios_documento(documento: DocumentoLeido) -> list[BloqueExtraido]:
     celdas = _parsear_celdas(documento)
     if celdas:
-        return celdas
+        return fusionar_contiguos(celdas)
     tabla = _parsear_tabla(documento)
     if tabla:
-        return tabla
+        return fusionar_contiguos(tabla)
     return _parsear_lineas(documento.lineas)

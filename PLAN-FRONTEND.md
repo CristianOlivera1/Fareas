@@ -478,6 +478,18 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   `core/models/imports.ts` y métodos `importSchedule` /
   `confirmScheduleImport` en `courses-api.ts`. Sin librerías nuevas.
 - Responsive: tabla con scroll horizontal, inputs compactos y cabecera fija.
+- **Mejoras (2026-10-24):** se quitó «Solo revisar». El docente y el aula por
+  defecto se reflejan en el select de cada fila que no tenga uno elegido a mano
+  (`teacher_manual` / `room_manual`); limpiar un select vuelve al valor por
+  defecto. Docentes, aulas y cursos se cargan completos (paginando de 100 en
+  100) y todos los selects son buscables. La cabecera de cada curso muestra si
+  está registrado o será nuevo, permite elegir un curso registrado y, si el
+  código o el nombre se parece a uno existente
+  (`shared/utils/similarity.ts`), obliga a elegir «Sí, usar ese» o «No, crear»
+  antes de confirmar. Docente/aula detectados pero no registrados muestran
+  «No registrado» con sugerencias parecidas. El backend ahora lee horarios en
+  cuadrícula (celdas combinadas, colores, grupos A/B) y en tabla de una celda
+  por hora, fusionando horas contiguas en bloques de hasta 2 h.
 - **Verificación (2026-10-23):** `npm run build -- --configuration development`
   OK; `npm test -- --watch=false` 7/7. Flujo real en navegador con una foto de
   horario generada: el OCR devolvió 3 bloques, se asignaron docente y aula por

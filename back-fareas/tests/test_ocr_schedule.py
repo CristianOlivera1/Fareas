@@ -262,6 +262,24 @@ def test_coincidencias_para_autocompletar():
     aula = emparejar_aula("LAB 401", aulas)
     assert aula is not None and aula.valor.id == 7
 
+
+def test_aula_se_empareja_por_numero_aunque_cambie_el_prefijo():
+    aulas = [Room(id=1, code="LAB 104"), Room(id=2, code="LAB 305"), Room(id=3, code="LAB 306")]
+
+    assert emparejar_aula("AULA 104", aulas).valor.id == 1
+    assert emparejar_aula("Aula104", aulas).valor.id == 1
+    assert emparejar_aula("LÃB 305", aulas).valor.id == 2
+    assert emparejar_aula("LAB 3O6", aulas).valor.id == 3
+    assert emparejar_aula("AULA 999", aulas) is None
+
+
+def test_aula_con_el_mismo_numero_prefiere_el_prefijo_igual():
+    aulas = [Room(id=1, code="LAB 104"), Room(id=2, code="AULA 104")]
+
+    assert emparejar_aula("AULA 104", aulas).valor.id == 2
+    assert emparejar_aula("LAB 104", aulas).valor.id == 1
+
+
 async def test_confirmacion_sin_docente_ni_aula(client, admin_headers, db_session, escenario):
     payload = {
         "cycle": 9, "semester_label": "2027-I",

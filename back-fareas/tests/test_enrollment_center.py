@@ -333,3 +333,30 @@ async def test_settings_reject_an_inverted_enrollment_window(client, admin_heade
         json={"enrollment_start": str(today + timedelta(days=3)), "enrollment_end": str(today)},
     )
     assert r.status_code == 422
+
+
+async def test_student_changes_own_cycle_only_while_window_is_open(client, admin_headers, db_session, world):
+    student = world.students[0]
+    headers = _student_headers(student)
+
+    closed = await client.patch(f"{API}/me/enrollment/cycle", headers=headers, json={"cycle": 4})
+    assert closed.status_code == 403
+
+    await _open_window(client, admin_headers)
+    ok = await client.patch(f"{API}/me/enrollment/cycle", headers=headers, json={"cycle": 4})
+    assert ok.status_code == 200, ok.text
+    assert (await client.get(f"{API}/me/enrollment", headers=headers)).json()["student_cycle"] == 4
+
+    invalid = await client.patch(f"{API}/me/enrollment/cycle", headers=headers, json={"cycle": 11})
+    assert invalid.status_code == 422
+    forbidden = await client.patch(
+        f"{API}/me/enrollment/cycle", headers=admin_headers, json={"cycle": 3}
+    )
+    assert forbidden.status_code == 403
+
+    log = (
+        await db_session.exec(
+            select(AuditLog).where(AuditLog.actor_id == student.id, AuditLog.action == "ciclo_actualizado")
+        )
+    ).first()
+    assert log is not None and log.new_value == {"semester": 4}

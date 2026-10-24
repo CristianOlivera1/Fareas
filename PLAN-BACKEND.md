@@ -367,7 +367,7 @@ completa sin `test_vision.py`: **92 passed**.
 | R6 Justificación | `is_justified` + `justification_id`; crear marca faltas existentes y las futuras nacen justificadas; eliminar revierte; docente con curso obligatorio | `services/justifications.py`, `justificacion_vigente` |
 | R7 DPI | `absence_percent` = faltas no justificadas / sesiones válidas; aviso ≥ 20, límite > 30; correo solo con `sessions_held ≥ 4` y **una vez por nivel** (`dpi_alert_sent`); "faltas restantes" contra el total planificado | `services/dpi.py`, `v_student_dpi`, `notifications.py` |
 | R8 Matrícula | Cupo 40; un grupo activo por curso; sin cruces de horario del alumno; retiro con `withdrawn_at` (o DELETE si no hay registros); transferencia transaccional | `services/enrollments.py`, `courses.py` |
-| R9 Grupos | UNIQUE(course, group_code, semester); cupo por grupo; validación de cruce de los alumnos al crear/editar bloques | `courses.py`, `services/schedule.py` |
+| R9 Grupos | UNIQUE(course, group_code, semester); cupo por grupo; validación de cruce de los alumnos al crear/editar bloques. Auditoría 2026-10-24: un grupo no puede tener dos bloques que se crucen el mismo día; la duración debe ser exactamente 1 h o 2 h (decisión 4); reactivar un grupo (`/activate` o grupo por defecto) revalida aula, docente y alumnos matriculados; la transferencia ignora el grupo de origen al comprobar el cruce del alumno (los grupos paralelos comparten franja) | `courses.py`, `services/schedule.py`, `services/enrollments.py`, `tests/test_schedule_conflicts.py` |
 | R10 Contiguos | Candidatos por aula+ventana; desempate por la matrícula del alumno reconocido y, si persiste, el bloque que empezó más tarde | `bloques_candidatos`, `resolver_sesion`, `camera_loop` |
 | R11 Rectificación | Docente solo últimos `rectify_days` (7); admin sin plazo; motivo obligatorio → `audit_log`; cambiar de falta limpia la justificación | `attendance.py` (`/rectify`) |
 | R12 Feriados | Alta por rango (omite fines de semana) y generador nacional (fijos + Semana Santa); al crear un feriado se cancelan las sesiones abiertas/por revisar de esa fecha | `calendar_admin.py`, `services/holidays_pe.py` |
@@ -558,6 +558,14 @@ borrarlo. Suite completa: **118 passed** (113 previos + 5 de storage).
   `pagina`/`linea`. `POST /courses/import-pdf/confirm` añade
   `semester_label`, `teacher_id`/`room_id` por bloque y `omitidos`.
   Los paths actuales se mantienen (el frontend aún no los consume).
+- **Horarios en imagen (2026-10-24):** el parser de celdas/tabla cubre la
+  cuadrícula con colores y celdas combinadas (grupos A/B, códigos AGG/AIS) y la
+  tabla simple de una celda por hora (códigos ISA9xx, docentes). Se normaliza
+  NFC, el patrón de docente admite mayúsculas acentuadas y
+  `fusionar_contiguos()` une horas consecutivas de la misma clase (mismo curso,
+  grupo, día, aula y docente parecidos) hasta 2 h. Fixtures
+  `tests/fixtures/horario_colores.png` y `horario_tabla.png`;
+  `tests/test_schedule_grid_images.py` (8 tests).
 
 **Contrato (confirm)**
 

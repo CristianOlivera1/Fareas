@@ -23,7 +23,7 @@ from app.services.import_matching import (
 )
 from app.services.ocr_extract import MAX_PESO_ARCHIVO, leer_documento_async
 from app.services.ocr_schedule import BloqueExtraido, extraer_horarios_documento
-from app.services.schedule import add_block, update_block
+from app.services.schedule import add_block, update_block, validar_reactivacion
 from app.services.settings import semestre_vigente
 from app.tables import (
     AppUser,
@@ -320,6 +320,7 @@ async def activate_group(
     group = await _get_or_404(db, CourseGroup, group_id, "Grupo")
     if group.is_active:
         raise errors.DomainError("El grupo ya está activo")
+    await validar_reactivacion(db, group)
     group.is_active = True
     db.add(group)
     await audit(db, admin, action="grupo_reactivado", entity="course_group", entity_id=group.id,

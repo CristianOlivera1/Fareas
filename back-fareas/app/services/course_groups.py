@@ -2,6 +2,7 @@ from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
 
 from app.services import errors
+from app.services.schedule import validar_reactivacion
 from app.services.settings import semestre_vigente
 from app.tables import Course, CourseGroup, Enrollment
 
@@ -44,6 +45,7 @@ async def ensure_default_group(
         )
     ).first()
     if existing is not None:
+        await validar_reactivacion(db, existing)
         existing.is_active = True
         db.add(existing)
         await db.flush()

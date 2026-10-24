@@ -45,10 +45,10 @@ export interface ScheduleImportRow {
   end_time: string;
   teacher_id: number | null;
   room_id: number | null;
+  teacher_manual: boolean;
+  room_manual: boolean;
   teacher_name: string | null;
   room_code: string | null;
-  course_suggestion: CourseSuggestion | null;
-  suggestion_dismissed: boolean;
   confiable: boolean;
   nota: string | null;
   linea: string;

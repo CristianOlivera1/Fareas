@@ -111,13 +111,38 @@ def emparejar_docente(nombre: str | None, docentes: Iterable[AppUser]) -> Coinci
     return _mejor(candidatos, 0.82)
 
 
+RE_AULA = re.compile(r"^([A-Z]*?)([0-9OI]*[0-9][0-9OI]*)$")
+
+
+def _partir_aula(codigo: str | None) -> tuple[str, str]:
+    compacto = _compacto(codigo)
+    encontrado = RE_AULA.match(compacto)
+    if not encontrado:
+        return compacto, ""
+    numero = encontrado.group(2).replace("O", "0").replace("I", "1")
+    return encontrado.group(1), numero
+
+
 def emparejar_aula(codigo: str | None, aulas: Iterable[Room]) -> Coincidencia | None:
-    codigo_normal = _compacto(codigo)
-    candidatos: list[tuple[object, float, str]] = []
-    for aula in aulas:
-        aula_normal = _compacto(aula.code)
-        puntaje = _similitud(codigo_normal, aula_normal)
-        if puntaje < 0.85:
-            continue
-        candidatos.append((aula, puntaje, "código de aula parecido"))
+    prefijo, numero = _partir_aula(codigo)
+    aulas = list(aulas)
+    if numero:
+        mismo_numero = [aula for aula in aulas if _partir_aula(aula.code)[1] == numero]
+        if len(mismo_numero) == 1:
+            igual = _partir_aula(mismo_numero[0].code)[0] == prefijo
+            return Coincidencia(
+                valor=mismo_numero[0],
+                puntaje=1.0 if igual else 0.95,
+                motivo="código de aula" if igual else "mismo número de aula",
+            )
+        if mismo_numero:
+            candidatos = [
+                (aula, _similitud(prefijo, _partir_aula(aula.code)[0]), "mismo número de aula")
+                for aula in mismo_numero
+            ]
+            return _mejor(candidatos, 0.5)
+    candidatos = [
+        (aula, _similitud(_compacto(codigo), _compacto(aula.code)), "código de aula parecido")
+        for aula in aulas
+    ]
     return _mejor(candidatos, 0.85)

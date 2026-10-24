@@ -4,6 +4,7 @@ import {
   CUSTOM_ELEMENTS_SCHEMA,
   DestroyRef,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -13,13 +14,16 @@ import type { AbstractControl, ValidationErrors } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DialogModule } from 'primeng/dialog';
 import { AuthService } from '../../../core/services/auth/auth';
+import { EnrollmentStatus } from '../../../core/models/enrollment';
 import { ROLE_LABELS } from '../../../core/models/user';
+import { EnrollmentApi } from '../../../core/services/enrollment-api';
 import { Avatar } from '../../../shared/components/avatar/avatar';
 import { PageHeader } from '../../../shared/components/page-header/page-header';
 import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
 import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { extractDetail } from '../../../shared/utils/api-error';
+import { CYCLES, toRoman } from '../../../shared/utils/cycles';
 
 const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const AVATAR_MAX_MB = 5;
@@ -45,6 +49,7 @@ export class ProfilePage {
   readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly enrollmentApi = inject(EnrollmentApi);
 
   readonly avatarBusy = signal(false);
   readonly avatarError = signal('');
@@ -66,6 +71,14 @@ export class ProfilePage {
     () => this.isSendingOtp() || this.isVerifyingOtp() || this.isSubmitting(),
   );
 
+  readonly cycles = CYCLES;
+  readonly roman = toRoman;
+  readonly enrollmentStatus = signal<EnrollmentStatus | null>(null);
+  readonly pendingCycle = signal<number | null>(null);
+  readonly cycleSaving = signal(false);
+  readonly cycleError = signal('');
+  readonly cycleSaved = signal(false);
+
   readonly steps = [
     { id: 1, label: 'Identidad' },
     { id: 2, label: 'Código' },
@@ -77,6 +90,13 @@ export class ProfilePage {
     const role = this.user()?.role;
     return role ? ROLE_LABELS[role] : 'Sin rol';
   };
+
+  readonly isStudent = computed(() => this.user()?.role === 'estudiante');
+  readonly cycleEditable = computed(() => this.enrollmentStatus()?.window.open ?? false);
+  readonly cycleChanged = computed(() => {
+    const pending = this.pendingCycle();
+    return pending !== null && pending !== this.enrollmentStatus()?.student_cycle;
+  });
 
   readonly resendLabel = computed(() => {
     const seconds = this.resendSeconds();
@@ -101,10 +121,17 @@ export class ProfilePage {
     ],
   });
 
+  private statusRequested = false;
   private resendTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     this.refresh();
+    effect(() => {
+      if (this.isStudent() && this.enrollmentStatus() === null && !this.statusRequested) {
+        this.statusRequested = true;
+        this.loadEnrollmentStatus();
+      }
+    });
 
     this.form.controls.otp_code.valueChanges
       .pipe(takeUntilDestroyed())
@@ -122,6 +149,50 @@ export class ProfilePage {
       });
 
     this.destroyRef.onDestroy(() => this.stopResendTimer());
+  }
+
+  selectCycle(cycle: number): void {
+    if (!this.cycleEditable()) return;
+    this.cycleSaved.set(false);
+    this.cycleError.set('');
+    this.pendingCycle.set(cycle);
+  }
+
+  saveCycle(): void {
+    const cycle = this.pendingCycle();
+    if (cycle === null || !this.cycleChanged() || this.cycleSaving()) return;
+    this.cycleSaving.set(true);
+    this.cycleError.set('');
+    this.enrollmentApi
+      .updateMyCycle(cycle)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.enrollmentStatus.update((status) =>
+            status ? { ...status, student_cycle: cycle } : status,
+          );
+          this.cycleSaving.set(false);
+          this.cycleSaved.set(true);
+        },
+        error: (err: unknown) => {
+          this.cycleSaving.set(false);
+          this.cycleError.set(extractDetail(err));
+          this.loadEnrollmentStatus();
+        },
+      });
+  }
+
+  private loadEnrollmentStatus(): void {
+    this.enrollmentApi
+      .myStatus()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (status) => {
+          this.enrollmentStatus.set(status);
+          this.pendingCycle.set(status.student_cycle);
+        },
+        error: (err: unknown) => this.cycleError.set(extractDetail(err)),
+      });
   }
 
   onAvatarSelected(event: Event): void {
