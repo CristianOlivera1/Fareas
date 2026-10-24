@@ -44,6 +44,17 @@ async def _despachar_correos() -> None:
     except Exception:
         logger.exception("No se pudieron despachar los correos pendientes")
 
+async def _limpiar_credenciales() -> None:
+    from app.services.maintenance import purge_expired_credentials
+
+    try:
+        async with SessionLocal() as db:
+            removed = await purge_expired_credentials(db)
+        if any(removed.values()):
+            logger.info("[mantenimiento] credenciales vencidas eliminadas: %s", removed)
+    except Exception:
+        logger.exception("No se pudo limpiar las credenciales vencidas")
+
 def iniciar_scheduler(intervalo_segundos: int = 60) -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -62,6 +73,14 @@ def iniciar_scheduler(intervalo_segundos: int = 60) -> AsyncIOScheduler:
         "interval",
         seconds=intervalo_segundos,
         id="despacho_correos",
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.add_job(
+        _limpiar_credenciales,
+        "interval",
+        hours=6,
+        id="limpieza_credenciales",
         max_instances=1,
         coalesce=True,
     )
