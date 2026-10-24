@@ -5,6 +5,7 @@ import {
   computed,
   contentChildren,
   input,
+  linkedSignal,
   output,
   signal,
 } from '@angular/core';
@@ -31,6 +32,7 @@ export class DataTable {
   readonly serverPage = input(1);
   readonly serverTotal = input(0);
   readonly serverPageSize = input(10);
+  readonly initialPageSize = input(5);
 
   readonly loading = input(false);
   readonly errorMessage = input<string | null>(null);
@@ -53,7 +55,7 @@ export class DataTable {
   readonly cellTemplates = contentChildren(DataTableCellDirective);
 
   private readonly page = signal(1);
-  readonly perPage = signal(5);
+  readonly perPage = linkedSignal(() => this.initialPageSize());
 
   readonly totalCount = computed(() =>
     this.mode() === 'server' ? this.serverTotal() : this.data().length,

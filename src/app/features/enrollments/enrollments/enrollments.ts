@@ -75,6 +75,11 @@ export class EnrollmentsPage {
     { id: 'status', header: 'Matrícula', align: 'center' },
     { id: 'actions', header: 'Acciones', align: 'center', width: '150px' },
   ];
+  readonly studentPageSizeOptions = [
+    { label: '10', value: 10 },
+    { label: '25', value: 25 },
+    { label: '50', value: 50 },
+  ];
 
   readonly semesters = signal<string[]>([]);
   readonly courseOptions = signal<Option<number>[]>([]);

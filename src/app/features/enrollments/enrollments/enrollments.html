@@ -105,6 +105,7 @@
 
   <app-data-table
     [columns]="columns" [data]="students()"
+    [initialPageSize]="25" [pageSizeOptions]="studentPageSizeOptions"
     [loading]="loadingStudents()"
     emptyTitle="Sin alumnos matriculados"
     emptyMessage="Matricula al primer alumno de este grupo."
