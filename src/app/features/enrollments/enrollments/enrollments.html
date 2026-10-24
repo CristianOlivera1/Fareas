@@ -1,30 +1,22 @@
-<app-page-header title="Matrículas" subtitle="Administra los estudiantes inscritos en cada grupo, incluidos retiros y cambios de grupo.">
-  @if (auth.isAdmin()) {
-    <app-ui-button icon="material-symbols:person-add" [disabled]="!selectedGroup()" (click)="openEnroll()">
-      Matricular alumno
-    </app-ui-button>
-  }
-</app-page-header>
-
-<div class="mb-4 grid gap-3 sm:grid-cols-3">
-  <label class="space-y-1">
-    <span class="text-xs font-medium text-gray-500">Periodo</span>
-    <p-select class="w-full" appendTo="body" [options]="semesters()" placeholder="Vigente"
-      showClear [ngModel]="semester()" (ngModelChange)="onSemester($event)" />
-  </label>
-  <label class="space-y-1">
+<div class="mb-4 flex flex-wrap items-end gap-3">
+  <label class="min-w-56 flex-1 space-y-1">
     <span class="text-xs font-medium text-gray-500">Curso</span>
     <p-select class="w-full" appendTo="body" [options]="courseOptions()" optionLabel="label"
       optionValue="value" placeholder="Selecciona el curso" [filter]="true" filterBy="label"
       showClear [ngModel]="courseIdNumber()" (ngModelChange)="onCourse($event)" />
   </label>
-  <label class="space-y-1">
+  <label class="min-w-56 flex-1 space-y-1">
     <span class="text-xs font-medium text-gray-500">Grupo</span>
     <p-select class="w-full" appendTo="body" [options]="groupOptions()" optionLabel="label"
       optionValue="value" placeholder="Selecciona el grupo"
       [loading]="loadingGroups()" [disabled]="!courseId()"
       [ngModel]="groupIdNumber()" (ngModelChange)="onGroup($event)" />
   </label>
+  @if (auth.isAdmin()) {
+    <app-ui-button icon="material-symbols:person-add" [disabled]="!selectedGroup()" (click)="openEnroll()">
+      Matricular alumnos
+    </app-ui-button>
+  }
 </div>
 
 @if (selectedGroup(); as selectedGroup) {
@@ -174,27 +166,52 @@
   </app-data-table>
 }
 
-<p-dialog header="Matricular alumno" [(visible)]="enrollDialogVisible" [modal]="true"
-  [style]="{ width: '460px' }">
+<p-dialog header="Matricular alumnos" [(visible)]="enrollDialogVisible" [modal]="true"
+  [style]="{ width: '520px' }" appendTo="body">
   <div class="space-y-4 pt-2">
     <label class="block space-y-1">
-      <span class="text-sm font-medium text-gray-700">Estudiante <span class="text-red-500">*</span></span>
-      <p-select class="w-full" appendTo="body" [options]="studentOptions()" optionLabel="label"
+      <span class="text-sm font-medium text-gray-700">Estudiantes <span class="text-red-500">*</span></span>
+      <p-multiselect class="w-full" appendTo="body" [options]="studentOptions()" optionLabel="label"
         optionValue="value" placeholder="Busca por nombre, correo o código" [filter]="true"
-        [loading]="searchingStudents()" (onFilter)="onStudentFilter($event)"
-        [ngModel]="selectedStudentId()" (ngModelChange)="selectedStudentId.set($event)" />
+        [showToggleAll]="false" [loading]="searchingStudents()" (onFilter)="onStudentFilter($event)"
+        [ngModel]="selectedStudentIds()" (ngModelChange)="onStudentsSelected($event)" display="chip" />
       <span class="block text-[13px] text-gray-400">
-        El cupo disponible de este grupo es {{ remainingCapacity() }}.
+        Cupo disponible en este grupo: {{ remainingCapacity() }}. Elegiste {{ selectedStudentIds().length }}.
       </span>
     </label>
+
+    <div class="space-y-1">
+      <span class="text-sm font-medium text-gray-700">O pega códigos de matrícula</span>
+      <textarea rows="2" [ngModel]="pastedCodes()" (ngModelChange)="pastedCodes.set($event)"
+        placeholder="221181, 221182, 221183…"
+        class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-xs focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)"></textarea>
+      <app-ui-button size="sm" variant="outline" icon="material-symbols:playlist-add" [loading]="resolvingCodes()"
+        [disabled]="!pastedCodes().trim()" (click)="addPastedCodes()">Agregar códigos</app-ui-button>
+    </div>
+
+    @if (bulkResult(); as r) {
+      @if (r.failed > 0) {
+        <app-ui-alert variant="warning" title="Algunos alumnos no se pudieron matricular">
+          <ul class="mt-1 max-h-32 list-disc overflow-auto pl-4 text-xs">
+            @for (row of r.results; track row.student_id) {
+              @if (row.status === 'failed') {
+                <li>{{ row.student_code }} · {{ row.student_name }}: {{ row.reason }}</li>
+              }
+            }
+          </ul>
+        </app-ui-alert>
+      }
+    }
+
     <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-      Se valida el cupo de 40, que el alumno no tenga otro grupo activo del mismo curso y que su
-      horario no se cruce con otros cursos del periodo.
+      Se valida el cupo, que el alumno no tenga otro grupo activo del mismo curso y que su horario no se cruce con otros cursos.
     </app-ui-alert>
   </div>
   <ng-template pTemplate="footer">
-    <app-ui-button variant="ghost" (click)="enrollDialogVisible = false">Cancelar</app-ui-button>
-    <app-ui-button [loading]="saving()" (click)="confirmEnroll()">Matricular</app-ui-button>
+    <app-ui-button variant="ghost" (click)="enrollDialogVisible = false">Cerrar</app-ui-button>
+    <app-ui-button [loading]="saving()" [disabled]="selectedStudentIds().length === 0" (click)="confirmEnroll()">
+      Matricular {{ selectedStudentIds().length || '' }}
+    </app-ui-button>
   </ng-template>
 </p-dialog>
 

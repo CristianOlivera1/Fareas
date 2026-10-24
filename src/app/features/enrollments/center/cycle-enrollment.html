@@ -1,0 +1,229 @@
+<div class="grid gap-4 xl:grid-cols-5">
+  <section class="rounded-2xl border border-gray-100 bg-white p-5 xl:col-span-3" aria-labelledby="cycle-step-1">
+    <h2 id="cycle-step-1" class="flex items-center gap-2 text-base font-semibold tracking-tight text-gray-900">
+      <span class="grid size-6 place-items-center rounded-full bg-(--fareas-primary) text-xs text-white">1</span>
+      Horario del ciclo
+    </h2>
+    <p class="mt-1 text-sm text-gray-500">
+      Elige el ciclo y el grupo: cada alumno queda matriculado en ese grupo de todos los cursos del ciclo.
+    </p>
+
+    <div class="mt-4 flex flex-wrap items-end gap-3">
+      <label class="block space-y-1">
+        <span class="text-xs font-medium text-gray-500">Ciclo</span>
+        <p-select class="w-40" appendTo="body" [options]="cycleOptions" optionLabel="label" optionValue="value"
+          placeholder="Elige el ciclo" [ngModel]="cycle()" (ngModelChange)="onCycle($event)" />
+      </label>
+      @if (letters().length > 0) {
+        <div>
+          <span class="mb-1 block text-xs font-medium text-gray-500">Grupo</span>
+          <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Grupo del ciclo">
+            @for (item of letters(); track item.group_code) {
+              <button type="button" role="radio" [attr.aria-checked]="letter() === item.group_code"
+                (click)="onLetter(item.group_code)" [class]="
+                  'rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ' +
+                  (letter() === item.group_code
+                    ? 'border-(--fareas-primary) bg-blue-50 text-(--fareas-primary)'
+                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50')
+                ">
+                {{ item.group_code }}
+                <span class="ml-1 text-[11px] font-normal text-gray-500">{{ item.courses_covered }}/{{ item.courses_total }} cursos</span>
+              </button>
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+    @if (packageError(); as message) {
+      <app-ui-alert variant="warning" class="mt-4 block">{{ message }}</app-ui-alert>
+    }
+
+    @if (loadingPackage()) {
+      <div class="mt-4 space-y-2" aria-busy="true">
+        @for (i of [1, 2, 3]; track i) {
+          <div class="h-12 animate-pulse rounded-xl bg-gray-50"></div>
+        }
+      </div>
+    } @else if (pkg(); as p) {
+      <div class="mt-4 overflow-hidden rounded-xl border border-gray-200">
+        <div class="max-h-[46vh] overflow-auto">
+          <table class="w-full min-w-[560px] border-collapse text-left text-sm">
+            <thead class="sticky top-0 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+              <tr>
+                <th class="px-3 py-2.5">Curso</th>
+                <th class="px-3 py-2.5">Horario</th>
+                <th class="px-3 py-2.5">Docente</th>
+                <th class="px-3 py-2.5 text-right">Cupos</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              @for (course of p.courses; track course.course_id) {
+                <tr class="align-top">
+                  <td class="px-3 py-2">
+                    <span class="rounded-md bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-700">{{ course.course_code }}</span>
+                    <div class="mt-0.5 text-xs text-gray-600">{{ course.course_name }}</div>
+                  </td>
+                  <td class="px-3 py-2 text-xs text-gray-600">{{ blocksLabel(course.blocks) }}</td>
+                  <td class="px-3 py-2 text-xs text-gray-600">{{ course.teacher_name ?? '—' }}</td>
+                  <td class="px-3 py-2 text-right text-xs tabular-nums">
+                    <span [class]="course.free === 0 ? 'font-semibold text-red-600' : course.free < 6 ? 'font-semibold text-amber-600' : 'text-gray-700'">
+                      {{ course.free }} libres
+                    </span>
+                    <span class="text-gray-400"> / {{ course.capacity }}</span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+      @if (p.missing.length > 0) {
+        <app-ui-alert variant="warning" title="Cursos sin este grupo" class="mt-3 block">
+          No tienen grupo «{{ p.group_code }}» en el periodo {{ p.period }}, así que no se matricula ahí:
+          {{ p.missing.map(m => m.course_code).join(', ') }}. Créalos desde Cursos y grupos o matricula esos cursos a mano en la pestaña «Por grupo».
+        </app-ui-alert>
+      }
+    }
+  </section>
+
+  <section class="rounded-2xl border border-gray-100 bg-white p-5 xl:col-span-2" aria-labelledby="cycle-step-2">
+    <h2 id="cycle-step-2" class="flex items-center gap-2 text-base font-semibold tracking-tight text-gray-900">
+      <span class="grid size-6 place-items-center rounded-full bg-(--fareas-primary) text-xs text-white">2</span>
+      Alumnos
+    </h2>
+
+    <div class="mt-3 inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1" role="tablist" aria-label="Cómo elegir alumnos">
+      @for (item of [{ id: 'search', label: 'Buscar' }, { id: 'codes', label: 'Pegar códigos' }, { id: 'cycle', label: 'Todo un ciclo' }]; track item.id) {
+        <button type="button" role="tab" [attr.aria-selected]="source() === item.id" (click)="setSource($any(item.id))" [class]="
+          'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ' +
+          (source() === item.id ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-700')
+        ">{{ item.label }}</button>
+      }
+    </div>
+
+    <div class="mt-3">
+      @switch (source()) {
+        @case ('search') {
+          <app-ui-input icon="material-symbols:search" placeholder="Nombre, código o correo…"
+            [ngModel]="query()" (ngModelChange)="onQuery($event)" />
+          @if (searching()) {
+            <p class="mt-2 text-xs text-gray-500">Buscando…</p>
+          } @else if (found().length > 0) {
+            <div class="mt-2 flex items-center justify-between text-xs text-gray-500">
+              <span>{{ found().length }} resultado(s)</span>
+              <button type="button" class="font-medium text-(--fareas-primary) hover:underline" (click)="addAllFound()">Agregar todos</button>
+            </div>
+            <ul class="mt-1 max-h-48 divide-y divide-gray-100 overflow-auto rounded-xl border border-gray-200">
+              @for (person of found(); track person.id) {
+                <li class="flex items-center gap-2 px-3 py-2">
+                  <span class="font-mono text-xs text-gray-500">{{ person.code ?? '—' }}</span>
+                  <span class="min-w-0 flex-1 truncate text-sm text-gray-800">{{ person.full_name }}</span>
+                  <span class="text-[11px] text-gray-400">Ciclo {{ person.semester ? roman(person.semester) : '—' }}</span>
+                  @if (pickedIds().has(person.id)) {
+                    <iconify-icon icon="material-symbols:check-circle" width="18" class="text-green-600"></iconify-icon>
+                  } @else {
+                    <button type="button" (click)="addPerson(person)" class="rounded-md px-2 py-1 text-xs font-medium text-(--fareas-primary) hover:bg-blue-50">Agregar</button>
+                  }
+                </li>
+              }
+            </ul>
+          }
+        }
+        @case ('codes') {
+          <textarea rows="4" [ngModel]="pasted()" (ngModelChange)="pasted.set($event)"
+            placeholder="Pega los códigos de matrícula, uno por línea o separados por comas o espacios"
+            class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-xs focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)"></textarea>
+          <div class="mt-2 flex items-center gap-2">
+            <app-ui-button size="sm" variant="outline" icon="material-symbols:playlist-add" [loading]="resolving()"
+              [disabled]="!pasted().trim()" (click)="resolveCodes()">Agregar códigos</app-ui-button>
+            @if (unknownCodes().length > 0) {
+              <span class="text-xs text-amber-700">No encontrados: {{ unknownCodes().join(', ') }}</span>
+            }
+          </div>
+        }
+        @case ('cycle') {
+          <p class="text-xs text-gray-500">Útil para ingresantes y para pasar a un ciclo completo: agrega a todos los alumnos que tienen ese ciclo registrado.</p>
+          <div class="mt-2 flex items-end gap-2">
+            <p-select class="w-40" appendTo="body" [options]="cycleOptions" optionLabel="label" optionValue="value"
+              placeholder="Ciclo del alumno" [ngModel]="cycleSource()" (ngModelChange)="cycleSource.set($event)" />
+            <app-ui-button size="sm" variant="outline" icon="material-symbols:group-add-outline" [loading]="loadingCycle()"
+              [disabled]="cycleSource() === null" (click)="addWholeCycle()">Agregar</app-ui-button>
+          </div>
+        }
+      }
+    </div>
+
+    <div class="mt-4 border-t border-gray-100 pt-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-medium text-gray-800">Seleccionados ({{ picked().length }})</h3>
+        @if (picked().length > 0) {
+          <button type="button" class="text-xs font-medium text-red-600 hover:underline" (click)="clearPicked()">Quitar todos</button>
+        }
+      </div>
+      @if (picked().length === 0) {
+        <p class="mt-2 rounded-xl border border-dashed border-gray-200 p-4 text-center text-xs text-gray-500">Aún no elegiste alumnos.</p>
+      } @else {
+        <ul class="mt-2 flex max-h-40 flex-wrap gap-1.5 overflow-auto">
+          @for (student of picked(); track student.id) {
+            <li class="inline-flex items-center gap-1 rounded-full bg-blue-50 py-0.5 pl-2.5 pr-1 text-xs text-blue-900">
+              <span class="font-mono">{{ student.code ?? student.id }}</span>
+              <span class="max-w-32 truncate">{{ student.full_name }}</span>
+              <button type="button" (click)="remove(student.id)" [attr.aria-label]="'Quitar ' + student.full_name"
+                class="grid size-4 place-items-center rounded-full hover:bg-blue-100">
+                <iconify-icon icon="material-symbols:close" width="12"></iconify-icon>
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+  </section>
+</div>
+
+@if (picked().length > 0 && pkg()) {
+  <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-(--fareas-primary)/30 bg-blue-50/60 p-4">
+    <div class="text-sm text-gray-800">
+      <strong>{{ picked().length }}</strong> alumno(s) × <strong>{{ pkg()!.courses.length }}</strong> curso(s)
+      = <strong>{{ totalPairs() }}</strong> matrículas en el grupo <strong>{{ pkg()!.group_code }}</strong> del ciclo {{ roman(pkg()!.cycle) }}
+      @if (tightCourses().length > 0) {
+        <p class="mt-1 text-xs text-amber-700">
+          Cupos justos en {{ tightCourses().map(c => c.course_code).join(', ') }}: los que no alcancen quedarán como «grupo lleno» y podrás ubicarlos en otro grupo.
+        </p>
+      }
+    </div>
+    <app-ui-button icon="material-symbols:how-to-reg" [loading]="confirming()" [disabled]="!canConfirm()" (click)="confirm()">
+      Matricular
+    </app-ui-button>
+  </div>
+}
+
+@if (result(); as r) {
+  <section class="mt-4 rounded-2xl border border-gray-100 bg-white p-5" aria-labelledby="cycle-result" aria-live="polite">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 id="cycle-result" class="text-base font-semibold tracking-tight text-gray-900">Resultado</h2>
+      <app-ui-button size="sm" variant="outline" icon="material-symbols:restart-alt" (click)="startOver()">Matricular otra tanda</app-ui-button>
+    </div>
+    <dl class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div class="rounded-xl bg-green-50 p-3"><dt class="text-xs text-green-700">Matriculados</dt><dd class="text-xl font-semibold text-green-900">{{ r.ok }}</dd></div>
+      <div class="rounded-xl bg-gray-50 p-3"><dt class="text-xs text-gray-500">Ya estaban</dt><dd class="text-xl font-semibold text-gray-900">{{ r.skipped }}</dd></div>
+      <div class="rounded-xl bg-red-50 p-3"><dt class="text-xs text-red-700">Con problemas</dt><dd class="text-xl font-semibold text-red-900">{{ r.failed }}</dd></div>
+      <div class="rounded-xl bg-gray-50 p-3"><dt class="text-xs text-gray-500">Alumnos</dt><dd class="text-xl font-semibold text-gray-900">{{ r.students }}</dd></div>
+    </dl>
+    @if (failures().length > 0) {
+      <div class="mt-4 rounded-xl border border-red-200 bg-red-50/50 p-3">
+        <p class="text-sm font-medium text-red-900">Estos alumnos necesitan atención</p>
+        <ul class="mt-2 max-h-56 space-y-2 overflow-auto text-xs text-red-900">
+          @for (item of failures(); track item.key) {
+            <li>
+              <span class="font-medium">{{ item.name }}</span>
+              <ul class="ml-4 list-disc text-red-800">
+                @for (reason of item.reasons; track $index) { <li>{{ reason }}</li> }
+              </ul>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+  </section>
+}
