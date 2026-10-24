@@ -31,16 +31,7 @@ async def test_my_schedule_lists_only_the_students_blocks(client, escenario):
     assert rows[0]["group_code"] == "A"
 
 
-async def test_my_courses_includes_group_teacher_and_blocks(client, escenario):
-    r = await client.get(f"{API}/me/courses", headers=_headers(escenario["e1"], "estudiante"))
-    assert r.status_code == 200, r.text
-    course = next(c for c in r.json() if c["course_code"] == CURSO)
-    assert course["teacher_name"] == "Docente B6"
-    assert course["cycle"] == 9
-    assert course["blocks"][0]["weekday"] == 1
-
-
-async def test_withdrawn_enrollment_disappears_from_my_courses(client, escenario, db_session):
+async def test_withdrawn_enrollment_disappears_from_my_schedule(client, escenario, db_session):
     from sqlmodel import select
 
     from app.tables import Enrollment
@@ -53,9 +44,7 @@ async def test_withdrawn_enrollment_disappears_from_my_courses(client, escenario
     await db_session.commit()
 
     headers = _headers(escenario["e1"], "estudiante")
-    courses = (await client.get(f"{API}/me/courses", headers=headers)).json()
     schedule = (await client.get(f"{API}/me/schedule", headers=headers)).json()
-    assert all(c["course_code"] != CURSO for c in courses)
     assert all(row["course_code"] != CURSO for row in schedule)
 
 
@@ -78,7 +67,7 @@ async def test_my_justifications_only_returns_own(client, escenario, db_session)
     assert r.json()[0]["created_by_name"] == "Docente B6"
 
 
-@pytest.mark.parametrize("path", ["/me/schedule", "/me/courses", "/me/justifications"])
+@pytest.mark.parametrize("path", ["/me/schedule", "/me/justifications"])
 async def test_student_portal_rejects_staff(client, admin_headers, path):
     r = await client.get(f"{API}{path}", headers=admin_headers)
     assert r.status_code == 403

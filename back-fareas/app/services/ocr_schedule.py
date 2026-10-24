@@ -9,7 +9,14 @@ from statistics import median
 import pdfplumber
 from pydantic import BaseModel
 
-from app.services.ocr_extract import MAX_PAGINAS, DocumentoLeido, ItemTexto, LineaTexto
+from app.services.ocr_extract import (
+    MAX_PAGINAS,
+    CeldaRect,
+    DocumentoLeido,
+    ItemTexto,
+    LineaTexto,
+    agrupar_filas,
+)
 
 DIAS: dict[str, int] = {
     "LUNES": 1, "LUN": 1, "LU": 1,
@@ -27,7 +34,8 @@ RE_BLOQUE = re.compile(
     r"(\d{1,2})[:.](\d{2})\s*[-–—]\s*(\d{1,2})[:.](\d{2})",
     re.IGNORECASE,
 )
-RE_CURSO = re.compile(r"\b([A-Z]{2,8}\d{2,4})\b")
+RE_CURSO = re.compile(r"\b([A-Z]{2,8}\d{1,4})\b")
+RE_HORA_SOLA = re.compile(r"^\s*(\d{1,2})[:.](\d{2})\s*[-–—]?\s*$")
 RE_GRUPO = re.compile(r"(?:GRUPO|SECCIÓN|SECCION|SEC)\s*[:\-]?\s*([A-Z0-9]{1,3})\b", re.IGNORECASE)
 RE_HORA_RANGO = re.compile(
     r"(?<!\d)(\d{1,2})[:.](\d{2})\s*[-–—]\s*(\d{1,2})[:.](\d{2})(?!\d)"
@@ -191,6 +199,10 @@ def _etiquetas_hora(
     if len(etiquetas) >= 2:
         return sorted(etiquetas, key=lambda etiqueta: etiqueta.y)
 
+    partidas = _etiquetas_partidas(items, limite_izquierdo)
+    if len(partidas) >= 2:
+        return sorted(partidas, key=lambda etiqueta: etiqueta.y)
+
     for linea in lineas:
         if linea.x >= limite_izquierdo:
             continue
@@ -204,6 +216,41 @@ def _etiquetas_hora(
             _EtiquetaHora(rango[0], rango[1], linea.y, linea.alto, linea.pagina)
         )
     return sorted(etiquetas, key=lambda etiqueta: etiqueta.y)
+
+
+def _etiquetas_partidas(
+    items: list[ItemTexto], limite_izquierdo: float
+) -> list[_EtiquetaHora]:
+    columna = sorted(
+        (
+            item for item in items
+            if item.x + item.ancho / 2 < limite_izquierdo and RE_HORA_SOLA.match(item.texto)
+        ),
+        key=lambda item: (item.pagina, item.y),
+    )
+    etiquetas: list[_EtiquetaHora] = []
+    pendiente: tuple[ItemTexto, str] | None = None
+    for item in columna:
+        coincidencia = RE_HORA_SOLA.match(item.texto)
+        if coincidencia is None:
+            continue
+        hora = _hhmm(coincidencia.group(1), coincidencia.group(2))
+        if pendiente is not None:
+            previo, inicio = pendiente
+            cercano = (
+                previo.pagina == item.pagina
+                and item.y - previo.y <= max(previo.alto * 2.5, 30.0)
+            )
+            if cercano and inicio < hora:
+                etiquetas.append(
+                    _EtiquetaHora(
+                        inicio, hora, previo.y, item.y + item.alto - previo.y, item.pagina
+                    )
+                )
+                pendiente = None
+                continue
+        pendiente = (item, hora)
+    return etiquetas
 
 
 def _limites_filas(
@@ -258,7 +305,7 @@ def _bloque_de_celda(
     etiqueta: _EtiquetaHora,
     grupo_cabecera: str | None,
 ) -> BloqueExtraido | None:
-    ordenados = sorted(items, key=lambda item: (item.y, item.x))
+    ordenados = [item for fila in agrupar_filas(items) for item in fila]
     texto = re.sub(r"\s+", " ", " ".join(item.texto for item in ordenados)).strip()
     texto = texto.strip(" -–—:;,")
     match_curso = RE_CURSO.search(texto.upper())
@@ -307,6 +354,94 @@ def _bloque_de_celda(
         linea=texto[:200],
         pagina=etiqueta.pagina,
         confianza=round(confianza, 4),
+    )
+
+
+def _columna_de_celda(
+    celda: CeldaRect, columnas: list[tuple[_CabeceraDia, float, float]]
+) -> int | None:
+    mejor: tuple[float, int] | None = None
+    for cabecera, izquierda, derecha in columnas:
+        solape = min(celda.x + celda.ancho, derecha) - max(celda.x, izquierda)
+        if solape > 0 and (mejor is None or solape > mejor[0]):
+            mejor = (solape, cabecera.weekday)
+    return mejor[1] if mejor else None
+
+
+def _rango_de_celda(celda: CeldaRect, etiquetas: list[_EtiquetaHora]) -> _EtiquetaHora:
+    inferior = celda.y + celda.alto
+    cubiertas = [
+        etiqueta for etiqueta in etiquetas
+        if celda.y <= etiqueta.y + etiqueta.alto / 2 <= inferior
+    ]
+    if not cubiertas:
+        centro = celda.y + celda.alto / 2
+        cubiertas = [
+            min(etiquetas, key=lambda etiqueta: abs(etiqueta.y + etiqueta.alto / 2 - centro))
+        ]
+    return _EtiquetaHora(
+        min(etiqueta.inicio for etiqueta in cubiertas),
+        max(etiqueta.fin for etiqueta in cubiertas),
+        celda.y,
+        celda.alto,
+        celda.pagina,
+    )
+
+
+def _parsear_celdas(documento: DocumentoLeido) -> list[BloqueExtraido]:
+    bloques: list[BloqueExtraido] = []
+    vistos: set[tuple[str | None, str | None, int, str, str]] = set()
+
+    for pagina in sorted({celda.pagina for celda in documento.celdas}):
+        items = [item for item in documento.items if item.pagina == pagina]
+        lineas = [linea for linea in documento.lineas if linea.pagina == pagina]
+        headers = _cabeceras_dias(items)
+        columnas = _columnas(headers)
+        if not columnas:
+            continue
+        limite_izquierdo = columnas[0][1]
+        etiquetas = _etiquetas_hora(items, lineas, limite_izquierdo)
+        if len(etiquetas) < 2:
+            continue
+        cabecera_inferior = max(header.y + header.alto for header in headers)
+        grupo_cabecera = _grupo_de_cabecera(items, cabecera_inferior)
+
+        for celda in (c for c in documento.celdas if c.pagina == pagina):
+            if celda.y + celda.alto / 2 < cabecera_inferior:
+                continue
+            weekday = _columna_de_celda(celda, columnas)
+            if weekday is None:
+                continue
+            contenido = [
+                item for item in items
+                if celda.x <= item.x + item.ancho / 2 < celda.x + celda.ancho
+                and celda.y <= item.y + item.alto / 2 < celda.y + celda.alto
+            ]
+            if not contenido:
+                continue
+            bloque = _bloque_de_celda(
+                contenido,
+                weekday=weekday,
+                etiqueta=_rango_de_celda(celda, etiquetas),
+                grupo_cabecera=grupo_cabecera,
+            )
+            if bloque is None:
+                continue
+            clave = (
+                bloque.course_code,
+                bloque.group_code,
+                bloque.weekday,
+                bloque.start_time,
+                bloque.end_time,
+            )
+            if clave in vistos:
+                continue
+            vistos.add(clave)
+            bloques.append(bloque)
+
+    return sorted(
+        bloques,
+        key=lambda bloque: (bloque.weekday, bloque.start_time, bloque.course_code or ""),
     )
 
 
@@ -469,6 +604,9 @@ def extraer_horarios(pdf_bytes: bytes) -> tuple[list[BloqueExtraido], int]:
 
 
 def extraer_horarios_documento(documento: DocumentoLeido) -> list[BloqueExtraido]:
+    celdas = _parsear_celdas(documento)
+    if celdas:
+        return celdas
     tabla = _parsear_tabla(documento)
     if tabla:
         return tabla

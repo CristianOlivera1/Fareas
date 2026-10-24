@@ -1,23 +1,34 @@
 <div class="mb-4 flex flex-wrap items-end gap-3">
-  <label class="min-w-56 flex-1 space-y-1">
+  <label class="flex min-w-56 flex-1 flex-col gap-1">
     <span class="text-xs font-medium text-gray-500">Curso</span>
     <p-select class="w-full" appendTo="body" [options]="courseOptions()" optionLabel="label"
       optionValue="value" placeholder="Selecciona el curso" [filter]="true" filterBy="label"
       showClear [ngModel]="courseIdNumber()" (ngModelChange)="onCourse($event)" />
   </label>
-  <label class="min-w-56 flex-1 space-y-1">
+  @if (groups().length > 1) {
+  <label class="flex min-w-56 flex-1 flex-col gap-1">
     <span class="text-xs font-medium text-gray-500">Grupo</span>
     <p-select class="w-full" appendTo="body" [options]="groupOptions()" optionLabel="label"
       optionValue="value" placeholder="Selecciona el grupo"
       [loading]="loadingGroups()" [disabled]="!courseId()"
       [ngModel]="groupIdNumber()" (ngModelChange)="onGroup($event)" />
   </label>
+  }
   @if (auth.isAdmin()) {
     <app-ui-button icon="material-symbols:person-add" [disabled]="!selectedGroup()" (click)="openEnroll()">
       Matricular alumnos
     </app-ui-button>
   }
 </div>
+
+@if (courseId() && !loadingGroups() && groups().length === 0 && auth.isAdmin()) {
+  <app-ui-alert variant="info" title="Este curso todavía no tiene grupo" class="mb-4 block">
+    <span>No hace falta crear grupos al inicio: se crea el grupo A sin docente y se matricula ahí. Los demás grupos se crean cuando el curso se llena (cupo de 40).</span>
+    <app-ui-button size="sm" class="ml-2" icon="material-symbols:add" [loading]="creatingGroup()" (click)="createInitialGroup()">
+      Crear grupo A
+    </app-ui-button>
+  </app-ui-alert>
+}
 
 @if (selectedGroup(); as selectedGroup) {
   <div class="mb-4 flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white p-4">
@@ -169,7 +180,7 @@
 <p-dialog header="Matricular alumnos" [(visible)]="enrollDialogVisible" [modal]="true"
   [style]="{ width: '520px' }" appendTo="body">
   <div class="space-y-4 pt-2">
-    <label class="block space-y-1">
+    <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-gray-700">Estudiantes <span class="text-red-500">*</span></span>
       <p-multiselect class="w-full" appendTo="body" [options]="studentOptions()" optionLabel="label"
         optionValue="value" placeholder="Busca por nombre, correo o código" [filter]="true"
@@ -222,7 +233,7 @@
       Se retira del grupo actual y se matricula en el destino. Sus faltas anteriores se conservan y
       se suman al curso.
     </app-ui-alert>
-    <label class="block space-y-1">
+    <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-gray-700">Grupo destino <span class="text-red-500">*</span></span>
       <p-select class="w-full" appendTo="body" [options]="transferGroupOptions()" optionLabel="label"
         optionValue="value" placeholder="Selecciona el grupo destino"

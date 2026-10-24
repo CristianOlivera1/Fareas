@@ -11,7 +11,7 @@
 </app-page-header>
 
 <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-  <label class="w-full space-y-1 sm:w-40">
+  <label class="flex w-full sm:w-40 flex-col gap-1">
     <span class="text-xs font-medium text-gray-500">Año</span>
     <p-select class="w-full" appendTo="body" [options]="yearOptions" optionLabel="label"
       optionValue="value" placeholder="Todos los años" showClear [ngModel]="year()"
@@ -91,7 +91,7 @@
 
 <p-dialog header="Nuevo feriado" [(visible)]="createVisible" [modal]="true" [style]="{ width: '460px' }">
   <div class="space-y-4 pt-2">
-    <label class="block space-y-1">
+    <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-gray-700">Fecha <span class="text-red-500">*</span></span>
       <input type="date" [ngModel]="form().holiday_date" (ngModelChange)="patch({ holiday_date: $event })"
         class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
@@ -113,12 +113,12 @@
   [style]="{ width: '500px' }">
   <div class="space-y-4 pt-2">
     <div class="grid gap-3 sm:grid-cols-2">
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Desde <span class="text-red-500">*</span></span>
         <input type="date" [ngModel]="range().desde" (ngModelChange)="patchRange({ desde: $event })"
           class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
       </label>
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Hasta <span class="text-red-500">*</span></span>
         <input type="date" [ngModel]="range().hasta" (ngModelChange)="patchRange({ hasta: $event })"
           class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />

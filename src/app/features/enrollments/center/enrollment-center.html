@@ -1,4 +1,4 @@
-<app-page-header title="Matrícula" [subtitle]="period() ? 'Periodo vigente ' + period() + '. Matricula a varios alumnos a la vez, por ciclo o por grupo.' : 'Matricula a varios alumnos a la vez, por ciclo o por grupo.'">
+<app-page-header title="Matrícula" [subtitle]="(period() ? 'Periodo vigente ' + period() + '. ' : '') + 'Matricula a varios alumnos a la vez: todo el horario de un ciclo, o un curso en particular.'">
   <button type="button" (click)="openWindow()" [class]="
     'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ' +
     (windowOpen() ? 'border-green-200 bg-green-50 text-green-800 hover:bg-green-100' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50')
@@ -23,11 +23,11 @@
       Dentro de estas fechas los estudiantes pueden agregar, cambiar o retirar sus cursos desde «Mi matrícula». Fuera de ellas solo el administrador puede matricular.
     </p>
     <div class="grid gap-3 sm:grid-cols-2">
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-xs font-medium text-gray-600">Desde</span>
         <input type="date" [ngModel]="start()" (ngModelChange)="start.set($event)" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" />
       </label>
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-xs font-medium text-gray-600">Hasta</span>
         <input type="date" [ngModel]="end()" [min]="start()" (ngModelChange)="end.set($event)" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" />
       </label>

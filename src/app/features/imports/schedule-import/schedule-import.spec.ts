@@ -31,7 +31,6 @@ describe('ScheduleImportPage', () => {
       attendance_hour_start: '07:00:00',
       attendance_hour_end: '20:00:00',
     });
-    httpMock.expectOne(`${API}/settings/semesters`).flush(['2026-II']);
     httpMock.expectOne(`${API}/teachers?page_size=100`).flush({
       items: [{ id: 3, full_name: 'Docente de Prueba' }],
       total: 1,

@@ -1,14 +1,15 @@
 from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from sqlmodel import select
 
 from app.core.deps import DbSession, RequireRole
 from app.routers.catalog import _client_ip
-from app.routers.enrollment_center import BlockInfo, BulkOut, MissingCourseOut, PairOut
+from app.routers.enrollment_center import BlockInfo
 from app.services.attendance_engine import ahora_peru
-from app.services.enrollment_bulk import enroll_many, package_groups, window_state
+from app.services.course_groups import DEFAULT_CAPACITY, DEFAULT_GROUP_CODE
+from app.services.enrollment_bulk import enroll_courses_for_student, window_state
 from app.services.enrollments import matricular as enroll_one
 from app.services.enrollments import retirar, transferir
 from app.services.settings import get_settings_row, semestre_vigente
@@ -40,7 +41,7 @@ class EnrollmentStatusOut(BaseModel):
 
 
 class OfferGroupOut(BaseModel):
-    group_id: int
+    group_id: int | None
     course_id: int
     course_code: str
     course_name: str
@@ -55,6 +56,7 @@ class OfferGroupOut(BaseModel):
     mine: bool
     current_group_code: str | None
     conflict: str | None
+    will_create_group: bool = False
 
 
 class GroupBody(BaseModel):
@@ -65,14 +67,29 @@ class TransferBody(BaseModel):
     destino_group_id: int
 
 
-class SelfPackageIn(BaseModel):
-    cycle: int = Field(ge=1, le=10)
-    group_code: str = Field(min_length=1, max_length=5)
+class SelectionItem(BaseModel):
+    course_id: int
+    group_id: int | None = Field(default=None, description="Solo si el curso tiene varios grupos")
 
-    @field_validator("group_code")
-    @classmethod
-    def _upper(cls, value: str) -> str:
-        return value.strip().upper()
+
+class SelectionIn(BaseModel):
+    items: list[SelectionItem] = Field(min_length=1, max_length=30)
+
+
+class SelectionResultOut(BaseModel):
+    course_id: int
+    course_code: str
+    group_id: int | None
+    group_code: str | None
+    status: str
+    reason: str | None
+
+
+class SelectionOut(BaseModel):
+    ok: int
+    skipped: int
+    failed: int
+    results: list[SelectionResultOut]
 
 
 def _today() -> date:
@@ -220,6 +237,22 @@ async def offer(
                 conflict=conflict,
             )
         )
+    covered_course_ids = {course.id for _group, course, _teacher in rows}
+    course_stmt = select(Course).order_by(Course.cycle, Course.code)
+    if cycle is not None:
+        course_stmt = course_stmt.where(Course.cycle == cycle)
+    for course in (await db.exec(course_stmt)).all():
+        if course.id in covered_course_ids:
+            continue
+        result.append(
+            OfferGroupOut(
+                group_id=None, course_id=course.id, course_code=course.code, course_name=course.name,
+                cycle=course.cycle, group_code=DEFAULT_GROUP_CODE, teacher_name=None,
+                capacity=DEFAULT_CAPACITY, enrolled=0, free=DEFAULT_CAPACITY, full=False, blocks=[],
+                mine=False, current_group_code=None, conflict=None, will_create_group=True,
+            )
+        )
+    result.sort(key=lambda item: (item.cycle, item.course_code, item.group_code))
     return result
 
 
@@ -257,36 +290,21 @@ async def transfer_me(
     )
 
 
-@router.post("/package", response_model=BulkOut)
-async def enroll_me_in_package(
-    body: SelfPackageIn, request: Request, db: DbSession, student: RequireRole(UserRole.ESTUDIANTE)
-) -> BulkOut:
+@router.post("/bulk", response_model=SelectionOut)
+async def enroll_selection(
+    body: SelectionIn, request: Request, db: DbSession, student: RequireRole(UserRole.ESTUDIANTE)
+) -> SelectionOut:
     await _ensure_open(db)
-    found, missing = await package_groups(db, body.cycle, body.group_code)
-    if not found:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"No hay grupos «{body.group_code}» en el ciclo {body.cycle} del periodo vigente",
-        )
-    groups_count = len(found)
-    missing_out = [MissingCourseOut(course_id=c.id, course_code=c.code, course_name=c.name) for c in missing]
-    results = await enroll_many(
-        db, student, [student], [(item.group, item.course) for item in found], _client_ip(request)
-    )
-    return BulkOut(
-        students=1,
-        groups=groups_count,
-        ok=sum(1 for r in results if r.status == "ok"),
-        skipped=sum(1 for r in results if r.status == "skipped"),
-        failed=sum(1 for r in results if r.status == "failed"),
-        unknown=[],
-        missing=missing_out,
-        results=[
-            PairOut(
-                student_id=r.student_id, student_code=r.student_code, student_name=r.student_name,
-                group_id=r.group_id, course_code=r.course_code, group_code=r.group_code,
-                status=r.status, reason=r.reason,
-            )
-            for r in results
-        ],
+    seen: set[int] = set()
+    items = []
+    for item in body.items:
+        if item.course_id not in seen:
+            seen.add(item.course_id)
+            items.append((item.course_id, item.group_id))
+    results = await enroll_courses_for_student(db, student, items, _client_ip(request))
+    return SelectionOut(
+        ok=sum(1 for r in results if r["status"] == "ok"),
+        skipped=sum(1 for r in results if r["status"] == "skipped"),
+        failed=sum(1 for r in results if r["status"] == "failed"),
+        results=[SelectionResultOut(**r) for r in results],
     )

@@ -44,6 +44,16 @@ export interface Course {
   readonly cycle: number;
 }
 
+export interface FullCourse {
+  readonly course_id: number;
+  readonly code: string;
+  readonly name: string;
+  readonly cycle: number;
+  readonly groups: number;
+  readonly enrolled: number;
+  readonly capacity: number;
+}
+
 export interface Group {
   readonly id: number;
   readonly course_id: number;

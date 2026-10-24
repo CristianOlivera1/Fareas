@@ -138,12 +138,12 @@
   [(visible)]="dialogVisible" [modal]="true" [style]="{ width: '460px' }">
   <div class="space-y-4 pt-2">
     @if (form().id === null) {
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Tipo <span class="text-red-500">*</span></span>
         <p-select class="w-full" appendTo="body" [options]="tipos" optionLabel="label" optionValue="value"
           placeholder="Cámara o ESP32" [ngModel]="form().device_type" (ngModelChange)="patch({ device_type: $event })" />
       </label>
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Aula <span class="text-red-500">*</span></span>
         <p-select class="w-full" appendTo="body" [options]="aulas()" optionLabel="label" optionValue="value"
           placeholder="Aula del dispositivo" [ngModel]="form().room_id" (ngModelChange)="patch({ room_id: $event })" />

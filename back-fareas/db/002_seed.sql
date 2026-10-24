@@ -33,12 +33,16 @@ INSERT INTO device (room_id, device_type, device_key, name, ip_address, mac_addr
 SELECT r.id, 'camara', 'cam-'   || lower(replace(r.code, ' ', '')), 'Cámara Hikvision ' || r.code, '10.14.5.' || (10 + r.id)::text, NULL,
        'rtsp://admin:Admin123@10.14.5.' || (10 + r.id)::text || ':554/Streaming/Channels/101'
 FROM room r
-WHERE NOT EXISTS (SELECT 1 FROM device d WHERE d.device_key = 'cam-' || lower(replace(r.code, ' ', '')));
+WHERE NOT EXISTS (SELECT 1 FROM device d WHERE d.device_key = 'cam-' || lower(replace(r.code, ' ', '')))
+ORDER BY r.id ASC
+LIMIT 2;
 
 INSERT INTO device (room_id, device_type, device_key, name, ip_address, mac_address)
 SELECT r.id, 'esp32', 'esp32-' || lower(replace(r.code, ' ', '')), 'Nodo puerta ' || r.code, '10.14.6.' || (10 + r.id)::text, NULL
 FROM room r
-WHERE NOT EXISTS (SELECT 1 FROM device d WHERE d.device_key = 'esp32-' || lower(replace(r.code, ' ', '')));
+WHERE NOT EXISTS (SELECT 1 FROM device d WHERE d.device_key = 'esp32-' || lower(replace(r.code, ' ', '')))
+ORDER BY r.id ASC
+LIMIT 2;
 
 INSERT INTO course (code, name, cycle) VALUES
   ('AIS11', 'Introducción a la informática y sistemas', 1),
@@ -121,6 +125,7 @@ WHERE NOT EXISTS (
     AND g.semester_label = (SELECT semester_label FROM app_settings WHERE id = 1)
 );
 
+-- horarios
 INSERT INTO schedule_block (group_id, room_id, weekday, start_time, end_time)
 SELECT g.id, r.id, v.weekday, v.start_time::time, v.end_time::time
 FROM (VALUES

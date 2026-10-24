@@ -100,19 +100,29 @@ async def test_apertura_sin_marcas_y_cierre_needs_review(db_session, escenario):
     ).all()
     assert {f.status.value for f in faltas} == {"falta"}
 
-async def test_no_abre_sesion_sin_docente_o_aula(db_session, escenario):
+async def test_no_abre_sesion_sin_aula(db_session, escenario):
     esc = escenario
-    grupo = await db_session.get(CourseGroup, esc["grupo_id"])
     bloque = await db_session.get(ScheduleBlock, esc["bloque_id"])
-    assert grupo is not None and bloque is not None
-    grupo.teacher_id = None
+    assert bloque is not None
     bloque.room_id = None
-    db_session.add_all([grupo, bloque])
+    db_session.add(bloque)
     await db_session.commit()
 
     lunes = esc["lunes"]
     await abrir_sesiones_del_dia(db_session, now=h(lunes, "08:05"))
     assert await _sesion_de_escenario(db_session, esc, lunes) is None
+
+async def test_abre_sesion_aunque_el_grupo_no_tenga_docente(db_session, escenario):
+    esc = escenario
+    grupo = await db_session.get(CourseGroup, esc["grupo_id"])
+    assert grupo is not None
+    grupo.teacher_id = None
+    db_session.add(grupo)
+    await db_session.commit()
+
+    lunes = esc["lunes"]
+    await abrir_sesiones_del_dia(db_session, now=h(lunes, "08:05"))
+    assert await _sesion_de_escenario(db_session, esc, lunes) is not None
 
 async def test_barrido_cierra_al_fin_del_bloque(db_session, escenario):
     esc = escenario

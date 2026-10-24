@@ -14,6 +14,7 @@ export interface DashboardSummary {
   readonly alertas_dpi: number;
   readonly en_riesgo: number;
   readonly sessions_to_review: number;
+  readonly cursos_llenos?: number;
   readonly at: string;
 }
 

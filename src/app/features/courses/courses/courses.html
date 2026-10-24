@@ -21,6 +21,21 @@
   </app-ui-button>
 </div>
 
+@if (fullCourses().length > 0) {
+<app-ui-alert variant="warning" [title]="fullCourses().length + (fullCourses().length === 1 ? ' curso está lleno' : ' cursos están llenos')" class="mb-4 block">
+  <p class="text-sm">Todos sus grupos llegaron al cupo; nadie más puede matricularse hasta crear un grupo nuevo.</p>
+  <div class="mt-2 flex flex-wrap gap-1.5">
+    @for (course of fullCourses(); track course.course_id) {
+    <button type="button" (click)="openFullCourse(course)"
+      class="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-amber-900 ring-1 ring-amber-300 transition-colors hover:bg-amber-100">
+      <span class="font-mono">{{ course.code }}</span> {{ course.enrolled }}/{{ course.capacity }}
+      <iconify-icon icon="material-symbols:arrow-forward" width="12"></iconify-icon>
+    </button>
+    }
+  </div>
+</app-ui-alert>
+}
+
 @if (error(); as msg) {
 <app-ui-alert variant="danger" title="No se pudieron cargar los cursos" class="mb-4 block">
   {{ msg }}
@@ -61,7 +76,7 @@
     <div class="grid grid-cols-2 gap-3">
       <app-ui-input label="Código" [required]="true" [mono]="true" placeholder="ISA903" hint="3 a 20 caracteres"
         [ngModel]="form().code" (ngModelChange)="patch({ code: $event })" />
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Ciclo <span class="text-red-500">*</span></span>
         <p-select class="w-full" appendTo="body" [options]="cycleOptions" optionLabel="label" optionValue="value"
           placeholder="Ciclo de la malla" [ngModel]="form().cycle" (ngModelChange)="patch({ cycle: $event })" />

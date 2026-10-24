@@ -47,13 +47,14 @@
     </div>
 
     <div class="mt-4 grid gap-3 sm:grid-cols-2">
-      <label class="block space-y-1">
-        <span class="text-sm font-medium text-gray-700">Periodo <span class="text-red-500">*</span></span>
-        <p-select class="w-full" appendTo="body" [options]="semesters()" placeholder="Periodo académico"
-          [ngModel]="semester()" (ngModelChange)="semester.set($event)" />
-        <span class="text-xs text-gray-400">Vigente: {{ currentSemester() ?? 'sin configurar' }}</span>
-      </label>
-      <label class="block space-y-1">
+      <div class="space-y-1">
+        <span class="text-sm font-medium text-gray-700">Periodo</span>
+        <p class="flex h-10 items-center rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700">
+          {{ semester() ?? 'Sin periodo configurado' }}
+        </p>
+        <span class="text-xs text-gray-400">Periodo vigente del sistema.</span>
+      </div>
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Ciclo <span class="text-red-500">*</span></span>
         <p-select class="w-full" appendTo="body" [options]="cycleOptions" optionLabel="label"
           optionValue="value" placeholder="Ciclo de la malla" [ngModel]="cycle()"
@@ -112,14 +113,14 @@
             (change)="onReviewToggle($event)" />
           Solo revisar ({{ reviewCount() }})
         </label>
-        <label class="block space-y-1">
+        <label class="flex flex-col gap-1">
           <span class="text-xs font-medium text-gray-500">Docente por defecto (opcional)</span>
           <p-select class="w-52" appendTo="body" [options]="teachers()" optionLabel="label"
             optionValue="value" [filter]="true" filterBy="label" placeholder="Sin asignar"
             [showClear]="true" [ngModel]="defaultTeacherId()"
             (ngModelChange)="defaultTeacherId.set($event)" />
         </label>
-        <label class="block space-y-1">
+        <label class="flex flex-col gap-1">
           <span class="text-xs font-medium text-gray-500">Aula por defecto (opcional)</span>
           <p-select class="w-32" appendTo="body" [options]="rooms()" optionLabel="label"
             optionValue="value" [filter]="true" filterBy="label" placeholder="Sin asignar"

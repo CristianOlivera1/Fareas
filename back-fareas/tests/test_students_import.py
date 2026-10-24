@@ -242,3 +242,100 @@ async def test_preview_rechaza_archivo_grande(client, admin_headers):
         client, admin_headers, contenido=b"x" * (10 * 1024 * 1024 + 1), nombre="grande.png"
     )
     assert r.status_code == 413
+
+
+def _celda(texto: str, x: float, y: float, ancho: float = 100, alto: float = 18) -> ItemTexto:
+    return ItemTexto(texto=texto, x=x, y=y, ancho=ancho, alto=alto, confianza=0.99, pagina=1)
+
+
+def _documento(items: list[ItemTexto]) -> DocumentoLeido:
+    return DocumentoLeido(tipo="imagen", paginas=1, items=items, lineas=agrupar_lineas(items))
+
+
+def test_nomina_con_nombre_en_varias_lineas_y_cabecera_partida():
+    items = [
+        _celda("Nombre", 30, 10, 60), _celda("Completo", 30, 30, 70),
+        _celda("Correo Institucional", 135, 30, 140), _celda("DNI", 370, 30, 32),
+        _celda("Código", 445, 30, 60), _celda("Ciclo", 518, 30, 45),
+        _celda("WhatsApp", 590, 30, 80),
+        _celda("Altamirano", 30, 73, 80), _celda("Rojas,", 30, 96, 50),
+        _celda("Carlos", 30, 118, 50), _celda("Manuel", 30, 141, 55),
+        _celda("carlos.altamirano@unamba.edu.pe", 134, 76, 227),
+        _celda("71948203", 364, 75, 74), _celda("222041", 446, 75, 52),
+        _celda("一", 520, 76, 11), _celda("984712304", 591, 75, 76),
+        _celda("Ramos", 30, 187, 60), _celda("Vilca, Luz", 30, 209, 70),
+        _celda("Clarita", 30, 231, 60),
+        _celda("I.ramos@unamba.edu.pe", 134, 190, 170),
+        _celda("45910284", 370, 189, 68), _celda("221199", 446, 189, 55),
+        _celda("ⅢII", 520, 190, 30), _celda("935612847", 590, 186, 78),
+    ]
+    alumnos = parsear_nomina(_documento(items), default_semester=9)
+    assert [a.full_name for a in alumnos] == [
+        "Altamirano Rojas, Carlos Manuel",
+        "Ramos Vilca, Luz Clarita",
+    ]
+    assert [a.semester for a in alumnos] == [1, 3]
+    assert [a.whatsapp for a in alumnos] == ["984712304", "935612847"]
+    assert all(a.confiable and not a.errores for a in alumnos)
+
+
+def test_nomina_apellidos_y_nombres_en_columnas_separadas_y_otro_orden():
+    items = [
+        _celda("Ciclo", 20, 10, 40), _celda("Nombres", 100, 10, 80),
+        _celda("Apellido Paterno", 250, 10, 120), _celda("Apellido Materno", 400, 10, 120),
+        _celda("DNI", 560, 10, 30), _celda("Código", 640, 10, 60),
+        _celda("Correo", 740, 10, 60),
+        _celda("IV", 20, 60, 20), _celda("Jhoel Franz", 100, 60, 110),
+        _celda("Quispe", 250, 60, 60), _celda("Ccahuana", 400, 60, 80),
+        _celda("70583921", 560, 60, 70), _celda("201147", 640, 60, 55),
+        _celda("jhoel.quispe@unamba.edu.pe", 740, 60, 200),
+    ]
+    [alumno] = parsear_nomina(_documento(items), default_semester=1)
+    assert alumno.full_name == "Quispe Ccahuana, Jhoel Franz"
+    assert alumno.semester == 4
+    assert alumno.code == "201147" and alumno.dni == "70583921"
+
+
+def test_nomina_sin_cabecera_en_una_sola_linea_por_alumno():
+    items = [
+        _celda("1 222041 71948203 ALTAMIRANO ROJAS CARLOS carlos.a@unamba.edu.pe III +51 984-712-304", 10, 10, 900),
+        _celda("2. 241032 46291048 CONDORI HUAMAN ANA 2do ciclo", 10, 50, 600),
+    ]
+    alumnos = parsear_nomina(_documento(items), default_semester=7)
+    assert alumnos[0].full_name == "ALTAMIRANO ROJAS CARLOS"
+    assert alumnos[0].semester == 3 and alumnos[0].whatsapp == "984712304"
+    assert alumnos[0].email == "carlos.a@unamba.edu.pe"
+    assert alumnos[1].full_name == "CONDORI HUAMAN ANA"
+    assert alumnos[1].semester == 2 and alumnos[1].email_generado is True
+
+
+def test_nomina_filas_pegadas_y_correo_partido():
+    items = [
+        _celda("Código", 10, 0, 60), _celda("DNI", 100, 0, 40), _celda("Alumno", 200, 0, 60),
+        _celda("Correo", 420, 0, 60),
+        _celda("111111", 10, 20), _celda("22222222", 100, 20), _celda("PEREZ, LUIS", 200, 20, 150),
+        _celda("luis.perez@", 420, 20, 90), _celda("unamba.edu.pe", 420, 38, 110),
+        _celda("333333", 10, 58), _celda("44444444", 100, 58), _celda("SOTO, ANA", 200, 58, 150),
+        _celda("ana.soto@unamba.edu.pe", 420, 58, 180),
+        _celda("555555", 10, 77), _celda("66666666", 100, 77), _celda("DIAZ, ROSA", 200, 77, 150),
+    ]
+    alumnos = parsear_nomina(_documento(items), default_semester=5)
+    assert [a.email for a in alumnos] == [
+        "luis.perez@unamba.edu.pe",
+        "ana.soto@unamba.edu.pe",
+        "555555@unamba.edu.pe",
+    ]
+    assert [a.full_name for a in alumnos] == ["PEREZ, LUIS", "SOTO, ANA", "DIAZ, ROSA"]
+    assert alumnos[2].email_generado is True
+    assert all(a.semester == 5 and a.nota for a in alumnos)
+
+
+def test_nomina_ignora_titulo_con_palabras_de_cabecera():
+    items = [
+        _celda("NOMINA DE ALUMNOS 2026-II", 10, 0, 400),
+        _celda("Código", 10, 60, 60), _celda("DNI", 100, 60, 40), _celda("Apellidos y Nombres", 200, 60, 200),
+        _celda("999111", 10, 90), _celda("11112222", 100, 90), _celda("GARCIA, MARIA", 200, 90, 180),
+        _celda("Total: 1 alumno", 10, 130, 150),
+    ]
+    [alumno] = parsear_nomina(_documento(items), default_semester=2)
+    assert alumno.full_name == "GARCIA, MARIA"

@@ -1,4 +1,4 @@
-<app-page-header title="Mi matrícula" subtitle="Arma tu horario: agrega cursos, cambia de grupo o retíralos mientras la matrícula esté abierta.">
+<app-page-header title="Mi matrícula" subtitle="Marca los cursos que quieres llevar, de tu ciclo o de otros, y confirma al final.">
   <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="load()">Actualizar</app-ui-button>
 </app-page-header>
 
@@ -13,144 +13,166 @@
   " role="status">
     <iconify-icon [icon]="s.window.open ? 'material-symbols:lock-open-outline' : 'material-symbols:lock-outline'" width="20"></iconify-icon>
     <span class="flex-1"><strong>Periodo {{ s.period }}.</strong> {{ s.window.message }}</span>
-    <span class="text-xs">{{ s.enrolled_groups }} curso(s) matriculados</span>
+    <span class="text-xs">{{ enrolledCount() }} curso(s) matriculados</span>
   </div>
 }
 
 @if (loading()) {
   <div class="h-72 animate-pulse rounded-2xl border border-gray-100 bg-white" aria-busy="true"></div>
 } @else {
-  <div class="grid gap-4 xl:grid-cols-5">
-    <section class="rounded-2xl border border-gray-100 bg-white p-5 xl:col-span-3" aria-labelledby="mine-title">
-      <h2 id="mine-title" class="text-base font-semibold tracking-tight text-gray-900">Mi horario</h2>
-      @if (mine().length === 0) {
-        <p class="mt-3 rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
-          Aún no tienes cursos. Agrégalos abajo, o usa «Matricularme en mi ciclo» para tomar todo el horario de un ciclo de una vez.
-        </p>
-      } @else {
-        <div class="mt-3"><app-schedule-table [entries]="entries()" /></div>
-      }
-    </section>
-
-    <section class="rounded-2xl border border-gray-100 bg-white p-5 xl:col-span-2" aria-labelledby="quick-title">
-      <h2 id="quick-title" class="text-base font-semibold tracking-tight text-gray-900">Matricularme en un ciclo completo</h2>
-      <p class="mt-1 text-sm text-gray-500">
-        Toma de una vez el mismo grupo de todos los cursos del ciclo {{ roman(cycle()) }}. Si alguno no se puede (cupo lleno o cruce), te avisamos y lo eliges tú.
-      </p>
-      <div class="mt-3 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Grupo">
-        @for (item of letters(); track item.letter) {
-          <button type="button" role="radio" [attr.aria-checked]="quickLetter() === item.letter" [disabled]="!open()"
-            (click)="quickLetter.set(item.letter)" [class]="
-              'rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ' +
-              (quickLetter() === item.letter ? 'border-(--fareas-primary) bg-blue-50 text-(--fareas-primary)' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50')
-            ">
-            Grupo {{ item.letter }}
-            <span class="ml-1 text-[11px] font-normal text-gray-500">{{ item.covered }}/{{ item.total }} cursos</span>
-          </button>
-        } @empty {
-          <span class="text-sm text-gray-500">No hay grupos en este ciclo.</span>
-        }
-      </div>
-      <div class="mt-3">
-        <app-ui-button icon="material-symbols:how-to-reg" [disabled]="!open() || !quickLetter()" [loading]="quickBusy()" (click)="enrollWholeCycle()">
-          Matricularme en el ciclo {{ roman(cycle()) }}
-        </app-ui-button>
-      </div>
-      @if (quickResult(); as r) {
-        <div class="mt-3 rounded-xl bg-gray-50 p-3 text-xs text-gray-700" aria-live="polite">
-          {{ r.ok }} agregado(s) · {{ r.skipped }} ya los tenías · {{ r.failed }} con problemas
-          @if (r.failed > 0 || r.missing.length > 0) {
-            <ul class="mt-2 list-disc space-y-0.5 pl-4 text-amber-800">
-              @for (row of r.results; track row.group_id) {
-                @if (row.status === 'failed') { <li>{{ row.course_code }}: {{ row.reason }}</li> }
-              }
-              @for (course of r.missing; track course.course_id) {
-                <li>{{ course.course_code }}: no tiene grupo en esta opción</li>
-              }
-            </ul>
-          }
-        </div>
-      }
-    </section>
-  </div>
-
-  <section class="mt-4 rounded-2xl border border-gray-100 bg-white p-5" aria-labelledby="offer-title">
+  <section class="rounded-2xl border border-gray-100 bg-white p-5" aria-labelledby="offer-title">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <h2 id="offer-title" class="text-base font-semibold tracking-tight text-gray-900">Cursos disponibles</h2>
+      <div>
+        <h2 id="offer-title" class="text-base font-semibold tracking-tight text-gray-900">Cursos disponibles</h2>
+        <p class="text-xs text-gray-500">Puedes combinar cursos de varios ciclos. Tu selección se conserva al cambiar de ciclo.</p>
+      </div>
       <app-ui-input class="w-full sm:w-64" icon="material-symbols:search" placeholder="Buscar curso o código…" [ngModel]="query()" (ngModelChange)="query.set($event)" />
     </div>
 
     <div class="mt-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Ciclo">
       @for (item of cycles(); track item) {
         <button type="button" role="tab" [attr.aria-selected]="cycle() === item" (click)="setCycle(item)" [class]="
-          'rounded-lg border px-3 py-1 text-xs font-medium transition-colors ' +
+          'inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-xs font-medium transition-colors ' +
           (cycle() === item ? 'border-(--fareas-primary) bg-blue-50 text-(--fareas-primary)' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50')
         ">
           Ciclo {{ roman(item) }}
-          @if (status()?.student_cycle === item) { <span class="ml-1 rounded-full bg-white/80 px-1.5 text-[10px]">tu ciclo</span> }
+          @if (status()?.student_cycle === item) { <span class="rounded-full bg-white/80 px-1.5 text-[10px]">tu ciclo</span> }
+          @if (selectedInCycle(item) > 0) {
+            <span class="rounded-full bg-(--fareas-primary) px-1.5 text-[10px] font-semibold text-white">{{ selectedInCycle(item) }}</span>
+          }
         </button>
       }
     </div>
 
     <div class="mt-4 grid gap-3 lg:grid-cols-2">
       @for (course of courses(); track course.courseId) {
-        <article class="rounded-xl border border-gray-100 p-4">
-          <div class="flex items-start gap-2">
-            <span class="rounded-md bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-700">{{ course.code }}</span>
-            <h3 class="min-w-0 flex-1 text-sm font-medium text-gray-900">{{ course.name }}</h3>
-          </div>
-          <ul class="mt-3 space-y-2">
-            @for (group of course.groups; track group.group_id) {
-              <li class="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
-                <span class="grid size-7 shrink-0 place-items-center rounded-md bg-white text-xs font-bold text-gray-800 shadow-xs">{{ group.group_code }}</span>
-                <div class="min-w-0 flex-1">
-                  <p class="text-xs text-gray-700">{{ blocksLabel(group.blocks) }}</p>
-                  <p class="truncate text-[11px] text-gray-500">
-                    {{ group.teacher_name ?? 'Docente por asignar' }} · {{ group.free }} cupos libres
-                  </p>
-                  @if (group.conflict) {
-                    <p class="text-[11px] text-red-600">Se cruza con {{ group.conflict }}</p>
+        <article [class]="
+          'rounded-xl border p-4 transition-colors ' +
+          (isSelected(course) ? 'border-(--fareas-primary) bg-blue-50/40' : course.current ? 'border-green-200 bg-green-50/40' : 'border-gray-100')
+        ">
+          <div class="flex items-start gap-3">
+            @if (course.current) {
+              <span class="mt-0.5 grid size-5 shrink-0 place-items-center rounded bg-green-500 text-white" aria-hidden="true">
+                <iconify-icon icon="material-symbols:check" width="14"></iconify-icon>
+              </span>
+            } @else {
+              <input type="checkbox" class="mt-1 size-4 shrink-0 accent-(--fareas-primary)" [id]="'course-' + course.courseId"
+                [checked]="isSelected(course)" [disabled]="!open() || !!blockedReason(course)" (change)="toggle(course)"
+                [attr.aria-label]="'Seleccionar ' + course.code" />
+            }
+            <div class="min-w-0 flex-1">
+              <label [attr.for]="course.current ? null : 'course-' + course.courseId" class="flex flex-wrap items-center gap-2">
+                <span class="rounded-md bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-700">{{ course.code }}</span>
+                <span class="min-w-0 text-sm font-medium text-gray-900">{{ course.name }}</span>
+              </label>
+
+              @if (course.current; as current) {
+                <p class="mt-1 text-xs text-gray-600">
+                  <span class="font-medium text-green-700">Matriculado</span>
+                  @if (course.groups.length > 1) { · Grupo {{ current.group_code }} }
+                  · {{ blocksLabel(current.blocks) }}
+                </p>
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                  @if (confirmingWithdraw() === course.courseId) {
+                    <span class="text-xs text-gray-700">¿Retirar este curso?</span>
+                    <app-ui-button size="sm" variant="danger" [loading]="busy() === current.group_id" (click)="withdraw(course)">Sí, retirar</app-ui-button>
+                    <app-ui-button size="sm" variant="ghost" (click)="cancelWithdraw()">No</app-ui-button>
+                  } @else {
+                    <app-ui-button size="sm" variant="ghost" [disabled]="!open()" (click)="askWithdraw(course)">Retirar</app-ui-button>
                   }
                 </div>
-                @switch (stateOf(group)) {
-                  @case ('mine') {
-                    @if (confirmingWithdraw() === group.group_id) {
-                      <span class="text-xs text-gray-700">¿Retirar?</span>
-                      <app-ui-button size="sm" variant="danger" [loading]="busy() === group.group_id" (click)="withdraw(group)">Sí</app-ui-button>
-                      <app-ui-button size="sm" variant="ghost" (click)="cancelWithdraw()">No</app-ui-button>
-                    } @else {
-                      <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700">
-                        <iconify-icon icon="material-symbols:check" width="13"></iconify-icon> Matriculado
-                      </span>
-                      <app-ui-button size="sm" variant="ghost" [disabled]="!open()" (click)="askWithdraw(group)">Retirar</app-ui-button>
+                @if (course.groups.length > 1 && open()) {
+                  <ul class="mt-2 space-y-1">
+                    @for (group of course.groups; track group.group_id) {
+                      @if (!group.mine) {
+                        <li class="flex flex-wrap items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 text-xs text-gray-600 ring-1 ring-gray-100">
+                          <span class="font-semibold text-gray-800">Grupo {{ group.group_code }}</span>
+                          <span class="min-w-0 flex-1 truncate">{{ blocksLabel(group.blocks) }} · {{ group.free }} libres</span>
+                          @if (group.conflict) {
+                            <span class="text-red-600">Se cruza con {{ group.conflict }}</span>
+                          } @else if (group.full) {
+                            <span class="text-red-600">Lleno</span>
+                          } @else {
+                            <app-ui-button size="sm" variant="outline" [loading]="busy() === group.group_id" (click)="switchTo(course, group)">Cambiar a este grupo</app-ui-button>
+                          }
+                        </li>
+                      }
                     }
-                  }
-                  @case ('full') {
-                    <span class="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">Lleno</span>
-                  }
-                  @case ('conflict') {
-                    <span class="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">Cruce de horario</span>
-                  }
-                  @case ('switch') {
-                    <app-ui-button size="sm" variant="outline" [disabled]="!open()" [loading]="busy() === group.group_id" (click)="switchTo(group)">
-                      Cambiar desde {{ group.current_group_code }}
-                    </app-ui-button>
-                  }
-                  @default {
-                    <app-ui-button size="sm" icon="material-symbols:add" [disabled]="!open()" [loading]="busy() === group.group_id" (click)="enroll(group)">
-                      Agregar
-                    </app-ui-button>
-                  }
+                  </ul>
                 }
-              </li>
-            }
-          </ul>
+              } @else if (course.pending) {
+                <p class="mt-1 text-xs text-gray-500">Horario por definir · el administrador aún no lo programa.</p>
+              } @else if (course.groups.length === 1) {
+                <p class="mt-1 text-xs text-gray-600">
+                  {{ blocksLabel(course.groups[0].blocks) }} · {{ course.groups[0].teacher_name ?? 'Docente por asignar' }} · {{ course.groups[0].free }} cupos libres
+                </p>
+              } @else if (isSelected(course)) {
+                <fieldset class="mt-2 space-y-1.5">
+                  <legend class="text-xs font-medium text-gray-700">Elige el grupo</legend>
+                  @for (group of course.groups; track group.group_id) {
+                    <label [class]="
+                      'flex cursor-pointer flex-wrap items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ring-1 ' +
+                      (selection()[course.courseId] === group.group_id ? 'bg-white ring-(--fareas-primary)' : 'bg-white ring-gray-100') +
+                      (groupSelectable(group) ? '' : ' cursor-not-allowed opacity-60')
+                    ">
+                      <input type="radio" class="accent-(--fareas-primary)" [name]="'group-' + course.courseId" [value]="group.group_id"
+                        [checked]="selection()[course.courseId] === group.group_id" [disabled]="!groupSelectable(group)"
+                        (change)="chooseGroup(course, group.group_id!)" />
+                      <span class="font-semibold text-gray-800">Grupo {{ group.group_code }}</span>
+                      <span class="min-w-0 flex-1 truncate text-gray-600">{{ blocksLabel(group.blocks) }} · {{ group.teacher_name ?? 'Docente por asignar' }} · {{ group.free }} libres</span>
+                      @if (group.conflict) { <span class="text-red-600">Se cruza con {{ group.conflict }}</span> }
+                      @else if (group.full) { <span class="text-red-600">Lleno</span> }
+                    </label>
+                  }
+                </fieldset>
+              } @else {
+                <p class="mt-1 text-xs text-gray-600">{{ course.groups.length }} grupos disponibles · márcalo para elegir el tuyo.</p>
+              }
+
+              @if (blockedReason(course); as reason) {
+                <p class="mt-1 text-xs font-medium text-red-600">{{ reason }}</p>
+              }
+              @if (selectionConflicts().get(course.courseId); as other) {
+                <p class="mt-1 text-xs font-medium text-red-600">Se cruza con {{ other }}, que también marcaste.</p>
+              }
+              @if (failureOf(course.courseId); as reason) {
+                <p class="mt-1 text-xs font-medium text-red-600" role="alert">No se pudo matricular: {{ reason }}</p>
+              }
+            </div>
+          </div>
         </article>
       } @empty {
         <p class="col-span-full rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
-          No hay cursos con grupos abiertos para esta búsqueda.
+          No hay cursos para esta búsqueda.
         </p>
       }
     </div>
   </section>
+
+  @if (outcome(); as o) {
+    @if (o.failed === 0) {
+      <app-ui-alert variant="success" class="mt-4 block" title="Matrícula registrada">
+        {{ o.ok }} curso(s) agregados{{ o.skipped ? ' y ' + o.skipped + ' que ya tenías' : '' }}. Revisa tu horario en «Mi horario».
+      </app-ui-alert>
+    }
+  }
+
+  @if (selectedIds().length > 0 || confirming()) {
+    <div class="sticky bottom-3 z-20 mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-(--fareas-primary)/30 bg-white p-3 shadow-lg" role="region" aria-label="Confirmar matrícula">
+      <div class="min-w-0 flex-1 text-sm text-gray-800">
+        <strong>{{ selectedIds().length }}</strong> curso(s) seleccionados:
+        <span class="text-gray-600">{{ selectedCourses().map(c => c.code).join(', ') }}</span>
+        @if (missingChoices().length > 0) {
+          <p class="text-xs text-amber-700">Elige el grupo de {{ missingChoices().map(c => c.code).join(', ') }}.</p>
+        }
+        @if (selectionConflicts().size > 0) {
+          <p class="text-xs text-red-600">Hay cursos marcados que se cruzan entre sí; desmarca uno.</p>
+        }
+      </div>
+      <app-ui-button variant="ghost" size="sm" (click)="clearSelection()">Limpiar</app-ui-button>
+      <app-ui-button icon="material-symbols:how-to-reg" [loading]="confirming()" [disabled]="!canConfirm()" (click)="confirm()">
+        Confirmar matrícula
+      </app-ui-button>
+    </div>
+  }
 }

@@ -35,7 +35,7 @@
     <div class="space-y-4">
       <app-file-drop [file]="file()" (fileChange)="onFile($event)" (fileError)="onFileError($event)" />
 
-      <label class="block max-w-sm space-y-1">
+      <label class="flex max-w-sm flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Ciclo de los cursos (opcional)</span>
         <p-select class="w-full" appendTo="body" [options]="defaultCycleOptions" optionLabel="label"
           optionValue="value" [ngModel]="defaultCycle()" (ngModelChange)="defaultCycle.set($event)" />

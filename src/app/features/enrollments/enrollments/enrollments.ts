@@ -199,6 +199,7 @@ export class EnrollmentsPage {
     try {
       const courseGroups = await this.api.courseGroups(courseId, selectedSemester).toPromise();
       this.groups.set(courseGroups ?? []);
+      if ((courseGroups ?? []).length === 1 && !this.groupId()) this.onGroup((courseGroups ?? [])[0].id);
       if (
         this.groupId() &&
         !(courseGroups ?? []).some((group) => group.id === this.groupIdNumber())
@@ -248,6 +249,29 @@ export class EnrollmentsPage {
     void this.qp.update({ group: value });
     if (value) void this.loadStudents(value);
     else this.students.set([]);
+  }
+
+  readonly creatingGroup = signal(false);
+
+  async createInitialGroup(): Promise<void> {
+    const courseId = this.courseIdNumber();
+    if (!courseId) return;
+    this.creatingGroup.set(true);
+    try {
+      const group = await this.api.createGroup(courseId, { group_code: 'A', teacher_id: null, capacity: 40 }).toPromise();
+      await this.loadGroups();
+      if (group) this.onGroup(group.id);
+      this.toast.add({
+        severity: 'success',
+        summary: 'Grupo A creado',
+        detail: 'Quedó sin docente; puedes asignarlo desde el detalle del curso.',
+        life: 4000,
+      });
+    } catch (err) {
+      this.toast.add({ severity: 'error', summary: 'No se pudo crear el grupo', detail: extractDetail(err), life: 5000 });
+    } finally {
+      this.creatingGroup.set(false);
+    }
   }
 
   reloadStudents(): void {

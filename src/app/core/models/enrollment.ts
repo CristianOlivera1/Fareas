@@ -22,6 +22,7 @@ export interface MissingCourse {
   readonly course_id: number;
   readonly course_code: string;
   readonly course_name: string;
+  readonly will_create_group?: boolean;
 }
 
 export interface CyclePackage {
@@ -71,6 +72,7 @@ export interface BulkResult {
   readonly failed: number;
   readonly unknown: string[];
   readonly missing: MissingCourse[];
+  readonly created_groups?: string[];
   readonly results: EnrollmentPair[];
 }
 
@@ -89,7 +91,7 @@ export interface EnrollmentStatus {
 }
 
 export interface OfferGroup {
-  readonly group_id: number;
+  readonly group_id: number | null;
   readonly course_id: number;
   readonly course_code: string;
   readonly course_name: string;
@@ -104,4 +106,26 @@ export interface OfferGroup {
   readonly mine: boolean;
   readonly current_group_code: string | null;
   readonly conflict: string | null;
+  readonly will_create_group?: boolean;
+}
+
+export interface SelectionItem {
+  readonly course_id: number;
+  readonly group_id: number | null;
+}
+
+export interface SelectionResult {
+  readonly course_id: number;
+  readonly course_code: string;
+  readonly group_id: number | null;
+  readonly group_code: string | null;
+  readonly status: PairStatus;
+  readonly reason: string | null;
+}
+
+export interface SelectionOutcome {
+  readonly ok: number;
+  readonly skipped: number;
+  readonly failed: number;
+  readonly results: SelectionResult[];
 }

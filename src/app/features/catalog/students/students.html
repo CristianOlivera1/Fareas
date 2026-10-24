@@ -85,6 +85,16 @@
         title="Editar" (click)="openEdit(s)">
         <iconify-icon icon="material-symbols:edit-outline" width="18"></iconify-icon>
       </button>
+      <button type="button"
+        class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-blue-50 hover:text-(--fareas-primary) transition-colors disabled:opacity-40"
+        [disabled]="resendingId() === s.id"
+        title="Enviar nuevamente la clave temporal al correo" (click)="resend(s)">
+        @if (resendingId() === s.id) {
+          <iconify-icon icon="svg-spinners:180-ring-with-bg" width="16"></iconify-icon>
+        } @else {
+          <iconify-icon icon="material-symbols:mark-email-unread-outline" width="18"></iconify-icon>
+        }
+      </button>
     </div>
   </ng-template>
 </app-data-table>
@@ -106,7 +116,7 @@
           placeholder="221181" inputmode="numeric" autocomplete="off" [maxlength]="6"
           [error]="fieldError('code')"/>
       </div>
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Ciclo <span class="text-red-500">*</span></span>
         <p-select class="w-full" appendTo="body" [options]="ciclos" optionLabel="label"
           optionValue="value" placeholder="Ciclo actual" formControlName="semester" />

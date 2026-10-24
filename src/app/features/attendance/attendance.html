@@ -197,12 +197,12 @@
           {{ shortHour(r.marked_at) }}
         </div>
       </div>
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Nuevo estado <span class="text-red-500">*</span></span>
         <p-select class="w-full" appendTo="body" [options]="statusChoices" optionLabel="label"
           optionValue="value" [ngModel]="rectifyStatus()" (ngModelChange)="rectifyStatus.set($event)" />
       </label>
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Motivo <span class="text-red-500">*</span></span>
         <textarea rows="3" [ngModel]="rectifyReason()" (ngModelChange)="rectifyReason.set($event)"
           placeholder="El alumno presentó su carné físico al llegar tarde (mínimo 5 caracteres)"
@@ -230,7 +230,7 @@
         <div class="text-sm font-medium text-amber-900">{{ r.student_name }}</div>
         <div class="text-xs text-amber-800">{{ r.course_code }} · G{{ r.group_code }}</div>
       </div>
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Motivo <span class="text-red-500">*</span></span>
         <textarea rows="3" [ngModel]="justifyReason()" (ngModelChange)="justifyReason.set($event)"
           placeholder="Presentó certificado médico del 12 al 14 de octubre (mínimo 5 caracteres)"
@@ -282,7 +282,7 @@
         {{ s.course_code }} · G{{ s.group_code }} · {{ s.room_code }} ·
         {{ s.start_time.slice(0, 5) }}–{{ s.end_time.slice(0, 5) }}
       </p>
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Motivo <span class="text-red-500">*</span></span>
         <textarea rows="3" [ngModel]="cancelReason()" (ngModelChange)="cancelReason.set($event)"
           placeholder="Día sin clase por paro de transporte (mínimo 5 caracteres)"
@@ -333,7 +333,7 @@
       <p class="text-sm text-gray-700">
         {{ rv.session_date }} · {{ rv.course_code }} · G{{ rv.group_code }} · {{ rv.room_code }}
       </p>
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Motivo <span class="text-red-500">*</span></span>
         <textarea rows="3" [ngModel]="reviewReason()" (ngModelChange)="reviewReason.set($event)"
           placeholder="La clase no se dictó por mantenimiento del laboratorio (mínimo 5 caracteres)"

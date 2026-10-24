@@ -8,6 +8,8 @@ import {
   OfferGroup,
   PackageLetter,
   ResolveResult,
+  SelectionItem,
+  SelectionOutcome,
 } from '../models/enrollment';
 
 export interface StudentRefs {
@@ -59,7 +61,7 @@ export class EnrollmentApi extends BaseApi {
     });
   }
 
-  enrollMePackage(cycle: number, groupCode: string) {
-    return this.post<BulkResult>('/me/enrollment/package', { cycle, group_code: groupCode });
+  enrollSelection(items: SelectionItem[]) {
+    return this.post<SelectionOutcome>('/me/enrollment/bulk', { items });
   }
 }

@@ -117,37 +117,53 @@
 <p-dialog [header]="editingBlockId() !== null ? 'Editar bloque de horario' : 'Nuevo bloque de horario'"
   [(visible)]="blockDialogVisible" [modal]="true" [style]="{ width: '460px' }">
   <div class="space-y-4 pt-2">
-    <label class="block space-y-1">
-      <span class="text-sm font-medium text-gray-700">Grupo <span class="text-red-500">*</span></span>
-      <p-select class="w-full" appendTo="body" [options]="groupOptions()" optionLabel="label"
-        optionValue="value" placeholder="Curso · grupo · docente" [filter]="true" filterBy="label"
-        [disabled]="editingBlockId() !== null" [ngModel]="blockForm().group_id"
-        (ngModelChange)="onGroup($event)" />
-      @if (editingBlockId() !== null) {
-        <span class="text-xs text-gray-400">El bloque no cambia de grupo al editarlo.</span>
+    @if (editingBlock(); as current) {
+      <div class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700">
+        <span class="font-medium">{{ current.course_code }} · {{ current.course_name }}</span>
+        <span class="text-gray-500"> · Grupo {{ current.group_code }}</span>
+        <p class="text-xs text-gray-400">El bloque no cambia de curso ni de grupo al editarlo.</p>
+      </div>
+    } @else {
+      <label class="flex flex-col gap-1">
+        <span class="text-sm font-medium text-gray-700">Curso <span class="text-red-500">*</span></span>
+        <p-select class="w-full" appendTo="body" [options]="blockCourseOptions()" optionLabel="label"
+          optionValue="value" placeholder="Busca el curso" [filter]="true" filterBy="label"
+          [ngModel]="blockForm().course_id" (ngModelChange)="onBlockCourse($event)" />
+        <span class="text-xs text-gray-400">
+          El curso no necesita grupo ni docente para aparecer en el horario: el grupo se crea solo.
+        </span>
+      </label>
+      @if (needsGroupChoice()) {
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-gray-700">Grupo <span class="text-red-500">*</span></span>
+          <p-select class="w-full" appendTo="body" [options]="groupChoiceOptions()" optionLabel="label"
+            optionValue="value" placeholder="Elige el grupo" [ngModel]="blockForm().group_id"
+            (ngModelChange)="onGroup($event)" />
+          <span class="text-xs text-gray-400">Este curso ya se divide en varios grupos.</span>
+        </label>
       }
-    </label>
-    <label class="block space-y-1">
+    }
+    <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-gray-700">Día <span class="text-red-500">*</span></span>
       <p-select class="w-full" appendTo="body" [options]="weekdays" optionLabel="label"
         optionValue="value" [ngModel]="blockForm().weekday"
         (ngModelChange)="patchBlock({ weekday: $event })" />
     </label>
     <div class="grid grid-cols-2 gap-3">
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Inicio <span class="text-red-500">*</span></span>
         <p-select class="w-full" appendTo="body" [options]="startHours" optionLabel="label"
           optionValue="value" [ngModel]="blockForm().start_time"
           (ngModelChange)="onStartTime($event)" />
       </label>
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Fin <span class="text-red-500">*</span></span>
         <p-select class="w-full" appendTo="body" [options]="endHours()" optionLabel="label"
           optionValue="value" [ngModel]="blockForm().end_time"
           (ngModelChange)="patchBlock({ end_time: $event })" />
       </label>
     </div>
-    <label class="block space-y-1">
+    <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-gray-700">Docente (opcional)</span>
       <p-select class="w-full" appendTo="body" [options]="teacherOptions()" optionLabel="label"
         optionValue="value" placeholder="Sin asignar" [filter]="true" filterBy="label"
@@ -157,7 +173,7 @@
         Se aplica a todo el grupo; puedes completarlo o cambiarlo después.
       </span>
     </label>
-    <label class="block space-y-1">
+    <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-gray-700">Aula (opcional)</span>
       <p-select class="w-full" appendTo="body" [options]="roomOptions()" optionLabel="label"
         optionValue="value" placeholder="Sin asignar" [filter]="true" filterBy="label"
@@ -169,8 +185,8 @@
     </label>
     <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
       Bloques de 1 h o 2 h, en horas exactas (sin minutos), entre las {{ attendanceStartTime() }} y las
-      {{ attendanceEndTime() }}. Sin docente o sin aula el bloque se guarda como pendiente y no abre sesiones
-      de asistencia; los choques se validan cuando ambos datos existen.
+      {{ attendanceEndTime() }}. El aula es obligatoria; el docente es opcional y se puede asignar después.
+      La asistencia se registra aunque todavía no haya docente.
     </app-ui-alert>
   </div>
   <ng-template pTemplate="footer">

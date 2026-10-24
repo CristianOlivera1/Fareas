@@ -14,6 +14,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MessageService } from 'primeng/api';
+import { SelectModule } from 'primeng/select';
 import { Subject, debounceTime, distinctUntilChanged, firstValueFrom } from 'rxjs';
 
 import { Person } from '../../../core/models/catalog';
@@ -27,6 +28,7 @@ import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
 import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { extractDetail } from '../../../shared/utils/api-error';
+import { CYCLES, toRoman } from '../../../shared/utils/cycles';
 import { QueryParams } from '../../../shared/utils/query-params';
 
 const MIN_PHOTOS = 3;
@@ -44,6 +46,7 @@ const POSES = [
   selector: 'app-faces-page',
   imports: [
     FormsModule,
+    SelectModule,
     PageHeader,
     UiButton,
     UiInput,
@@ -68,8 +71,16 @@ export class FacesPage {
   readonly minPhotos = MIN_PHOTOS;
   readonly maxPhotos = MAX_PHOTOS;
   readonly slots = Array.from({ length: MAX_PHOTOS }, (_, index) => index);
+  readonly cycleOptions = CYCLES.map((cycle) => ({
+    label: `Ciclo ${toRoman(cycle)}`,
+    value: cycle,
+  }));
 
   readonly search = signal('');
+  readonly cycle = computed(() => {
+    const value = this.queryParams.integer('cycle', 0)();
+    return value >= 1 && value <= CYCLES.length ? value : null;
+  });
   private readonly studentParam = this.queryParams.filter('student');
   private readonly queryStudentId = this.queryParams.integer('student', 0);
   readonly results = signal<Person[]>([]);
@@ -110,6 +121,7 @@ export class FacesPage {
 
   private stream: MediaStream | null = null;
   private readonly search$ = new Subject<string>();
+  private searchRequestId = 0;
 
   constructor() {
     this.search$
@@ -125,6 +137,11 @@ export class FacesPage {
   onSearch(value: string): void {
     this.search.set(value);
     this.search$.next(value.trim());
+  }
+
+  async onCycle(value: number | null): Promise<void> {
+    await this.queryParams.update({ cycle: value });
+    await this.searchStudents(this.search().trim(), value ?? undefined);
   }
 
   async select(person: Person): Promise<void> {
@@ -365,21 +382,26 @@ export class FacesPage {
     this.success.set(null);
   }
 
-  private async searchStudents(query: string): Promise<void> {
+  private async searchStudents(
+    query: string,
+    semester: number | undefined = this.cycle() ?? undefined,
+  ): Promise<void> {
+    const requestId = ++this.searchRequestId;
     this.searching.set(true);
     try {
       const page = await firstValueFrom(
         this.catalog.students({
           q: query || undefined,
-          page_size: 8,
+          page_size: 100,
           with_face: 'true',
+          semester,
         }),
       );
-      this.results.set(page.items);
+      if (requestId === this.searchRequestId) this.results.set(page.items);
     } catch (err) {
-      this.error.set(extractDetail(err));
+      if (requestId === this.searchRequestId) this.error.set(extractDetail(err));
     } finally {
-      this.searching.set(false);
+      if (requestId === this.searchRequestId) this.searching.set(false);
     }
   }
 

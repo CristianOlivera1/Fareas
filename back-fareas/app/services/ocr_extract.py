@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from statistics import median
 
@@ -42,11 +42,21 @@ class LineaTexto:
 
 
 @dataclass(slots=True)
+class CeldaRect:
+    x: float
+    y: float
+    ancho: float
+    alto: float
+    pagina: int
+
+
+@dataclass(slots=True)
 class DocumentoLeido:
     tipo: str
     paginas: int
     items: list[ItemTexto]
     lineas: list[LineaTexto]
+    celdas: list[CeldaRect] = field(default_factory=list)
 
 
 def _es_pdf(raw: bytes) -> bool:
@@ -144,6 +154,40 @@ def _normalizar_imagen(imagen: Image.Image) -> Image.Image:
     return imagen
 
 
+def detectar_celdas(imagen: Image.Image, pagina: int) -> list[CeldaRect]:
+    import cv2
+
+    gris = cv2.cvtColor(np.asarray(imagen), cv2.COLOR_RGB2GRAY)
+    alto, ancho = gris.shape
+    bordes = cv2.adaptiveThreshold(
+        gris, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 15, 10
+    )
+    horizontales = cv2.morphologyEx(
+        bordes,
+        cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (max(ancho // 25, 30), 1)),
+    )
+    verticales = cv2.morphologyEx(
+        bordes,
+        cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(alto // 25, 30))),
+    )
+    rejilla = cv2.dilate(cv2.bitwise_or(horizontales, verticales), np.ones((3, 3), np.uint8))
+    if cv2.countNonZero(rejilla) < (ancho + alto) * 2:
+        return []
+
+    total, _, estadisticas, _ = cv2.connectedComponentsWithStats(
+        cv2.bitwise_not(rejilla), connectivity=4
+    )
+    celdas: list[CeldaRect] = []
+    for indice in range(1, total):
+        x, y, w, h, _ = (int(valor) for valor in estadisticas[indice])
+        if w * h > ancho * alto * 0.6 or w < 20 or h < 12:
+            continue
+        celdas.append(CeldaRect(x=x, y=y, ancho=w, alto=h, pagina=pagina))
+    return celdas
+
+
 def _se_solapan(izquierda: ItemTexto, derecha: ItemTexto) -> bool:
     centro_x = izquierda.x + izquierda.ancho / 2
     centro_y = izquierda.y + izquierda.alto / 2
@@ -199,8 +243,9 @@ def _reintentar_baja_confianza(
     return sorted(resultado, key=lambda item: (item.pagina, item.y, item.x))
 
 
-def _items_de_pdf_escaneado(raw: bytes) -> tuple[list[ItemTexto], int]:
+def _items_de_pdf_escaneado(raw: bytes) -> tuple[list[ItemTexto], int, list[CeldaRect]]:
     items: list[ItemTexto] = []
+    celdas: list[CeldaRect] = []
     documento = pdfium.PdfDocument(raw)
     try:
         paginas = len(documento)
@@ -212,17 +257,19 @@ def _items_de_pdf_escaneado(raw: bytes) -> tuple[list[ItemTexto], int]:
             imagen = _normalizar_imagen(pagina.render(scale=escala).to_pil())
             encontrados = _items_de_ocr(np.asarray(imagen), numero + 1)
             items.extend(_reintentar_baja_confianza(imagen, encontrados, numero + 1))
+            celdas.extend(detectar_celdas(imagen, numero + 1))
     finally:
         documento.close()
-    return items, paginas
+    return items, paginas, celdas
 
 
-def _items_de_imagen(raw: bytes) -> list[ItemTexto]:
+def _items_de_imagen(raw: bytes) -> tuple[list[ItemTexto], list[CeldaRect]]:
     try:
         with Image.open(io.BytesIO(raw)) as imagen:
             normalizada = _normalizar_imagen(imagen)
             encontrados = _items_de_ocr(np.asarray(normalizada), 1)
-            return _reintentar_baja_confianza(normalizada, encontrados, 1)
+            items = _reintentar_baja_confianza(normalizada, encontrados, 1)
+            return items, detectar_celdas(normalizada, 1)
     except Image.UnidentifiedImageError as exc:
         raise ValueError("Formato no soportado; sube un PDF, JPG, PNG o WEBP") from exc
 
@@ -292,18 +339,28 @@ def leer_documento(raw: bytes, filename: str | None = None, forzar_ocr: bool = F
                 )
 
         try:
-            items, paginas = _items_de_pdf_escaneado(raw)
+            items, paginas, celdas = _items_de_pdf_escaneado(raw)
         except ValueError:
             raise
         except Exception as exc:
             raise ValueError("No se pudo interpretar el PDF escaneado") from exc
         return DocumentoLeido(
-            tipo="pdf_ocr", paginas=paginas, items=items, lineas=agrupar_lineas(items)
+            tipo="pdf_ocr",
+            paginas=paginas,
+            items=items,
+            lineas=agrupar_lineas(items),
+            celdas=celdas,
         )
 
     if _es_imagen(raw):
-        items = _items_de_imagen(raw)
-        return DocumentoLeido(tipo="imagen", paginas=1, items=items, lineas=agrupar_lineas(items))
+        items, celdas = _items_de_imagen(raw)
+        return DocumentoLeido(
+            tipo="imagen",
+            paginas=1,
+            items=items,
+            lineas=agrupar_lineas(items),
+            celdas=celdas,
+        )
 
     nombre = filename or "el archivo"
     raise ValueError(f"Formato no soportado en {nombre}; sube un PDF, JPG, PNG o WEBP")

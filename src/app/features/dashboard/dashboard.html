@@ -16,6 +16,18 @@
   </a>
   }
 
+  @if (fullCourses() > 0 && auth.isAdmin()) {
+  <a routerLink="/admin/courses"
+    class="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition-colors hover:bg-amber-100">
+    <iconify-icon icon="material-symbols:group-off-outline" width="20"></iconify-icon>
+    <span class="flex-1">
+      <strong>{{ fullCourses() }}</strong>
+      {{ fullCourses() === 1 ? 'curso tiene todos sus grupos llenos' : 'cursos tienen todos sus grupos llenos' }}: crea un grupo nuevo para que puedan matricularse más alumnos.
+    </span>
+    <span class="font-medium">Ver cursos</span>
+  </a>
+  }
+
   <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
     @for (card of cards(); track card.title) {
     @if (card.title === 'Cámaras activas' && auth.isAdmin()) {

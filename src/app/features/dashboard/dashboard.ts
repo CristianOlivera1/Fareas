@@ -75,6 +75,7 @@ export class Dashboard {
   readonly summary = signal<DashboardSummary | null>(null);
   readonly cards = computed(() => buildCards(this.summary()));
   readonly sessionsToReview = computed(() => this.summary()?.sessions_to_review ?? 0);
+  readonly fullCourses = computed(() => this.summary()?.cursos_llenos ?? 0);
 
   constructor() {
     interval(REFRESH_MS)

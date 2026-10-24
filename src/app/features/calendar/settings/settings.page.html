@@ -79,14 +79,14 @@
         <app-ui-input label="Etiqueta del periodo" placeholder="2026-II" icon="material-symbols:badge"
           hint="Formato AAAA-I / AAAA-II" [ngModel]="form().semester_label"
           (ngModelChange)="patch({ semester_label: $event })" />
-        <label class="block space-y-1">
+        <label class="flex flex-col gap-1">
           <span class="text-sm font-medium text-gray-700">Inicio del periodo</span>
           <input type="date" [ngModel]="form().semester_start"
             (ngModelChange)="patch({ semester_start: $event })"
             class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
           <span class="block text-[13px] text-gray-400">No se programarán sesiones antes de esta fecha.</span>
         </label>
-        <label class="block space-y-1">
+        <label class="flex flex-col gap-1">
           <span class="text-sm font-medium text-gray-700">Fin del periodo</span>
           <input type="date" [ngModel]="form().semester_end"
             (ngModelChange)="patch({ semester_end: $event })"
@@ -107,21 +107,21 @@
         </div>
       </header>
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <label class="block space-y-1">
+        <label class="flex flex-col gap-1">
           <span class="text-sm font-medium text-gray-700">Duración de bloque</span>
           <p-select class="w-full" appendTo="body" [options]="blockMinutesOptions" optionLabel="label"
             optionValue="value" [ngModel]="form().block_minutes"
             (ngModelChange)="patch({ block_minutes: $event })" />
           <span class="block text-[13px] text-gray-400">Sugerencia usada al crear bloques (1 h o 2 h).</span>
         </label>
-        <label class="block space-y-1">
+        <label class="flex flex-col gap-1">
           <span class="text-sm font-medium text-gray-700">Tolerancia de tardanza</span>
           <p-select class="w-full" appendTo="body" [options]="toleranceOptions" optionLabel="label"
             optionValue="value" [ngModel]="form().late_tolerance_minutes"
             (ngModelChange)="patch({ late_tolerance_minutes: $event })" />
           <span class="block text-[13px] text-gray-400">Pasado este tiempo, la marca es tardanza.</span>
         </label>
-        <label class="block space-y-1">
+        <label class="flex flex-col gap-1">
           <span class="text-sm font-medium text-gray-700">Apertura anticipada</span>
           <p-select class="w-full" appendTo="body" [options]="earlyOpenOptions" optionLabel="label"
             optionValue="value" [ngModel]="form().early_open_minutes"
@@ -130,13 +130,13 @@
         </label>
       </div>
       <div class="mt-4 grid gap-4 sm:grid-cols-2">
-        <label class="block space-y-1">
+        <label class="flex flex-col gap-1">
           <span class="text-sm font-medium text-gray-700">Inicio del horario para registrar asistencias</span>
           <input type="time" [ngModel]="form().attendance_hour_start"
             (ngModelChange)="patch({ attendance_hour_start: $event })"
             class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm tabular-nums focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
         </label>
-        <label class="block space-y-1">
+        <label class="flex flex-col gap-1">
           <span class="text-sm font-medium text-gray-700">Fin del horario para registrar asistencias</span>
           <input type="time" [ngModel]="form().attendance_hour_end"
             (ngModelChange)="patch({ attendance_hour_end: $event })"
@@ -157,7 +157,7 @@
         </div>
       </header>
       <div class="grid gap-4 sm:grid-cols-2">
-        <label class="block space-y-1">
+        <label class="flex flex-col gap-1">
           <span class="text-sm font-medium text-gray-700">Plazo de rectificación</span>
           <p-select class="w-full" appendTo="body" [options]="rectifyOptions" optionLabel="label"
             optionValue="value" [ngModel]="form().rectify_days"
@@ -193,7 +193,7 @@
           <h3 class="text-sm font-semibold text-gray-800">Alertas por inasistencia</h3>
           <p class="mt-1 text-xs text-gray-500">Define cuándo avisar por inasistencias y qué porcentaje supera el límite permitido.</p>
           <div class="mt-4 grid gap-4 sm:grid-cols-2">
-            <label class="block space-y-1">
+            <label class="flex flex-col gap-1">
               <span class="text-sm font-medium text-gray-700">Mínimo de sesiones</span>
               <p-select class="w-full" appendTo="body" [options]="minSessionsOptions" optionLabel="label"
                 optionValue="value" [ngModel]="form().dpi_min_sessions"
