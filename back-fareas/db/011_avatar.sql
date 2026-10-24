@@ -1,1 +1,0 @@
-ALTER TABLE app_user ADD COLUMN IF NOT EXISTS avatar_key VARCHAR(500);

@@ -1,1 +1,0 @@
-ALTER TABLE justification ADD COLUMN IF NOT EXISTS document_key VARCHAR(500);
