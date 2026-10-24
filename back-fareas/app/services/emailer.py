@@ -10,7 +10,9 @@ from app.core.config import get_settings
 
 logger = logging.getLogger("fareas.emailer")
 _EMAIL_LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "logo-full.png"
+_EMAIL_IIS_LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "iis.png"
 _EMAIL_LOGO_CID = "fareas-logo"
+_EMAIL_IIS_LOGO_CID = "fareas-iis-logo"
 
 _PRIMARY = "#155DFC"
 _CANVAS = "#F6F9FF"
@@ -30,8 +32,14 @@ def _wrap(*, preheader: str, title: str, content_html: str) -> str:
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:{_CANVAS};padding:24px 12px;">
 <tr><td align="center">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background-color:#FFFFFF;border:1px solid {_BORDER};border-radius:12px;">
-<tr><td style="padding:28px 28px 0;">
+<tr><td style="padding:28px 28px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+<td align="left" valign="middle">
 <img src="cid:{_EMAIL_LOGO_CID}" alt="Fareas" width="200" height="45" style="display:block;width:200px;max-width:100%;height:auto;border:0;">
+</td>
+<td align="right" valign="middle">
+<img src="cid:{_EMAIL_IIS_LOGO_CID}" alt="Ingeniería Informática y Sistemas UNAMBA" width="64" height="64" style="display:block;width:64px;height:64px;border:0;">
+</td>
+</tr></table>
 <p style="margin:4px 0 0;font-family:{_FONT};font-size:12px;color:{_MUTED};">Facultad de Informática - UNAMBA</p>
 </td></tr>
 <tr><td style="padding:20px 28px 0;">
@@ -91,6 +99,14 @@ async def send_email(to: str, subject: str, body: str, html_body: str | None = N
             cid=f"<{_EMAIL_LOGO_CID}>",
             disposition="inline",
             filename="fareas-logo.png",
+        )
+        html_part.add_related(
+            _EMAIL_IIS_LOGO_PATH.read_bytes(),
+            maintype="image",
+            subtype="png",
+            cid=f"<{_EMAIL_IIS_LOGO_CID}>",
+            disposition="inline",
+            filename="iis-logo.png",
         )
 
     try:
