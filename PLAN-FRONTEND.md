@@ -531,6 +531,16 @@ confirmación se habilitó. No se confirmó para no crear cuentas de prueba;
 `students-import.dialog.spec.ts` verifica el cuerpo de `POST
 /students/import-confirm` (incluido `group_id` opcional).
 
+### F6d - Importar malla curricular desde PDF o foto - **✅ LISTO (2026-10-24)**
+> **Backend (Bloque 17):** `POST /courses/import-curriculum` y `/confirm` (solo admin). Vive en `/courses`: el botón
+> «Importar malla» (opcional, junto a «Nuevo curso») abre un diálogo de 3 pasos; el alta manual de un curso sigue igual.
+
+- **Paso 1 - Archivo:** dropzone PDF/JPG/PNG/WEBP (≤10 MB) y «Ciclo de los cursos (opcional)», solo para listas sin títulos de ciclo.
+- **Paso 2 - Revisar por ciclo:** pestañas **Todos + I…X** con contador; tabla editable (código, nombre, ciclo) con chips **Listo / Revisar / Corregir / Ya existe** y la línea leída en el tooltip del nombre. Cambiar el ciclo de una fila la mueve de pestaña. Acciones: añadir curso (en el ciclo activo), quitar filas con error, quitar los que ya existen. Validación en vivo (código de 3 a 20 letras o números, nombre ≥ 3, ciclo, códigos repetidos) y la confirmación se bloquea mientras haya filas por corregir.
+- **Paso 3 - Resultado:** creados, omitidos por existir y su lista. Los cursos existentes **nunca se modifican**; al cerrar se recarga la tabla.
+- **Archivos:** `features/courses/courses/courses-import.dialog.{ts,html,spec.ts}`, `importCurriculum`/`confirmCurriculum` en `courses-api.ts` y modelos `Curriculum*` en `core/models/imports.ts`.
+- **Verificación (2026-10-24):** con la imagen real de la malla (10 columnas, 63 cursos) el servidor devolvió los 63 con su ciclo, 62 listos y 1 por revisar (`Ingeniería de software II`, lectura de «II» con 0.85 de confianza). `npm test` 86/86 y `npm run build` OK.
+
 ### F7 - Dispositivos reales: armado, instalación y puesta en marcha (única tarea pendiente: la prueba con el hardware)
 
 > Todo el software (frontend y backend) está terminado y probado con simuladores. Este apartado reúne, en un solo

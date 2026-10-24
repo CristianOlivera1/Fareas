@@ -1,8 +1,15 @@
 <app-page-header title="Cursos y grupos" subtitle="Organiza los cursos por ciclo y administra sus grupos y horarios.">
   @if (auth.isAdmin()) {
+  <app-ui-button variant="outline" icon="material-symbols:document-scanner-outline" (click)="importVisible = true">
+    Importar malla
+  </app-ui-button>
   <app-ui-button icon="material-symbols:add" (click)="openCreate()">Nuevo curso</app-ui-button>
   }
 </app-page-header>
+
+@if (auth.isAdmin()) {
+<app-courses-import-dialog [(visible)]="importVisible" (imported)="reload()" />
+}
 
 <div class="mb-4 flex flex-wrap items-center gap-3">
   <app-ui-input class="w-full sm:w-72" icon="material-symbols:search" placeholder="Buscar por código o nombre…"
