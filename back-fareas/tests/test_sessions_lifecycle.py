@@ -111,8 +111,7 @@ async def test_no_abre_sesion_sin_docente_o_aula(db_session, escenario):
     await db_session.commit()
 
     lunes = esc["lunes"]
-    abiertas = await abrir_sesiones_del_dia(db_session, now=h(lunes, "08:05"))
-    assert abiertas == 0
+    await abrir_sesiones_del_dia(db_session, now=h(lunes, "08:05"))
     assert await _sesion_de_escenario(db_session, esc, lunes) is None
 
 async def test_barrido_cierra_al_fin_del_bloque(db_session, escenario):

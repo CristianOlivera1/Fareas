@@ -36,6 +36,10 @@ READ_ENDPOINTS: dict[str, set[str]] = {
     "/me/courses": {STUDENT},
     "/me/justifications": {STUDENT},
     "/reports/dpi-risk.xlsx": STAFF,
+    "/enrollment/package-letters?cycle=1": {ADMIN},
+    "/enrollment/package?cycle=1&group_code=A": {ADMIN},
+    "/me/enrollment": {STUDENT},
+    "/me/enrollment/offer": {STUDENT},
 }
 
 

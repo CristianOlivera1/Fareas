@@ -17,12 +17,14 @@ from app.routers import (
     curriculum,
     dashboard,
     dpi,
+    enrollment_center,
     enrollment_faces,
     health,
     me,
     notifications,
     profile,
     reports,
+    self_enrollment,
     ws_devices,
 )
 from app.services import errors
@@ -95,6 +97,8 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router, prefix=settings.API_V1_PREFIX)
     app.include_router(reports.router, prefix=settings.API_V1_PREFIX)
     app.include_router(me.router, prefix=settings.API_V1_PREFIX)
+    app.include_router(enrollment_center.router, prefix=settings.API_V1_PREFIX)
+    app.include_router(self_enrollment.router, prefix=settings.API_V1_PREFIX)
     app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
     app.include_router(profile.router, prefix=settings.API_V1_PREFIX)
 

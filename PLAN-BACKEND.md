@@ -849,3 +849,21 @@ La matriz por pantalla está en `PLAN-FRONTEND.md` §7. Pendientes del lado back
   5. Marca como no confiable: nombre vacío o muy corto, lectura con confianza < 0.85, ciclo estimado y códigos repetidos en el archivo.
 - **Verificación:** `tests/test_ocr_curriculum.py` (23): casos sintéticos (columnas, nombres de varias líneas, ruido, duplicados, sin títulos, lista vertical), PDF con texto, **la imagen real de la malla** (`tests/fixtures/malla_ais.png`: 63 cursos, `7-6-6-6-6-6-7-7-6-6` por ciclo) y los endpoints (preview, confirm, permisos, 415/422). Contra el servidor real: 63 cursos, 62 listos, 1 por revisar.
 - **Límites:** la imagen debe verse nítida y recta; un diagrama muy borroso o con códigos tapados por flechas saldrá «por revisar». No se actualizan cursos existentes (para cambiar un nombre o ciclo se edita el curso).
+
+---
+
+## 12. Bloque 18 - Matrícula masiva y autogestión (2026-10-24) - ✅ COMPLETADO Y VERIFICADO
+
+> Reutiliza `services/enrollments.py` (reglas R8: cupo, un grupo activo por curso, sin cruce de horario, retiro y transferencia) y
+> añade la matrícula de varios alumnos a la vez, el paquete «ciclo + letra de grupo» y la matrícula por el propio estudiante.
+
+- **BD:** `db/012_ventana_matricula.sql` (`app_settings.enrollment_start` y `enrollment_end`, DATE; ya consolidado en `001`). La ventana está abierta si hoy (hora de Perú) está entre ambas fechas, **inclusive**; sin fechas, cerrada. `PATCH /settings` las acepta y rechaza inicio > fin.
+- **Administrador (`routers/enrollment_center.py`):**
+  - `GET /enrollment/package-letters?cycle=` — letras de grupo del ciclo con cuántos cursos cubre cada una.
+  - `GET /enrollment/package?cycle=&group_code=` — grupos del paquete con docente, horario, cupo y libres, y los cursos del ciclo que **no tienen** esa letra en el periodo vigente.
+  - `POST /enrollment/resolve-students` — resuelve códigos de matrícula (informa los no encontrados).
+  - `POST /enrollment/bulk` (`student_ids`/`student_codes` + `group_ids`) y `POST /enrollment/package` (`student_ids`/`student_codes` + `cycle` + `group_code`): hasta 300 alumnos y 20 grupos; cada par alumno-grupo se procesa por separado y devuelve `ok`, `skipped` (ya estaba) o `failed` con el motivo; un fallo no revierte los demás. Auditoría `matricula_masiva` / `matricula_por_ciclo` más la de cada matrícula.
+- **Estudiante (`routers/self_enrollment.py`, solo rol estudiante):** `GET /me/enrollment` (periodo, ciclo del alumno y ventana), `GET /me/enrollment/offer?cycle=` (todos los grupos activos del periodo con cupo, horario, `mine`, `current_group_code` si ya cursa otro grupo del mismo curso y `conflict` con el curso con el que se cruza), `POST /me/enrollment`, `DELETE /me/enrollment/{group_id}`, `POST /me/enrollment/{group_id}/transfer` y `POST /me/enrollment/package`. Todo lo que escribe exige la ventana abierta (403 con el mensaje) y solo actúa sobre el propio estudiante; el administrador sigue pudiendo matricular fuera de la ventana. Las matrículas hechas por el estudiante quedan auditadas con él como actor.
+- **Tests:** `tests/test_enrollment_center.py` (9: vista previa del paquete, parejas ok/fallidas/omitidas, grupo lleno, cruce de horario, códigos desconocidos, permisos, ventana cerrada por defecto, alta/cambio/retiro del estudiante, paquete del estudiante, ventana invertida) y la matriz de roles ampliada. Los alumnos de una tanda se procesan ordenados por código para que el reparto de los últimos cupos sea predecible.
+- **Nota de pruebas:** `test_no_abre_sesion_sin_docente_o_aula` dependía de que no hubiera ningún otro bloque real el lunes a las 08:05 (la base compartida tiene un horario real en esa hora); ahora comprueba solo la sesión de su propio escenario.
+- **Fuera de alcance (anotado):** aprobación de solicitudes, límite de créditos o de cursos por estudiante, prerrequisitos de la malla, lista de espera para cursos llenos y notificación por correo al matricular.
