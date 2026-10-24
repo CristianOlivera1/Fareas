@@ -541,6 +541,22 @@ confirmación se habilitó. No se confirmó para no crear cuentas de prueba;
 - **Archivos:** `features/courses/courses/courses-import.dialog.{ts,html,spec.ts}`, `importCurriculum`/`confirmCurriculum` en `courses-api.ts` y modelos `Curriculum*` en `core/models/imports.ts`.
 - **Verificación (2026-10-24):** con la imagen real de la malla (10 columnas, 63 cursos) el servidor devolvió los 63 con su ciclo, 62 listos y 1 por revisar (`Ingeniería de software II`, lectura de «II» con 0.85 de confianza). `npm test` 86/86 y `npm run build` OK.
 
+### F6e - Matrícula masiva y autogestión del estudiante (2026-10-24) - **✅ LISTO**
+> Decisiones acordadas: el estudiante se matricula solo dentro de una **ventana de fechas** con confirmación automática; el paquete
+> masivo es **ciclo + letra de grupo**; el estudiante puede llevar **cursos de cualquier ciclo** (con avisos); el **periodo ya no se
+> elige**: todo es del periodo vigente. Reglas R8 sin cambios (cupo, un grupo por curso, sin cruce de horario, retiro y transferencia).
+
+**Administrador (`/enrollments`, ahora «Matrícula»)**
+- Cabecera con el estado de la **ventana de matrícula de estudiantes** (abierta/cerrada y hasta cuándo); al pulsarla se fijan «Desde/Hasta» (atajos de 3 días, 1 y 2 semanas) o se cierra. Se guarda en los parámetros del sistema.
+- **Pestaña «Por ciclo»** (por defecto): 1) elegir ciclo y grupo (se sugiere la letra que cubre más cursos) y ver el horario del paquete con docente, horario, cupos libres y los cursos que **no tienen ese grupo**; 2) elegir alumnos de tres maneras: **buscar** y agregar, **pegar códigos** de matrícula (informa los no encontrados) o **todo un ciclo** de alumnos (útil para ingresantes); 3) «N alumnos × M cursos = P matrículas» con aviso de cupos justos y botón **Matricular**. El resultado indica matriculados, los que ya estaban y los problemas **agrupados por alumno** (grupo lleno, cruce de horario…); el resto se matricula igual.
+- **Pestaña «Por grupo»:** el flujo anterior, sin selector de periodo y con **selección múltiple** de alumnos (más pegar códigos); conserva retiro, reactivación y transferencia.
+
+**Estudiante (`/my-enrollment`, menú «Mi matrícula»)**
+- Banner con el periodo y el estado de la ventana; **Mi horario** semanal con sus grupos; **Matricularme en un ciclo completo** (elige la letra y toma todos los cursos del ciclo; informa lo que no se pudo); y **Cursos disponibles** por ciclo (su ciclo primero) con búsqueda y, por grupo: docente, horario, cupos y estado — *Agregar*, *Cambiar desde A*, *Retirar* (con confirmación), *Lleno* o *Cruce de horario con X*. Fuera de la ventana todo queda en solo lectura.
+
+**Archivos:** `features/enrollments/center/*` (contenedor y panel por ciclo), `features/enrollments/enrollments/*` (por grupo), `features/my-enrollment/*`, `core/services/enrollment-api.ts` y `core/models/enrollment.ts`. Specs: `cycle-enrollment.spec.ts`, `my-enrollment.spec.ts`.
+**Verificación:** `npm test` 100/100 y `npm run build` OK.
+
 ### F7 - Dispositivos reales: armado, instalación y puesta en marcha (única tarea pendiente: la prueba con el hardware)
 
 > Todo el software (frontend y backend) está terminado y probado con simuladores. Este apartado reúne, en un solo
@@ -752,6 +768,7 @@ la UI solo oculta botones con `@if (auth.isAdmin())`.
 |---|---|---|---|
 | Inicio | `/me` | Clases de hoy, próxima clase y cursos en riesgo de inhabilitación | `GET /me/schedule`, `GET /attendance/me/dpi` |
 | Mi horario | `/my-schedule` | Semana Lun–Vie con curso, grupo, aula y docente | `GET /me/schedule` |
+| Mi matrícula | `/my-enrollment` | Armar su horario dentro de la ventana de matrícula: agregar, cambiar de grupo, retirar o tomar un ciclo completo | `GET /me/enrollment`, `/me/enrollment/offer`, `POST /me/enrollment…` |
 | Mis cursos | `/my-courses` | Cursos matriculados del periodo: grupo, docente, horario, faltas y faltas restantes | `GET /me/courses` + `GET /attendance/me/dpi` |
 | Mis asistencias | `/my-attendance` | Historial con filtro de fechas y rectificaciones (ya existía, movida desde `/me`) | `GET /attendance/me` |
 | Mis justificaciones | `/my-justifications` | Justificaciones registradas a su nombre, con motivo, cursos y documento | `GET /me/justifications` |

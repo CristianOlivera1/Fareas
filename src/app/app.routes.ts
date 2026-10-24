@@ -103,6 +103,13 @@ export const routes: Routes = [
         data: { title: 'Mis cursos' },
       },
       {
+        path: 'my-enrollment',
+        canActivate: [navGuard('/my-enrollment')],
+        loadComponent: () =>
+          import('./features/my-enrollment/my-enrollment').then((m) => m.MyEnrollmentPage),
+        data: { title: 'Mi matrícula' },
+      },
+      {
         path: 'my-justifications',
         canActivate: [navGuard('/my-justifications')],
         loadComponent: () =>
@@ -155,7 +162,7 @@ export const routes: Routes = [
         path: 'enrollments',
         canActivate: [navGuard('/enrollments')],
         loadComponent: () =>
-          import('./features/enrollments/enrollments/enrollments').then((m) => m.EnrollmentsPage),
+          import('./features/enrollments/center/enrollment-center').then((m) => m.EnrollmentCenterPage),
         data: { title: 'Matrículas' },
       },
 

@@ -103,6 +103,7 @@ describe('navForRole', () => {
     expect(labels('estudiante')).toEqual([
       'Inicio',
       'Mi horario',
+      'Mi matrícula',
       'Mis cursos',
       'Mis asistencias',
       'Mis justificaciones',
