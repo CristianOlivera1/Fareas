@@ -50,6 +50,10 @@
         primero revisas y corriges por ciclo, y recién después confirmas. Los cursos que ya existen no se modifican.
       </app-ui-alert>
 
+      @if (loading()) {
+        <app-scan-loader label="Analizando malla curricular…" />
+      }
+
       @if (error(); as message) {
         <app-ui-alert variant="danger" title="No se pudo leer la malla">{{ message }}</app-ui-alert>
       }
@@ -226,8 +230,10 @@
   <ng-template pTemplate="footer">
     @if (step() === 1) {
       <app-ui-button variant="ghost" (click)="close()">Cancelar</app-ui-button>
-      <app-ui-button icon="material-symbols:document-scanner-outline" [loading]="loading()"
-        [disabled]="!canRead()" (click)="readCurriculum()">Leer malla</app-ui-button>
+      <app-ui-button icon="material-symbols:document-scanner-outline"
+        [disabled]="!canRead()" (click)="readCurriculum()">
+        {{ loading() ? 'Analizando…' : 'Leer malla' }}
+      </app-ui-button>
     } @else if (step() === 2) {
       <app-ui-button variant="ghost" (click)="step.set(1)">Atrás</app-ui-button>
       <app-ui-button icon="material-symbols:library-add-outline" [loading]="confirming()"

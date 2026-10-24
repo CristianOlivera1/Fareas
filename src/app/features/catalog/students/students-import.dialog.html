@@ -50,6 +50,10 @@
         confirmas.
       </app-ui-alert>
 
+      @if (loading()) {
+        <app-scan-loader label="Leyendo nómina de estudiantes…" />
+      }
+
       @if (error(); as message) {
         <app-ui-alert variant="danger" title="No se pudo leer la nómina">{{ message }}</app-ui-alert>
       }
@@ -265,9 +269,9 @@
   <ng-template pTemplate="footer">
     @if (step() === 1) {
       <app-ui-button variant="ghost" (click)="close()">Cancelar</app-ui-button>
-      <app-ui-button icon="material-symbols:document-scanner-outline" [loading]="loading()"
+      <app-ui-button icon="material-symbols:document-scanner-outline"
         [disabled]="!canRead()" (click)="readRoster()">
-        Leer nómina
+        {{ loading() ? 'Leyendo…' : 'Leer nómina' }}
       </app-ui-button>
     } @else if (step() === 2) {
       <app-ui-button variant="ghost" (click)="step.set(1)">Atrás</app-ui-button>

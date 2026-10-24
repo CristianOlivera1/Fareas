@@ -16,6 +16,7 @@ import { SelectModule } from 'primeng/select';
 import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
 import { FileDrop } from '../../../shared/components/file-drop/file-drop';
+import { ScanLoader } from '../../../shared/components/scan-loader/scan-loader';
 import { CatalogApi } from '../../../core/services/catalog-api';
 import { CoursesApi } from '../../../core/services/courses-api';
 import { CalendarApi } from '../../../core/services/calendar-api';
@@ -44,7 +45,7 @@ const CYCLES: Option<number>[] = Array.from({ length: 12 }, (_, index) => ({
 
 @Component({
   selector: 'app-students-import-dialog',
-  imports: [FormsModule, DialogModule, SelectModule, UiButton, UiAlert, FileDrop],
+  imports: [FormsModule, DialogModule, SelectModule, UiButton, UiAlert, FileDrop, ScanLoader],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './students-import.dialog.html',
   changeDetection: ChangeDetectionStrategy.OnPush,

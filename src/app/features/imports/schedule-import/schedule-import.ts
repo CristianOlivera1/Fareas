@@ -15,6 +15,7 @@ import { PageHeader } from '../../../shared/components/page-header/page-header';
 import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
 import { FileDrop } from '../../../shared/components/file-drop/file-drop';
+import { ScanLoader } from '../../../shared/components/scan-loader/scan-loader';
 import { CoursesApi } from '../../../core/services/courses-api';
 import { CatalogApi } from '../../../core/services/catalog-api';
 import { CalendarApi } from '../../../core/services/calendar-api';
@@ -46,7 +47,7 @@ const STEPS = [
 
 @Component({
   selector: 'app-schedule-import-page',
-  imports: [FormsModule, PageHeader, UiButton, UiAlert, FileDrop, SelectModule],
+  imports: [FormsModule, PageHeader, UiButton, UiAlert, FileDrop, ScanLoader, SelectModule],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './schedule-import.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
