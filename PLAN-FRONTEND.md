@@ -137,34 +137,34 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 ## 4. Bloques de implementación (cada uno termina verificable)
 
 ### F0-F1 - Infraestructura de datos + navegación (½ día)
-- [ ] `core/api/`: `api-url.ts` (dev: `environment.apiUrl`; prod: `/api/v1` relativo),
+- [x] `core/api/`: `api-url.ts` (dev: `environment.apiUrl`; prod: `/api/v1` relativo),
   `page.ts` (tipo `Page<T>` idéntico al backend), `params.ts` (serializa `?page=&page_size=&q=`).
-- [ ] `core/services/` genéricos por módulo: `catalog-api.ts` (rooms/devices/teachers/students
+- [x] `core/services/` genéricos por módulo: `catalog-api.ts` (rooms/devices/teachers/students
   con `Page<T>`), `courses-api.ts`, `calendar-api.ts` — HttpClient tipado, sin estado global
   (cada página recarga; PLAN §7: sin NgRx).
-- [ ] UI kit compartido: `shared/components/` → `page-header`, `data-table` (ya existe:
+- [x] UI kit compartido: `shared/components/` → `page-header`, `data-table` (ya existe:
   ampliar a `Page<T>` + paginador PrimeNG), `confirm-dialog` (PrimeNG ConfirmationService),
   `toasts` (MessageService global), `empty-state`, `skeleton-table`.
-- [ ] `roleGuard` + rutas hijas de `/admin` con `data.roles` (rutas creadas apuntando a
+- [x] `roleGuard` + rutas hijas de `/admin` con `data.roles` (rutas creadas apuntando a
   placeholders "En construcción" salvo las existentes).
-- [ ] Sidebar agrupado con `nav.ts` + submenús colapsables + roles.
+- [x] Sidebar agrupado con `nav.ts` + submenús colapsables + roles.
 - **Entregable:** login → panel con menú completo por rol; rutas nuevas navegan a placeholders.
 
 ### F2 - Catálogos y carga académica (1-1.5 días) - RF-02…RF-06, RF-22, RF-35
-- [ ] **Aulas** `/rooms`: tabla paginada + crear/editar (dialog) — `GET/POST /rooms`, `PATCH /rooms/{id}`.
-- [ ] **Docentes** `/teachers`: tabla + alta (dialog: nombre, email, DNI, WhatsApp) — `GET/POST /teachers`;
+- [x] **Aulas** `/rooms`: tabla paginada + crear/editar (dialog) — `GET/POST /rooms`, `PATCH /rooms/{id}`.
+- [x] **Docentes** `/teachers`: tabla + alta (dialog: nombre, email, DNI, WhatsApp) — `GET/POST /teachers`;
   botón "Reenviar clave" → `POST /accounts/{id}/send-temp-password`; editar → `PATCH /accounts/{id}`.
-- [ ] **Estudiantes** `/students`: tabla + alta (incluye `code` y `semester`) — `GET/POST /students`;
+- [x] **Estudiantes** `/students`: tabla + alta (incluye `code` y `semester`) — `GET/POST /students`;
   columna "Rostro" con badge Enrolado/Sin rostro (F4 lo conecta a `GET /students/{id}/faces`).
-- [ ] **Dispositivos** `/devices`: tabla + alta (tipo cámara exige `rtsp_url`) — `GET/POST /devices`,
+- [x] **Dispositivos** `/devices`: tabla + alta (tipo cámara exige `rtsp_url`) — `GET/POST /devices`,
   `PATCH /devices/{id}`; **pestaña "Monitoreo" RF-35**: tarjetas por aula con estado en línea
   (verde/gris) desde `GET /devices/status` (público) con auto-refresh cada 30 s.
-- [ ] **Cursos y grupos** `/courses`: lista de cursos (`GET/POST /courses`) → detalle de curso con
+- [x] **Cursos y grupos** `/courses`: lista de cursos (`GET/POST /courses`) → detalle de curso con
   sus grupos (`GET /courses/{id}/groups?semester=` — **Bloque 11: cada grupo trae `semester_label`,
   `capacity` y `enrolled_count`**), crear grupo (docente+aula+**cupo, 40 por defecto**: selects de
   `/teachers` y `/rooms`) → detalle de grupo con BLOQUES horarios (tabla semanal **LUN-VIE**,
   crear/patch/delete con detección de choque RF-06 mostrando el 409 del backend como toast).
-- [ ] **Matrículas** `/enrollments`: selector curso→grupo (`GET /courses` + `GET /courses/{id}/groups`)
+- [x] **Matrículas** `/enrollments`: selector curso→grupo (`GET /courses` + `GET /courses/{id}/groups`)
   + listar/alta/quitar alumnos (`GET/POST/DELETE /groups/{id}/students`, autocomplete de estudiantes).
   **Bloque 11 (R8):** el alta puede responder 409 con mensajes claros ("Grupo lleno 40/40",
   "ya está matriculado en el grupo B", "el horario se cruza con …"); el listado trae
@@ -245,15 +245,15 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   horario, contador de horas libres y alta de bloque con solo grupos del ciclo).
 
 ### F3 - Asistencia y calendario (1 día) - RF-09, RF-10, RF-15, RF-21, RF-26, RF-34
-- [ ] **Backend (~30 min, aprobado):** `GET /attendance/sessions-today` →
+- [x] **Backend (~30 min, aprobado):** `GET /attendance/sessions-today` →
   `[{session_id, course_code, course_name, group_code, room_code, weekday, start_time, end_time,
   status, total_marcas}]` (sesiones de hoy abiertas+cerradas del docente o todas para admin).
-- [ ] **Asistencias** `/attendance`: tabla en vivo de HOY desde `GET /attendance/today` con filtros
+- [x] **Asistencias** `/attendance`: tabla en vivo de HOY desde `GET /attendance/today` con filtros
   curso/aula/estado (refresh manual + botón); **modal marca manual RF-21**: seleccionar sesión
   (de `sessions-today`) → estudiante (solo matriculados del grupo) → estado → `POST /sessions/{id}/manual-mark`;
   **rectificar RF-15**: acción de fila con dialog motivo → `PATCH /attendance/{id}/rectify`;
   botón "Cerrar sesión" (admin) → `POST /sessions/{id}/close` con resumen de faltas.
-- [ ] **Bloque 11 (backend ya listo):**
+- [x] **Bloque 11 (backend ya listo):**
   - **Día sin clase / paro:** `POST /sessions/{id}/cancel` y `POST /blocks/{id}/cancel-day`
     (body `{reason, fecha?}`; admin también pre-cancela fechas futuras).
   - **Sesiones por revisar (R4):** `GET /attendance/sessions-review` (cerradas con cero marcas;
@@ -263,16 +263,16 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
     (solo admin/docente; el estado de la fila pasa a "Falta justificada", FJ).
   - **Plazo de rectificación:** el backend responde 403 a docentes fuera de los 7 días
     (`rectify_days`); la UI puede ocultar la acción en filas antiguas y mostrar el motivo.
-- [ ] **Feriados** `/calendar/holidays`: lista + alta/baja — `GET/POST /holidays`, `DELETE /holidays/{id}`;
+- [x] **Feriados** `/calendar/holidays`: lista + alta/baja — `GET/POST /holidays`, `DELETE /holidays/{id}`;
   **Bloque 11:** botón "Cargar feriados nacionales del año" → `POST /holidays/national?year=`
   (o body `{year}`) y "Paro por rango" → `POST /holidays/range` `{desde, hasta, descripcion,
   omitir_fines_de_semana}` → chip con `{creados, omitidos, sesiones_canceladas}`.
-- [ ] **Justificaciones** `/calendar/justifications`: lista filtrable por alumno + alta
+- [x] **Justificaciones** `/calendar/justifications`: lista filtrable por alumno + alta
   (rango fechas, motivo, curso opcional, documento URL) — `GET/POST /justifications`, `DELETE /justifications/{id}`.
   **Bloque 11 (R6):** la respuesta de alta trae `faltas_afectadas` (mostrarlo en el toast) y el
   docente está obligado a elegir curso; eliminar revierte las faltas (confirmar con dialog).
   **F4.1:** el campo "documento URL" se complementa con adjunto PDF/JPG/PNG (subida por backend).
-- [ ] **Parámetros** `/calendar/settings`: formulario semestre/bloque/tolerancia/**ventana de
+- [x] **Parámetros** `/calendar/settings`: formulario semestre/bloque/tolerancia/**ventana de
   apertura (early_open_minutes), rectify_days, dpi_min_sessions y fechas del semestre
   (semester_start/end)** — `GET/PATCH /settings` (aviso: "aplica a sesiones siguientes, nunca
   retroactivo" RF-34; validación cliente: aviso < límite; inicio < fin).
@@ -310,15 +310,14 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 > Decisión 1 revisada: el estudiante SÍ entra a la app. El backend YA expone
 > `GET /attendance/me` (Bloque 6b del PLAN-BACKEND: solo rol estudiante, filtros
 > ?desde=&hasta=, devuelve curso, grupo, estado, marked_at, method y correct_reason).
-- [ ] Ruta `​/me` (o `/my-attendance`) FUERA de `/admin` (otro guard: solo rol estudiante;
-  el panel admin/docente sigue con roleGuard) con layout propio simple.
-- [ ] Pantalla: lista de asistencias del alumno (curso, grupo, fecha/franja, badge de estado
+- [x] Rutas `/me` y `/my-attendance` dentro de `/admin`, con `navGuard` solo para el rol estudiante (reutiliza el layout con sidebar y cierre de sesión).
+- [x] Pantalla: lista de asistencias del alumno (curso, grupo, fecha/franja, badge de estado
   asistio/tardanza/falta con colores Tabla 8, método facial/manual) + filtro de rango de fechas.
   **Bloque 11:** la respuesta trae `is_justified` → badge propio para la **falta justificada (FJ)**
   (no cuenta para el 30 %); añadir una tarjeta de **DPI por curso** con `GET /attendance/me/dpi`
   (porcentaje, nivel alerta/límite, sesiones planificadas y faltas restantes).
-- [ ] Mostrar `correct_reason` si la marca fue rectificada (RF-15 visible para el alumno).
-- [ ] El estudiante no puede navegar a `/admin` (authGuard y roleDocente ya lo bloquean;
+- [x] Mostrar `correct_reason` si la marca fue rectificada (RF-15 visible para el alumno).
+- [x] El estudiante no puede navegar a `/admin` (authGuard y roleDocente ya lo bloquean;
   verificar la redirección de login para rol estudiante → `/me` y no a `/admin/dashboard`).
 - **Entregable:** el estudiante entra con su cuenta del BD (código o correo), ve SU historial
   y sus alertas DPI siguen llegando por correo (RF-24) sin cambio en el backend.
@@ -403,20 +402,20 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 > **Limitación del backend detectada:** `camaras_activas` cuenta las cámaras con `is_active`, no las que están en línea (`streams_caidos` siempre 0). El SSE solo trae ids y similitud, sin nombre ni curso; el frontend los completa con peticiones extra.
 
 ### F5 (diseño original) - Dashboard en vivo (1 día) - RF-13, RF-35, PLAN §5
-- [ ] `DashboardApi`: `GET /dashboard/summary` → las tarjetas reales (asistencias/tardanzas/
+- [x] `DashboardApi`: `GET /dashboard/summary` → las tarjetas reales (asistencias/tardanzas/
   ausencias con %, cámaras activas, alertas DPI) con auto-refresh 30 s. **Bloque 11:** la tarjeta
   DPI distingue `en_riesgo` (≥ 20 %) de `alertas_dpi` (> 30 %, inhabilitación) y hay un
   **banner/contador `sessions_to_review`** que enlaza a la pantalla de sesiones por revisar (F3).
-- [ ] **Activity-feed con SSE real** (reemplaza el `setInterval`):
+- [x] **Activity-feed con SSE real** (reemplaza el `setInterval`):
   `new EventSource(\`${api}/dashboard/live?access_token=${token}&room_id=...\`)`
   evento `verdict` → feed con nombre/código/similitud/veredicto (colores Tabla 8);
   `onerror` → reconexión con backoff y banner "En vivo / Reconectando…";
   cerrar en `onDestroy` (sin fugas).
-- [ ] **hourly-chart**: `GET /stats/hourly` (serie total por hora, misma estética Chart.js actual,
+- [x] **hourly-chart**: `GET /stats/hourly` (serie total por hora, misma estética Chart.js actual,
   selector Hoy con `day=` para Ayer).
-- [ ] **distribution-chart**: `GET /stats/distribution` (dona con asistio/tardanza/falta/sin_registro).
-- [ ] **student-list**: consume `GET /attendance/today` (ya con F3).
-- [ ] Tarjeta "Cámaras activas" enlaza a `/devices` (pestaña Monitoreo RF-35).
+- [x] **distribution-chart**: `GET /stats/distribution` (dona con asistio/tardanza/falta/sin_registro).
+- [x] **student-list**: consume `GET /attendance/today` (ya con F3).
+- [x] Tarjeta "Cámaras activas" enlaza a `/devices` (pestaña Monitoreo RF-35).
 - **Entregable:** el dashboard refleja la BD y el feed muestra los veredictos REALES del
   bucle de cámaras (verificable con `simulate_camera.py` + `simulate_esp32.py` corriendo).
 
@@ -425,7 +424,7 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 > `/audit` (`features/audit`, solo admin): tabla paginada de `GET /audit-log` con filtros acción, entidad, rol de quien actuó y fecha (en la URL) y diálogo con los valores anterior y nuevo en JSON. Specs: `reports-api.spec.ts`.
 
 ### F6 (diseño original) - Reportes, importación OCR y bitácora (½-1 día; F6b/F6c aparte) - RF-16, RF-07, RF-32
-- [ ] **Reportes** `/reports`: filtros desde/hasta + curso (opcional) + botones
+- [x] **Reportes** `/reports`: filtros desde/hasta + curso (opcional) + botones
   "Excel" / "PDF" → `GET /reports/attendance.xlsx|pdf` con `responseType: 'blob'` +
   descarga vía `URL.createObjectURL` (respeta el `filename` del Content-Disposition);
   docente ve solo SUS grupos (el backend ya filtra).
@@ -437,7 +436,7 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   tabla editable y confirmación transaccional con resumen).
 - [x] **Importar nómina de alumnos** en `/students` (RF-02/RF-03/RF-08): implementado en
   F6c (diálogo de 3 pasos, correo generado, matrícula opcional y errores por fila).
-- [ ] **Bitácora** `/audit` (admin): tabla paginada `GET /audit-log` con filtros
+- [x] **Bitácora** `/audit` (admin): tabla paginada `GET /audit-log` con filtros
   action/entity/entity_id/actor/**actor_role**/since (backend ya los soporta) + visor de
   old/new_value (JSON); la respuesta trae `actor_name` y `actor_role` para la columna "Quién".
   **Bloque 11:** aquí se ven las acciones nuevas (sesión cancelada/revisada, justificación,
@@ -532,159 +531,148 @@ confirmación se habilitó. No se confirmó para no crear cuentas de prueba;
 `students-import.dialog.spec.ts` verifica el cuerpo de `POST
 /students/import-confirm` (incluido `group_id` opcional).
 
-### F7 - DISPOSITIVOS REALES: cámara + ESP32 (1-1.5 días) — guía completa de armado
-> Orden: primero la CÁMARA (solo configuración de red, sin soldar nada),
-> luego el ESP32 (hardware). Todo queda monitoreado en `/devices` (RF-35, F2).
+### F7 - Dispositivos reales: armado, instalación y puesta en marcha (única tarea pendiente: la prueba con el hardware)
 
-#### 7A. Cámara Hikvision PoE (RF-17) — SOLO software y red
-**¿Se descarga el programa del link que me pasaste (iVMS-4200)?** SÍ conviene, pero NO
-es estrictamente obligatorio. Lo imprescindible es **SADP Tool** (viene dentro de iVMS-4200
-o se descarga aparte, búsqueda "SADP tool Hikvision"): es el que DESCUBRE la cámara en la red,
-la ACTIVA (primer uso: define usuario/contraseña) y le pone IP fija. iVMS-4200 añade vista
-en vivo y gestión cómoda desde Windows — recomendado para la tesis (capturas de pantalla).
+> Todo el software (frontend y backend) está terminado y probado con simuladores. Este apartado reúne, en un solo
+> lugar, lo necesario para armar y conectar los equipos reales: red, cámara Hikvision, nodo ESP32, instalación
+> de programas en Windows, configuración del código y verificación. Reemplaza las guías sueltas que había en F7,
+> F8 y en el PLAN-BACKEND §4.
 
-1. **Cableado:** cámara → puerto **PoE+** del TP-Link LS108GP con cable Cat6 (datos+energía
-   en un solo cable). PC también al switch. La cámara y tu PC en la MISMA red.
-2. **Instalar SADP/iVMS-4200** en Windows y abrir: la cámara aparece como "Inactive".
-3. **Activar:** definir contraseña fuerte (GUÁRDALA: va dentro del `rtsp_url`) — p. ej. `Fareas2026*`.
-4. **IP fija** desde SADP: p. ej. `10.14.5.11` (máscara/gateway de tu red) → la cámara reinicia.
-5. **Verificar web:** navegador a `http://10.14.5.11` → login admin → ver imagen en vivo.
-6. **URL RTSP** (la que va a la BD): SUB-STREAM recomendado (menos CPU):
-   `rtsp://admin:Fareas2026*@10.14.5.11:554/Streaming/Channels/102`
-7. **Probar sin backend:** `python scripts/test_rtsp.py "rtsp://..."` → muestra 1 frame.
-8. **Registrar en BD** (ya hay 6 cámaras del seed; actualiza la del aula):
-   `UPDATE device SET rtsp_url='rtsp://...', ip_address='10.14.5.11' WHERE device_key='cam-lab305';`
-9. **Verificación final:** backend arriba → `/devices` Monitoreo la muestra EN LÍNEA tras el
-   primer frame; persona enfrente de la cámara → marca en `/attendance` + LED del ESP32 (7B).
+#### 7.1 Materiales y arquitectura
 
-#### 7B. ESP32 + anillo NeoPixel 16 + buzzer (RF-25, RF-27…RF-29, RF-33)
-**Materiales:** ESP32 DevKit (30 pines) · anillo WS2812B 16 LEDs · buzzer ACTIVO 5 V ·
-resistencia 330–470 Ω · condensador electrolítico 1000 µF (≥6.3 V) · jumpers hembra-hembra ·
-cable USB con DATOS · protoboard (opcional).
+| Equipo | Función |
+|---|---|
+| Cámara Hikvision PoE | Ve la puerta del aula; el backend lee su stream RTSP y reconoce rostros |
+| Switch TP-Link LS108GP (PoE+) | Alimenta la cámara y conecta la PC por cable de red |
+| PC con Windows 11 | Corre PostgreSQL, el backend (FastAPI), el reconocimiento facial y sirve el frontend |
+| ESP32 DevKit (30 pines) + anillo NeoPixel WS2812B de 16 LED + buzzer activo 5 V | Nodo de la puerta: muestra el veredicto con color y sonido |
+| Router WiFi 2.4 GHz | El ESP32 solo usa 2.4 GHz y debe estar en la misma red que la PC |
 
-**Cableado (con el ESP32 DESCONECTADO de USB):**
+Flujo: **cámara → (RTSP) → backend → reconoce y registra → (WebSocket) → ESP32 → LED y buzzer**. El navegador ve el
+resultado en el dashboard por SSE. La cámara y el ESP32 son independientes: la asistencia se registra aunque el ESP32 esté apagado.
 
-| Del | Al | Nota |
+#### 7.2 Programas que se instalan en Windows
+
+| Programa | Para qué | Notas |
 |---|---|---|
-| Anillo 5V (VCC) | VIN/5V del ESP32 | alimentado por el USB |
-| Anillo GND | GND del ESP32 | común |
-| Anillo DIN | **GPIO 13** vía resistencia 330–470 Ω | en serie, acorta el cable de datos |
-| Condensador 1000 µF | entre 5V y GND del anillo | banda larga (++) a 5V — protege picos |
-| Buzzer + | **GPIO 26** | ⚠️ actualizado en el Bloque 11: GPIO 12 es pin de ARRANQUE del ESP32 y colgaba el boot. Si el buzzer es de 5 V "duro": transistor 2N2222 (base 1 kΩ a GPIO26) |
-| Buzzer − | GND | |
+| PostgreSQL 17 | Base de datos `fareas` | Ya instalado; aplicar `001_schema.sql`, `002_seed.sql` y los `0NN_*.sql` posteriores |
+| Python 3.13 y el entorno `back-fareas\.venv` | Backend | `pip install -r requirements.txt` (incluye onnxruntime, OpenCV, RapidOCR) |
+| Node.js (con fnm) | Compilar Angular | `npm install` y `npm run build` |
+| **SADP Tool** (viene con iVMS-4200) | Descubrir, activar y fijar la IP de la cámara | Es el único imprescindible; iVMS-4200 añade vista en vivo para capturas de la tesis |
+| **Arduino IDE 2.x** | Cargar el firmware al ESP32 | Driver **CP210x** (Silicon Labs) o CH340 si el puerto COM no aparece |
+| `cloudflared` | Túnel público para la sustentación | `winget install Cloudflare.cloudflared` |
 
-**Software en la PC:**
-1. **Arduino IDE 2.x** (arduino.cc). Boards Manager → URL de Espressif:
-   `https://espressif.github.io/arduino-esp32/package_esp32_index.json` → instalar
-   **"esp32 by Espressif Systems"**. Placa: **DOIT ESP32 DEVKIT V1**. Si el puerto COM no
-   aparece: driver CP210x (Silicon Labs).
-2. **Library Manager:** instalar `Adafruit NeoPixel` y `WebSockets` (de Markus Sattler / Links2004).
+Arduino IDE → Preferencias → *URLs del gestor de placas*: `https://espressif.github.io/arduino-esp32/package_esp32_index.json`.
+Gestor de placas: instalar **esp32 by Espressif Systems**; placa **DOIT ESP32 DEVKIT V1**. Gestor de bibliotecas:
+`Adafruit NeoPixel`, `WebSockets` (Markus Sattler / Links2004) y `ArduinoJson` **7.x**.
 
-**Firmware (`fareas_nodo.ino`)** — habla EXACTAMENTE el protocolo del backend:
+#### 7.3 Red (hacerlo primero)
 
-```cpp
-#include <WiFi.h>
-#include <WebSocketsClient.h>
-#include <Adafruit_NeoPixel.h>
+1. Cable Cat6: cámara → puerto **PoE+** del switch; PC → otro puerto del switch (o del router, si el switch cuelga de él).
+2. Todos los equipos en la misma subred. Anota la subred real (`ipconfig` en la PC); los ejemplos usan `192.168.1.x`.
+3. En el router, **reserva una IP fija (DHCP) para la PC** (p. ej. `192.168.1.50`). El firmware del ESP32 apunta a esa IP.
+4. Marca la red de la PC como **Privada** (Configuración → Red e Internet → propiedades de la red). Con perfil Público, Windows bloquea las conexiones entrantes.
+5. Firewall de Windows (PowerShell **como administrador**), solo una vez:
+   `New-NetFirewallRule -DisplayName "Fareas API 8000" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow -Profile Private`
 
-const char* WIFI_SSID = "TU_RED";
-const char* WIFI_PASS = "TU_CLAVE";
-// token = DEVICE_TOKEN_SECRET del .env del backend
-const char* WS_HOST = "192.168.1.XX";   // IP de la PC con el backend
-const uint16_t WS_PORT = 8000;
-const char* WS_PATH = "/api/v1/ws/devices?token=COPIA_DEVICE_TOKEN_SECRET";
-const char* DEVICE_ID = "esp32-lab305";  // device.device_key en la BD
+#### 7.4 Cámara Hikvision (RF-17)
 
-#define LED_PIN 13
-#define BUZZ_PIN 26   // Bloque 11: GPIO12 es pin de arranque (bootstrapping)
-#define LED_COUNT 16
+1. Abre **SADP**: la cámara aparece como *Inactive*. Actívala con una contraseña fuerte (guárdala) y fija su IP en tu subred
+   (p. ej. `192.168.1.64`), con la máscara y la puerta de enlace de tu red.
+2. Verifica en el navegador `http://<ip-camara>` (usuario `admin`) que se ve la imagen.
+3. URL RTSP del **sub-stream** (menos CPU, suficiente para reconocer):
+   `rtsp://admin:CLAVE@192.168.1.64:554/Streaming/Channels/102`.
+   Si la clave tiene caracteres especiales, codifícalos (`@` → `%40`, `#` → `%23`, `:` → `%3A`).
+4. Prueba sin el backend: `python scripts\test_rtsp.py "rtsp://admin:CLAVE@192.168.1.64:554/Streaming/Channels/102"` debe mostrar un fotograma.
+5. En la web, **Catálogo → Dispositivos**, edita la cámara del aula (`cam-lab305`) y pega la URL RTSP y la IP. El listado la enmascara; solo el detalle del administrador la muestra completa.
+6. Coloca la cámara a la altura del rostro, de frente a la puerta, con luz frontal y sin contraluz. Un rostro pequeño o de perfil baja la similitud.
 
-Adafruit_NeoPixel ring(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
-WebSocketsClient ws;
-uint32_t lastBeat = 0;
+#### 7.5 Nodo ESP32 (RF-25, RF-27…RF-29, RF-33)
 
-void mostrar(const char* color, int beeps, int ms, int segundos) {
-  uint32_t c = ring.Color(0,0,0);
-  if (!strcmp(color,"verde"))    c = ring.Color(0,180,0);
-  if (!strcmp(color,"amarillo")) c = ring.Color(220,140,0);
-  if (!strcmp(color,"rojo"))     c = ring.Color(200,0,0);
-  if (!strcmp(color,"azul"))     c = ring.Color(0,60,200);
-  ring.fill(c); ring.show();
-  for (int i=0;i<beeps;i++){ digitalWrite(BUZZ_PIN,HIGH); delay(ms); digitalWrite(BUZZ_PIN,LOW); delay(120); }
-  delay(segundos*1000);
-  ring.clear(); ring.show();                 // vuelve a reposo
-}
+Conexión con el ESP32 **desconectado del USB**:
 
-void onEvent(WStype_t type, uint8_t* payload, size_t len) {
-  if (type == WStype_CONNECTED) {
-    enviarHello();                            // Bloque 11: el hello va AQUÍ
-  }
-  if (type == WStype_TEXT) {
-    StaticJsonDocument<384> doc;
-    if (deserializeJson(doc, payload, len)) return;
-    if (!strcmp(doc["type"],"verdict"))
-      mostrar(doc["color"], doc["buzzer"]=="beep_2"?2:doc["buzzer"]=="beep_1"?1:4,
-              doc["buzzer"]=="tono_denegado"?600:120, doc["seconds"]|3);
-    Serial.printf("[WS] %s\n", (char*)payload);
-  }
-}
+| Desde | Hasta | Nota |
+|---|---|---|
+| Anillo 5V (VCC) | VIN / 5V del ESP32 | Lo alimenta el USB |
+| Anillo GND | GND del ESP32 | Tierra común |
+| Anillo DIN | **GPIO 13**, a través de una resistencia de 330–470 Ω | En serie y lo más cerca posible del anillo |
+| Condensador 1000 µF | Entre 5V y GND del anillo | Pata larga (+) a 5V; evita picos al encender |
+| Buzzer (+) | **GPIO 26** | No uses el GPIO 12: es pin de arranque y el ESP32 no inicia. Si el buzzer exige más corriente: transistor NPN 2N2222 con resistencia de base de 1 kΩ al GPIO 26 |
+| Buzzer (−) | GND | |
 
-void setup() {
-  Serial.begin(115200);
-  pinMode(BUZZ_PIN, OUTPUT);
-  ring.begin(); ring.setBrightness(60); ring.clear(); ring.show();
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  while (WiFi.status() != WL_CONNECTED) { delay(400); Serial.print("."); }
-  ws.begin(WS_HOST, WS_PORT, WS_PATH);
-  ws.onEvent(onEvent);
-  ws.setReconnectInterval(5000);
-}
+Cable USB **con datos** (no solo de carga). Brillo del anillo limitado a 60 en el firmware para que no sobrecargue el USB.
 
-void enviarHello() {  // Bloque 11: al CONECTAR, no en setup()
-  String hello = String("{\"type\":\"hello\",\"device_id\":\"") + DEVICE_ID + "\",\"mac\":\"" + WiFi.macAddress() + "\"}";
-  ws.sendTXT(hello);                          // presentación RF-33
-}
+Firmware: `back-fareas\firmware\fareas_nodo\fareas_nodo.ino` (abrir la carpeta `fareas_nodo` en Arduino IDE). Edita solo el bloque de constantes del inicio:
 
-void loop() {
-  ws.loop();
-  if (millis() - lastBeat > 30000) {          // latido cada 30 s
-    lastBeat = millis();
-    ws.sendTXT("{\"type\":\"heartbeat\"}");
-  }
-}
+| Constante | Valor |
+|---|---|
+| `WIFI_SSID`, `WIFI_PASS` | Tu red de **2.4 GHz** |
+| `SERVER_HOST` | La IP fija de la PC (p. ej. `192.168.1.50`) |
+| `SERVER_PORT` | `8000` |
+| `DEVICE_TOKEN` | Exactamente el `DEVICE_TOKEN_SECRET` del `.env` (si tiene símbolos, codifícalos en URL) |
+| `DEVICE_ID` | El `device_key` del nodo en `/devices` (p. ej. `esp32-lab305`) |
+
+Placa *DOIT ESP32 DEVKIT V1* → seleccionar el puerto COM → *Subir*. Si no sube, mantén pulsado **BOOT** al iniciar la carga. El monitor serie (115200) debe mostrar la IP del WiFi y `[WS] conectado`.
+El firmware no se pudo compilar en este entorno (no hay Arduino IDE): se probó el protocolo con `scripts\simulate_esp32.py`, pero la primera compilación real es parte de la prueba con el hardware.
+
+Veredictos (Tabla 8): verde + 1 pitido (asistió) · amarillo + 2 pitidos (tardanza) · rojo + tono largo de 700 ms (no matriculado en esa aula) · azul sin sonido (desconocido o sin clase activa).
+
+#### 7.6 Configuración del backend para producción (`back-fareas\.env`)
+
+| Variable | Valor |
+|---|---|
+| `ENVIRONMENT` | `production` (desactiva `/docs`) |
+| `DEVICE_TOKEN_SECRET` | Una cadena larga y propia; **no dejes el valor de ejemplo**. Debe coincidir con el firmware |
+| `JWT_SECRET_KEY` | Una cadena larga y aleatoria propia |
+| `FRONTEND_DIST_DIR` | `../dist/fareas/browser` (el backend sirve Angular en el mismo origen) |
+| `R2_ENABLED`, `R2_*` | `true` con las claves del bucket privado `fareas-assets` (fotos de enrolamiento, adjuntos y fotos de perfil) |
+| `MAIL_ENABLED`, `MAIL_*` | `true` con la cuenta Gmail y su **contraseña de aplicación** (credenciales temporales, OTP y alertas DPI) |
+| `CORS_ORIGINS`, `FRONTEND_BASE_URL` | Origen público (el del túnel) si se usa |
+
+Y en la base de datos: cada aula con cámara necesita su dispositivo `camara` (con `rtsp_url`) y su dispositivo `esp32` (con el `device_key` del firmware), ambos activos y en la **misma aula** que el horario.
+
+#### 7.7 Puesta en marcha
+
 ```
-(Añadir `#include <ArduinoJson.h>` — instalar también la librería **ArduinoJson**.)
+cd C:\Users\USUARIO\OneDrive\Documentos\DWeb\angular\fareas
+npm run build
+cd back-fareas
+.venv\Scripts\fastapi run --host 0.0.0.0 --port 8000
+```
 
-**Registro y red:**
-- El device_key DEBE existir: el seed trae `esp32-lab305` (o créalo en `/devices` → tipo ESP32).
-- **Firewall de Windows** para que el ESP32 alcance tu API (requiere permiso del usuario;
-  en F7 se pide aprobación y se ejecuta):
-  `netsh advfirewall firewall add rule name="Fareas API 8000" dir=in action=allow protocol=TCP localport=8000`
-- **Checklist de verificación:** 1) `simulate_esp32.py` verde/beep en consola; 2) grabar el
-  ESP32 y ver `hello_ack` en el monitor serie; 3) `GET /devices/status` lo muestra EN LÍNEA
-  (RF-35); 4) video/entrada con alumno enrolado → LED verde + 1 beep y marca en `/attendance`;
-  5) desconectar USB → EN LÍNEA pasa a FUERA DE LÍNEA en ≤150 s (90 latido + 60 scheduler).
-- **Tono completo (Tabla 8):** verde+beep_1 · amarillo+beep_2 · rojo+tono_denegado (600 ms)
-  · azul = animación de reposo **sin beeps** (el backend manda `buzzer:"ninguno"`; el sketch
-  hace fade simple).
-- **Red (Bloque 11):** reservar **IP fija por DHCP** para la PC del backend (la IP del ESP32
-  cambia de red; el `WS_HOST` del firmware debe seguir siendo válido) y usar WiFi de **2.4 GHz**
-  (el ESP32 no soporta 5 GHz).
+- `--host 0.0.0.0` es obligatorio: sin él el servidor solo escucha en `127.0.0.1` y el ESP32 no puede conectarse.
+- La aplicación queda en `http://<ip-de-la-pc>:8000` (misma red) con la API en `/api/v1`.
+- Acceso externo para la sustentación: `cloudflared tunnel --url http://localhost:8000` imprime una URL `https://….trycloudflare.com`. Cambia en cada ejecución. El túnel sirve la web y el SSE; el ESP32 sigue conectándose por la red local.
 
-### F8 - Producción y demo de tesis (½ día) - (par con Bloque 10 del backend)
-- [x] `src/environments/environment.ts` (la configuración de producción) usa `apiUrl: '/api/v1'` (mismo origen, sin CORS);
-  el de desarrollo sigue en `environment.development.ts`. Sin variables `R2_*` en Angular.
-- [x] `ng build` (producción) → `dist/fareas/browser`. Solo queda el aviso de presupuesto inicial (633 kB frente a 600 kB).
-- [x] Backend: `app/frontend.py` sirve los estáticos y hace fallback a `index.html` para las rutas de Angular, sin tocar
-  `/api/v1`, `/docs` ni `/openapi.json`. Se activa con `FRONTEND_DIST_DIR=../dist/fareas/browser` en el `.env`
-  (`tests/test_frontend_mount.py`, 5 pruebas; verificado contra el build real).
-- [ ] Arranque final: `fastapi run` con `ENVIRONMENT=production` (sin /docs) y `R2_ENABLED=true` con las claves en el entorno.
-- [ ] Acceso externo: **Cloudflare Tunnel** (`cloudflared tunnel --url http://localhost:8000`)
-  → URL pública para la sustentación.
-- [ ] **Guion de demo (10 min):** login admin → parámetros → crear curso/grupo/bloque (F2) →
-  importar horario (PDF/foto) y nómina de alumnos (F6b/F6c) → matricular (F2) → enrolar rostro por webcam (F4) →
-  cámara/ESP32 en la puerta (F7) → dashboard en vivo con SSE (F5) → marca manual y
-  rectificación (F3) → reporte PDF (F6) → bitácora (F6).
+#### 7.8 Prueba con el hardware (lo único pendiente)
+
+1. **Sin equipos:** `python scripts\simulate_esp32.py esp32-lab305` y `python scripts\simulate_camera.py` con la web abierta: el dashboard muestra el veredicto y el simulador pinta el color.
+2. **Cámara:** `/devices` → *Monitoreo*: la cámara pasa a **En línea** unos segundos después de abrir el stream; si se corta, vuelve a *Fuera de línea* (≤ 1 min). El dashboard cuenta «Cámaras activas».
+3. **ESP32:** el monitor serie muestra `[WS] conectado`; `/devices` lo marca **En línea**. Al desconectar el USB pasa a *Fuera de línea* en ≤ 150 s.
+4. **Extremo a extremo:** un alumno enrolado en `/faces` y matriculado en un grupo con clase en ese momento se para frente a la cámara → LED verde y un pitido, la marca aparece en `/attendance` y el feed del dashboard la muestra. Un alumno enrolado pero no matriculado en esa clase → LED rojo. Alguien sin enrolar → azul.
+5. **Cierre de la clase:** al terminar el bloque, el sistema cierra la sesión, genera las faltas y envía las alertas DPI correspondientes.
+
+Si algo falla:
+
+| Síntoma | Causa probable |
+|---|---|
+| El ESP32 no conecta (`[WS] desconectado` en bucle) | El backend escucha solo en `127.0.0.1` (falta `--host 0.0.0.0`), firewall o red en perfil Público, IP de la PC distinta, token o `device_key` distintos |
+| WebSocket cierra con 4401 / 4404 | Token incorrecto / `device_key` no existe como ESP32 activo |
+| La cámara no pasa a *En línea* | URL RTSP mal escrita o clave sin codificar, IP fuera de la subred, la cámara aún inactiva en SADP |
+| Reconoce pero no registra asistencia | No hay clase en esa aula y hora (el bloque debe tener `room_id` y la sesión abrirse), alumno no matriculado, feriado |
+| Alumno legítimo sale «desconocido» | Enrolamiento con malas fotos: repetir con 4–5 tomas de frente, buena luz y sin lentes oscuros |
+| El ESP32 reinicia al iniciar | Buzzer en GPIO 12 (usar GPIO 26) o cable USB sin potencia suficiente |
+| El anillo parpadea o muestra colores erráticos | Falta la resistencia en DIN, el condensador, o la tierra común |
+
+#### 7.9 Guion de demo (10 min)
+
+Ingresar como admin → parámetros → crear curso/grupo/bloque → importar horario (PDF o foto) y nómina de alumnos → matricular → enrolar un rostro por webcam → cámara y ESP32 en la puerta → dashboard en vivo → marca manual y rectificación → reporte PDF → bitácora → ingresar como estudiante y como docente para mostrar sus menús.
+
+### F8 - Producción (par con el Bloque 10 del backend) - **✅ LISTO**
+- [x] `src/environments/environment.ts` (producción) usa `apiUrl: '/api/v1'`; el de desarrollo sigue en `environment.development.ts`. Sin variables `R2_*` en Angular.
+- [x] `npm run build` genera `dist/fareas/browser`; solo queda el aviso de presupuesto inicial (633 kB frente a 600 kB).
+- [x] `back-fareas/app/frontend.py` sirve los estáticos con fallback a `index.html` (`FRONTEND_DIST_DIR`, `tests/test_frontend_mount.py`).
+- [x] Arranque, túnel público y guion de demo: documentados en F7 (7.7 y 7.9).
 
 ---
 

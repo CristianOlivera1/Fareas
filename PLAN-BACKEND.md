@@ -756,39 +756,16 @@ lista bajo demanda, marcar leída, marcar todas, estado vacío y navegación al
 evento.
 
 ### Bloque 10 - Calidad y demo final (1–2 días) - **se ejecuta DESPUÉS de los Bloques 11, 13, 14 y 15**
-- [ ] Tests pytest (`fareas_test`); motor y auth con prioridad.
-- [ ] Producción simple: `fastapi run` + Cloudflare Tunnel; el build de Angular se sirve desde el propio FastAPI (`app/frontend.py`, activado con `FRONTEND_DIST_DIR`; un solo origen, sin CORS) ✅. Activar `R2_ENABLED=true` con las claves en el entorno y el bucket privado.
-- [ ] README final con diagrama, protocolo ESP32 y guion de demo de tesis.
+- [x] Suite pytest completa (motor, auth, catálogo, OCR, portal, matriz de roles…) contra la base `fareas`.
+- [x] Producción simple: `fastapi run` + Cloudflare Tunnel; el build de Angular se sirve desde el propio FastAPI (`app/frontend.py`, activado con `FRONTEND_DIST_DIR`; un solo origen, sin CORS) ✅. Las variables de producción están en `PLAN-FRONTEND.md` F7 (7.6).
+- [x] README: protocolo ESP32, scripts de simulación y puesta en marcha; el guion de demo está en `PLAN-FRONTEND.md` F7 (7.9).
 - **Entregable:** demo end-to-end: PDF/foto → horario y nómina → matrícula → enrolamiento → video/entrada real → asistencia → reportes.
 
 ---
 
-## 4. Dispositivos REALES que tienes (cámara, ESP32, LED, buzzer)
+## 4. Dispositivos reales (cámara, ESP32, LED y buzzer)
 
-### 4.1 Cámara Hikvision PoE (RF-17)
-1. **Conexión física:** cámara → puerto PoE+ del TP-Link LS108GP con cable Cat6 (un solo cable: datos + energía).
-2. **Descubrir su IP:** herramienta **SADP** de Hikvision (Windows). La cámara viene por defecto en `192.168.1.64` con usuario `admin` y contraseña que se define al activarla (guárdala).
-3. **IP fija:** desde SADP o la web de la cámara, pon una IP del rango de tu red, p. ej. `10.14.5.11` (coincide con el seed).
-4. **URL RTSP** (la que va en `device.rtsp_url`):
-   - Stream principal: `rtsp://admin:CONTRASEÑA@10.14.5.11:554/Streaming/Channels/101`
-   - **Sub-stream (RECOMENDADO para el pipeline: menos CPU):** `.../Channels/102` (~640×480).
-5. **Probar sin backend:** `python scripts/test_rtsp.py` (lo creo en el Bloque 5) - abre el stream y muestra 1 frame.
-6. Registro en BD: `UPDATE device SET rtsp_url='...', ip_address='...' WHERE device_key='cam-lab305';` (yo lo hago cuando me pases IP/contraseña).
-
-### 4.2 ESP32 + anillo NeoPixel WS2812B + buzzer (RF-25, RF-27…RF-29, RF-33)
-- **Cableado:**
-  - Anillo NeoPixel (16 LEDs): `VCC→5V` (USB del ESP32), `GND→GND`, `DATA→GPIO 13` con **resistencia 330–470 Ω** en serie y un condensador 1000 µF entre 5V y GND (buena práctica).
-  - Buzzer activo 5V: `+→GPIO 26` (**⚠️ actualizado en el Bloque 11: era GPIO 12, que es pin de arranque del ESP32 y colgaba el boot**; para un buzzer pequeño de 3.3 V puede ser directo; si es de 5 V real, usa un transistor NPN 2N2222 con resistencia de base 1 kΩ) y `−→GND`.
-  - **Firmware (corrección Bloque 11):** el `hello` se envía en el evento `WStype_CONNECTED` (no en `setup()`), y se reserva **IP fija (DHCP)** para la PC del backend; el ESP32 solo usa WiFi de 2.4 GHz.
-- **Firmware (Arduino IDE):** librerías `WiFi.h`, `WebSocketsClient` (Links2004) y `Adafruit_NeoPixel`.
-  - Conecta a `ws://IP-DE-TU-PC:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET del .env>`.
-  - Envía `{"type":"hello","device_id":"esp32-lab305"}` (**debe coincidir con `device.device_key`** de la BD) y `{"type":"heartbeat"}` cada 30 s.
-  - Interpreta los comandos `verdict`: color y beeps según la Tabla 8 (verde+1 beep / amarillo+2 beeps / rojo+tono sostenido / azul animación en reposo).
-- **Red:** el ESP32 y tu PC deben estar en la misma LAN (router del aula) y el **firewall de Windows debe permitir el puerto 8000** (avísame y te preparo el comando exacto con permiso).
-- **Simulador primero:** `scripts/simulate_esp32.py` prueba todo el protocolo desde la PC antes de tocar el hardware.
-
-### 4.3 Orden recomendado de integración con hardware
-1. Bloque 5 con MP4 (sin cámara) → 2. cámara real con `test_rtsp.py` → 3. Bloque 7 con `simulate_esp32.py` → 4. ESP32 físico → 5. puerta real del aula.
+El armado, la instalación de programas en Windows, la configuración del `.env`, el firmware (`firmware/fareas_nodo/fareas_nodo.ino`) y la lista de verificación están en `PLAN-FRONTEND.md` → **F7**. Los scripts `test_rtsp.py`, `simulate_camera.py` y `simulate_esp32.py` siguen en `scripts/`.
 
 ---
 
@@ -836,8 +813,8 @@ Convención única de estados en todo el sistema: `asistio | tardanza | falta | 
 
 La matriz por pantalla está en `PLAN-FRONTEND.md` §7. Pendientes del lado backend:
 
-- [ ] Limpieza periódica de `refresh_token`/`password_otp` expirados y política de retención de `audit_log`.
-- [ ] Test parametrizado de permisos: endpoint × rol (admin/docente/estudiante) esperando 200/403.
+- [x] Limpieza periódica (cada 6 h) de `refresh_token` vencidos (7 días de gracia) o revocados hace más de 30 días y de `password_otp` vencidos hace más de un día: `services/maintenance.py`. La bitácora `audit_log` no se borra automáticamente (evidencia de auditoría).
+- [x] Test parametrizado de permisos: `tests/test_role_matrix.py` recorre 25 endpoints de lectura con admin, docente y estudiante (y sin token). Corrigió un fallo real: `/dashboard/summary` y `/stats/*` aceptaban a estudiantes.
 
 ---
 
@@ -848,3 +825,8 @@ La matriz por pantalla está en `PLAN-FRONTEND.md` §7. Pendientes del lado back
 - **Decisión de privacidad:** la foto de perfil es independiente del enrolamiento facial. La foto biométrica nunca se reutiliza como avatar: el consentimiento (Ley 29733) cubre solo el reconocimiento, el bucket es privado y solo la ve el administrador en `/faces`.
 - **Frontend servido por FastAPI** (`app/frontend.py`, `FRONTEND_DIST_DIR`): estáticos más fallback a `index.html`; `/api/v1`, `/docs` y `/openapi.json` quedan intactos. `tests/test_frontend_mount.py` (5).
 - **Pendiente:** mostrar la foto de los demás usuarios en listados (alumnos, matrículas, dashboard) exige que esos endpoints devuelvan `avatar_url`; hoy ahí se muestran iniciales.
+
+### Cambios de la revisión final (2026-10-23)
+- **Estado de las cámaras (RF-35):** `camera_loop` marca `device.is_online` y `last_heartbeat` al abrir el stream, lo refresca cada 30 s y lo apaga si la fuente se cae; al arrancar deja todas en fuera de línea. `GET /dashboard/summary` cuenta ahora cámaras realmente en línea (`tests/test_camera_status.py`).
+- **Alcance del docente en riesgo:** `GET /dpi/at-risk` y las alertas del dashboard usan los alumnos matriculados en **sus grupos** del periodo, no todos los del curso (`tests/test_dpi_teacher_scope.py`).
+- **Enrolamiento facial:** solo se guarda en R2 la primera foto como portada (las demás se descartan tras generar el embedding). Al reenrolar se borran el registro y la foto anteriores; antes quedaban acumuladas (`tests/test_enroll_replace.py`). La validación de consistencia compara cada foto con el promedio de las demás (≥ 0.40).
