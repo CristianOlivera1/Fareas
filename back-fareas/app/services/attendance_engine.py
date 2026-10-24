@@ -313,6 +313,10 @@ async def cerrar_sesion(
                        "needs_review": True, "cerrada_por": "sistema" if actor is None else "admin"},
             ip_address=ip,
         )
+
+        from app.services.notification_center import notificar_sesion_por_revisar
+
+        await notificar_sesion_por_revisar(db, session=session, actor=actor)
         await db.commit()
         return {"session_id": session.id, "status": "needs_review", "faltas": 0, "alertas": 0}
 
@@ -405,6 +409,12 @@ async def cancelar_sesion(
         new_value={"reason": session.cancel_reason, "fecha": str(session.session_date)},
         ip_address=ip,
     )
+
+    from app.services.notification_center import notificar_sesion_cancelada
+
+    await notificar_sesion_cancelada(
+        db, session=session, actor=actor, reason=session.cancel_reason or ""
+    )
     await db.commit()
     return {"session_id": session.id, "status": "cancelada", "reason": session.cancel_reason}
 
@@ -446,6 +456,12 @@ async def cancelar_dia(
             entity_id=sesion.id,
             new_value={"reason": sesion.cancel_reason, "fecha": str(fecha), "anticipada": True},
             ip_address=ip,
+        )
+
+        from app.services.notification_center import notificar_sesion_cancelada
+
+        await notificar_sesion_cancelada(
+            db, session=sesion, actor=actor, reason=sesion.cancel_reason or ""
         )
         await db.commit()
         return {"session_id": sesion.id, "status": "cancelada", "anticipada": True}

@@ -12,6 +12,7 @@ from app.tables import (
     AttendanceRecord,
     AttendanceSession,
     AttendanceStatus,
+    Course,
     CourseGroup,
     Enrollment,
     Justification,
@@ -120,6 +121,13 @@ async def crear(
                    "faltas_afectadas": afectadas},
         ip_address=ip,
     )
+
+    from app.services.notification_center import notificar_justificacion_creada
+
+    curso = await db.get(Course, course_id) if course_id else None
+    await notificar_justificacion_creada(
+        db, actor=actor, just=just, student=student, course=curso, afectadas=afectadas
+    )
     await db.commit()
     return just, afectadas
 
@@ -148,6 +156,9 @@ async def eliminar(
         db.add(falta)
         revertidas += 1
 
+    from app.services.notification_center import notificar_justificacion_eliminada
+
+    await notificar_justificacion_eliminada(db, actor=actor, just=just, revertidas=revertidas)
     await db.delete(just)
     await audit(
         db, actor, action="justificacion_eliminada", entity="justification",

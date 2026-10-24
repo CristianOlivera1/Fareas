@@ -2,12 +2,15 @@ import html
 import logging
 from email.message import EmailMessage
 from email.utils import formataddr
+from pathlib import Path
 
 from aiosmtplib import SMTP
 
 from app.core.config import get_settings
 
 logger = logging.getLogger("fareas.emailer")
+_EMAIL_LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "logo-full.png"
+_EMAIL_LOGO_CID = "fareas-logo"
 
 _PRIMARY = "#155DFC"
 _CANVAS = "#F6F9FF"
@@ -28,7 +31,7 @@ def _wrap(*, preheader: str, title: str, content_html: str) -> str:
 <tr><td align="center">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background-color:#FFFFFF;border:1px solid {_BORDER};border-radius:12px;">
 <tr><td style="padding:28px 28px 0;">
-<p style="margin:0;font-family:{_FONT};font-size:20px;font-weight:700;color:{_TEXT};">Fareas<span style="color:{_PRIMARY};">.</span></p>
+<img src="cid:{_EMAIL_LOGO_CID}" alt="Fareas" width="200" height="45" style="display:block;width:200px;max-width:100%;height:auto;border:0;">
 <p style="margin:4px 0 0;font-family:{_FONT};font-size:12px;color:{_MUTED};">Facultad de Informática - UNAMBA</p>
 </td></tr>
 <tr><td style="padding:20px 28px 0;">
@@ -80,6 +83,15 @@ async def send_email(to: str, subject: str, body: str, html_body: str | None = N
     message.set_content(body)
     if html_body:
         message.add_alternative(html_body, subtype="html")
+        html_part = message.get_payload()[-1]
+        html_part.add_related(
+            _EMAIL_LOGO_PATH.read_bytes(),
+            maintype="image",
+            subtype="png",
+            cid=f"<{_EMAIL_LOGO_CID}>",
+            disposition="inline",
+            filename="fareas-logo.png",
+        )
 
     try:
         client = SMTP(
@@ -163,6 +175,43 @@ async def send_otp(to: str, code: str, purpose: str = "recover") -> bool:
     html_body = _wrap(
         preheader=f"Tu código es {safe_code}",
         title=title,
+        content_html=content_html,
+    )
+    return await send_email(to, subject, plain, html_body)
+
+async def send_notification_email(
+    to: str, full_name: str, title: str, message: str, link: str | None = None
+) -> bool:
+    subject = f"Fareas UNAMBA - {title}"
+    safe_name = html.escape(full_name)
+    safe_title = html.escape(title)
+    safe_message = html.escape(message)
+    base = get_settings().FRONTEND_BASE_URL.rstrip("/")
+    url = None
+    if link:
+        url = link if link.startswith(("http://", "https://")) else f"{base}{link}"
+    plain = (
+        f"Hola {full_name},\n\n"
+        f"{message}\n\n"
+        + (f"Abre el sistema: {url}\n\n" if url else "")
+        + "- Sistema Fareas, Facultad de Informática UNAMBA"
+    )
+    cta = (
+        f'<p style="margin:20px 0 0;"><a href="{html.escape(url)}" '
+        'style="display:inline-block;padding:11px 18px;background-color:#155DFC;'
+        'color:#FFFFFF;text-decoration:none;border-radius:8px;font-weight:600;">'
+        "Ver en Fareas</a></p>"
+        if url
+        else ""
+    )
+    content_html = (
+        f'<p style="margin:0;">Hola <strong>{safe_name}</strong>,</p>'
+        f'<p style="margin:12px 0 0;white-space:pre-line;">{safe_message}</p>'
+        f"{cta}"
+    )
+    html_body = _wrap(
+        preheader=safe_title,
+        title=safe_title,
         content_html=content_html,
     )
     return await send_email(to, subject, plain, html_body)

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
+from app.frontend import mount_frontend, resolve_dist_dir
 from app.routers import (
     attendance,
     audit,
@@ -18,6 +19,8 @@ from app.routers import (
     enrollment_faces,
     health,
     me,
+    notifications,
+    profile,
     reports,
     ws_devices,
 )
@@ -34,7 +37,7 @@ async def lifespan(app: FastAPI):
 
     iniciar_scheduler(intervalo_segundos=60)
     iniciar_bucle_camaras()
-    print("[Fareas] Scheduler RF-26 + bucle de camaras activos")
+    print("[Fareas] Scheduler RF-26 + notificaciones + bucle de camaras activos")
 
     yield
 
@@ -90,6 +93,13 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router, prefix=settings.API_V1_PREFIX)
     app.include_router(reports.router, prefix=settings.API_V1_PREFIX)
     app.include_router(me.router, prefix=settings.API_V1_PREFIX)
+    app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
+    app.include_router(profile.router, prefix=settings.API_V1_PREFIX)
+
+    dist_dir = resolve_dist_dir(settings.FRONTEND_DIST_DIR)
+    if dist_dir is not None:
+        reserved = (settings.API_V1_PREFIX.strip("/"), "docs", "redoc", "openapi.json")
+        mount_frontend(app, dist_dir, reserved)
 
     return app
 

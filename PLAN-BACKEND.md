@@ -21,6 +21,7 @@
 | **Bloque 1 completado** | `app/main.py` + `pyproject.toml` (entrypoint `fastapi dev`), `database.py` (SQLModel async), `core/deps.py`, `tables.py` (14 entidades SQLModel con enums nativos), scripts `test_rtsp.py` y `simulate_esp32.py`. Verificado con servidor uvicorn real: `GET /api/v1/health` → `{"database":"ok","users":9}`. Ruff limpio |
 | **Cambio de contraseña con OTP (2026-10-22)** | Flujo de 3 pasos (`/auth/change-password/otp` → `/otp/verify` → `/change-password`), servicio `services/otp.py` con propósito + cooldown/TTL/intentos, `token_version` para invalidar JWT (columna ya consolidada en `001`). Suite: **92 passed** (sin `test_vision.py`) |
 | **OCR de fotos y nómina (2026-10-22)** | Bloques 14/15 implementados: horario desde PDF escaneado o foto con RapidOCR, periodo/ciclo, docente/aula por fila e importación idempotente; nómina de alumnos con preview editable, correo generado y confirmación fila por fila. Suite: **122 passed** (sin `test_vision.py`) |
+| **Notificaciones por rol (2026-10-23)** | Tabla `notification`, bandeja en el sistema con contador y cola de correo con reintentos; avisos de DPI, justificaciones, cancelaciones, revisiones, rectificaciones y dispositivos. Suite: **178 passed** (sin `test_vision.py`) |
 
 ### Decisiones definitivas
 
@@ -224,7 +225,7 @@ completa sin `test_vision.py`: **92 passed**.
 - [x] `ai/embedder.py`: ArcFace `w600k_r50.onnx` con alineación `estimateAffinePartial2D` de los 5 landmarks → 112×112 → 512-d L2-normalizado (equivale a `cv2.SimilarityTransform` de contrib, sin instalar opencv-contrib).
 - [x] `ai/recognizer.py`: `FaceGallery` en memoria (embeddings vigentes, recarga al enrolar) + coseno vectorizado NumPy; `ai/runtime.py` carga los modelos UNA vez por proceso (imports perezosos: onnxruntime pesa ~2 s).
 - [x] `ai/pipeline.py`: `process_frame()` → veredicto Tabla 8 (verde/beep_1 asistió, amarillo/beep_2 tardanza, ROJO/tono_denegado para conocido NO matriculado, azul sin clase/desconocido) + cooldown por alumno + `as_ws_command()` listo para el ESP32 (Bloque 7).
-- [x] `routers/enrollment_faces.py` + `services/faces.py`: 3–5 fotos base64 → exige exactamente 1 rostro por foto, consistencia intra-alumno por pares (mín 0.55), PROMEDIO normalizado a `face_embedding` (`REAL[512]`), portada en `storage/`, reemplazo del embedding anterior (`is_current`), auditoría RF-32 y recarga de galería en caliente.
+- [x] `routers/enrollment_faces.py` + `services/faces.py`: 3–5 fotos base64 → exige exactamente 1 rostro por foto, consistencia intra-alumno (cada foto frente al promedio de las demás ≥ 0.40; antes se exigía 0.55 entre todos los pares y rechazaba a una misma persona con poses distintas: medido con el video demo, solo el 13 % de los grupos de 3–5 fotos pasaba, frente al 99 % con la regla nueva), PROMEDIO normalizado a `face_embedding` (`REAL[512]`), portada en `storage/`, reemplazo del embedding anterior (`is_current`), auditoría RF-32 y recarga de galería en caliente.
 - [x] `scripts/simulate_camera.py`: MP4 en bucle como puerta del aula; ventana con cajas coloreadas o `--save video_anotado.mp4` para la tesis.
 - [x] Tests `tests/test_vision.py` + `tests/test_enrollment.py`: NMS/IoU, galería, veredictos Tabla 8 con dobles, E2E de la API RF-04 y 2 smokes con los MODELOS REALES + video de demo.
 - Nota: el bucle 2 fps por aula activa con `asyncio.Queue` se mueve al Bloque 6 (ahí vive el motor de sesiones que lo consume; en B5 el script de demo procesa directo).
@@ -714,9 +715,49 @@ correo generado, duplicados y matrícula opcional. Suite completa sin
 multipart: la nómina devolvió una fila con correo generado y el horario un
 bloque, ambos con 200.
 
+### Bloque 16 - Notificaciones por rol en el sistema y por correo (2026-10-23) - RF-24 - **✅ COMPLETADO Y VERIFICADO**
+
+> Las alertas DPI ya salían por correo. Faltaba una bandeja real para admin,
+> docente y estudiante, con lógica por evento y sin duplicar correos ni avisos.
+
+**Modelo y endpoints**
+
+- `notification` (`db/012_notifications.sql`; también consolidada en
+  `001_schema.sql`): `user_id`, `kind`, `title`, `message`, `link`, `severity`,
+  `read_at`, `dedupe_key`, estado de correo e intentos. FK con `ON DELETE CASCADE`.
+- `services/notification_center.py`: alta de avisos por usuario o por rol,
+  deduplicación por usuario y helpers por evento. `despachar_correos_pendientes`
+  envía en lote con `send_notification_email`, reintenta hasta 3 veces y separa
+  el envío del request.
+- `GET /notifications/unread-count` (para el polling de 10 s del cliente),
+  `GET /notifications?limit=&before_id=&unread_only=` (se pide al abrir la
+  bandeja, sin polling), `POST /notifications/{id}/read` y
+  `POST /notifications/read-all`. Cada endpoint filtra por el usuario autenticado.
+- APScheduler tiene un job independiente `despacho_correos` para no bloquear el
+  cierre de sesiones; `FRONTEND_BASE_URL` arma el CTA absoluto de los correos.
+
+**Matriz de eventos**
+
+| Rol | Eventos |
+|---|---|
+| Estudiante | Alerta/límite DPI, justificación registrada o eliminada, clase cancelada, rectificación de asistencia |
+| Docente | Sesión cerrada sin marcas, clase cancelada, justificación de su curso, alumno que supera el límite DPI |
+| Admin | Sesión cerrada sin marcas, justificación registrada por docente, dispositivo sin conexión, alumno que supera el límite DPI |
+
+**Correo:** DPI (flujo existente), cancelación de clase, sesión por revisar y
+rectificación. La supervisión al admin y los avisos de justificación quedan solo
+en la bandeja para no generar ruido.
+
+**Verificación (2026-10-23):** `tests/test_notifications.py` (6) cubre aislamiento
+por usuario, contador/listado, lectura individual y masiva, justificaciones,
+cancelación, revisión, rectificación y cola de correo. Suite completa sin
+`test_vision.py`: **178 passed**. En el navegador real: badge, polling de 10 s,
+lista bajo demanda, marcar leída, marcar todas, estado vacío y navegación al
+evento.
+
 ### Bloque 10 - Calidad y demo final (1–2 días) - **se ejecuta DESPUÉS de los Bloques 11, 13, 14 y 15**
 - [ ] Tests pytest (`fareas_test`); motor y auth con prioridad.
-- [ ] Producción simple: `fastapi run` + Cloudflare Tunnel; el build de Angular se sirve desde el propio FastAPI con `app.frontend("dist/fareas/browser")` (un solo origen, sin CORS). Activar `R2_ENABLED=true` con las claves en el entorno y el bucket privado.
+- [ ] Producción simple: `fastapi run` + Cloudflare Tunnel; el build de Angular se sirve desde el propio FastAPI (`app/frontend.py`, activado con `FRONTEND_DIST_DIR`; un solo origen, sin CORS) ✅. Activar `R2_ENABLED=true` con las claves en el entorno y el bucket privado.
 - [ ] README final con diagrama, protocolo ESP32 y guion de demo de tesis.
 - **Entregable:** demo end-to-end: PDF/foto → horario y nómina → matrícula → enrolamiento → video/entrada real → asistencia → reportes.
 
@@ -785,7 +826,7 @@ Convención única de estados en todo el sistema: `asistio | tardanza | falta | 
 | 3 | ~~6, 7~~ ✅ | ~~Motor de asistencia + protocolo ESP32~~ — COMPLETADO (el ESP32 físico se conecta cuando lo armes) |
 | 4 | ~~8, 9~~ ✅ | ~~Dashboard + reportes + OCR~~ — COMPLETADO |
 | 5 | **11 (reglas de negocio)** ✅ | Semestre, cupos, transferencias, justificaciones, DPI con aviso único, seguridad y reportes por grupo — COMPLETADO (ver §3, Bloque 11) |
-| 6 | **13** | R2 (fotos/adjuntos) — fotos listas; adjunto de justificación pendiente |
+| 6 | **13** ✅ | R2 (fotos/adjuntos) — COMPLETADO: fotos de enrolamiento, adjunto de justificación (UI en F4.1) y foto de perfil (Bloque 16) |
 | 7 | **14 + 15** ✅ | OCR de horario (foto/PDF escaneado) + importación de nómina de alumnos — COMPLETADO |
 | 8 | **10** | Calidad y demo final (README, demo E2E, tunnel) |
 
@@ -797,3 +838,13 @@ La matriz por pantalla está en `PLAN-FRONTEND.md` §7. Pendientes del lado back
 
 - [ ] Limpieza periódica de `refresh_token`/`password_otp` expirados y política de retención de `audit_log`.
 - [ ] Test parametrizado de permisos: endpoint × rol (admin/docente/estudiante) esperando 200/403.
+
+---
+
+## 10. Bloque 16 - Portal del estudiante, foto de perfil y servicio del frontend (2026-10-23) - ✅ COMPLETADO Y VERIFICADO
+
+- **Portal del estudiante** (`routers/me.py`, solo rol estudiante): `GET /me/schedule`, `/me/courses` y `/me/justifications`; `tests/test_student_portal.py` (7). Detalle de pantallas en `PLAN-FRONTEND.md` §8.
+- **Foto de perfil** (cualquier rol): `PUT /auth/me/avatar` (multipart) y `DELETE /auth/me/avatar`; `UserOut.avatar_url` en `/auth/login` y `/auth/me`. `services/avatars.py` valida que sea una imagen real (JPG/PNG/WEBP, hasta `AVATAR_MAX_UPLOAD_MB` = 5 y 25 Mpx), corrige la orientación, la recorta en cuadrado de 256 px y la guarda como JPEG sin metadatos EXIF en `avatars/{user_id}/{uuid}.jpg`. La URL firmada dura `AVATAR_URL_EXPIRE_SECONDS` (12 h). Auditoría `avatar_actualizado` / `avatar_eliminado`. BD: `db/011_avatar.sql` (`app_user.avatar_key`, ya consolidado en `001`). `tests/test_avatar.py` (7).
+- **Decisión de privacidad:** la foto de perfil es independiente del enrolamiento facial. La foto biométrica nunca se reutiliza como avatar: el consentimiento (Ley 29733) cubre solo el reconocimiento, el bucket es privado y solo la ve el administrador en `/faces`.
+- **Frontend servido por FastAPI** (`app/frontend.py`, `FRONTEND_DIST_DIR`): estáticos más fallback a `index.html`; `/api/v1`, `/docs` y `/openapi.json` quedan intactos. `tests/test_frontend_mount.py` (5).
+- **Pendiente:** mostrar la foto de los demás usuarios en listados (alumnos, matrículas, dashboard) exige que esos endpoints devuelvan `avatar_url`; hoy ahí se muestran iniciales.

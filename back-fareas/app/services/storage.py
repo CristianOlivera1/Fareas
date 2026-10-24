@@ -31,6 +31,10 @@ def justification_key(justification_id: int, extension: str) -> str:
     return f"justifications/{justification_id}/{uuid.uuid4().hex}{ext}"
 
 
+def avatar_key(user_id: int) -> str:
+    return f"avatars/{user_id}/{uuid.uuid4().hex}.jpg"
+
+
 def detect_document_type(data: bytes) -> tuple[str, str] | None:
     for signature, content_type, extension in _DOCUMENT_SIGNATURES:
         if data.startswith(signature):
@@ -58,7 +62,7 @@ class LocalStorage:
         if path.exists():
             await asyncio.to_thread(path.unlink)
 
-    async def url(self, key: str | None) -> str | None:
+    async def url(self, key: str | None, expires: int | None = None) -> str | None:
         return key
 
 
@@ -94,14 +98,14 @@ class R2Storage:
             Key=key,
         )
 
-    async def url(self, key: str | None) -> str | None:
+    async def url(self, key: str | None, expires: int | None = None) -> str | None:
         if not key or _is_external(key):
             return key
         return await asyncio.to_thread(
             self._client.generate_presigned_url,
             "get_object",
             Params={"Bucket": self.settings.R2_BUCKET_NAME, "Key": key},
-            ExpiresIn=self.settings.R2_PRESIGN_EXPIRE_SECONDS,
+            ExpiresIn=expires or self.settings.R2_PRESIGN_EXPIRE_SECONDS,
         )
 
 

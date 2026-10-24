@@ -166,8 +166,9 @@ nullable, más `v_today_attendance` con `LEFT JOIN room`) y
 `db/005_refresh_tokens.sql` (tabla `refresh_token` para las sesiones con
 refresh), `db/008_password_otp.sql` (tabla `password_otp` para los códigos de
 verificación), `db/009_justificacion_documento.sql` (columna
-`justification.document_key`) y `db/010_defaults_app_settings.sql` (DEFAULT de
-`app_settings`: umbral facial 0.55 y DPI 20/30). Quien ya los aplicó: borra su línea cuando todo
+`justification.document_key`), `db/010_defaults_app_settings.sql` (DEFAULT de
+`app_settings`: umbral facial 0.55 y DPI 20/30) y `db/012_notifications.sql`
+(tabla `notification` para la bandeja y la cola de correo). Quien ya los aplicó: borra su línea cuando todo
 el equipo los tenga, junto con el archivo.
 
 Lo que se revisa al actualizar: que una BD **vieja + ALTER** y una instalación
@@ -322,7 +323,7 @@ Toda escritura queda registrada en `audit_log` con actor, IP y valores antes/des
 ### Bloque 5 - enrolamiento facial (RF-04) y pipeline de visión
 
 - `POST /students/{id}/faces` - 3–5 fotos **base64** (JSON `{"photos": [...]}`).
-  Exige 1 rostro por foto y consistencia intra-alumno (mín. 0.55 por pares);
+  Exige 1 rostro por foto y consistencia intra-alumno (cada foto frente al promedio de las demás ≥ 0.40);
   guarda el PROMEDIO normalizado en `face_embedding` y la portada en R2 con URL
   firmada (Bloque 13; si R2 está desactivado, cae a `storage/` local).
 - `GET /students/{id}/faces` - estado de enrolamiento (admin y docente).

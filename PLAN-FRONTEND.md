@@ -1,6 +1,6 @@
 # PLAN DE IMPLEMENTACIÓN - FRONTEND FAREAS (Angular 21 + PrimeNG + Tailwind 4)
 
-> Complemento de `PLAN-BACKEND.md` (bloques 1-15 ✅). El backend ya expone TODOS los
+> Complemento de `PLAN-BACKEND.md` (bloques 1-16 ✅). El backend ya expone TODOS los
 > endpoints necesarios; este plan conecta la interfaz a datos reales por bloques,
 > cada uno terminando en algo navegable y verificable.
 > Principio rector: **profesional y técnico, no empresarial**. Sin SSR, sin PWA,
@@ -17,12 +17,17 @@
 | Mi perfil con OTP (2026-10-22) | `features/profile` → cambio guiado de 3 pasos (clave actual → código al correo → nueva clave), contador de reenvío y persistencia del token nuevo |
 | AuthService | signals `currentUser/isAuthenticated/isAdmin/isDocente/mustChangePassword`, rate-limit cliente, refresh tokens de 30 días (`/auth/refresh`) |
 | Interceptor | `core/interceptors/auth.ts` → ante 401 renueva con el refresh token y reintenta; si falla, limpia sesión y manda a `/login?reason=session_expired`; un 403 `must_change_password` lleva a `/auth/change-password` |
-| Layout admin | `layouts/admin` con Sidebar + Header funcionales (menú PLANO: Dashboard, Asistencias) |
-| Dashboard mock | 4 tarjetas, activity-feed con `setInterval`, hourly-chart, distribution-chart, student-list (todos con MOCK data) |
-| Asistencia mock | `features/attendance` con tabla estática |
+| Layout y menús por rol | `layouts/admin` con Sidebar agrupado y Header; `core/constants/nav.ts` define el menú de admin, docente y estudiante (§8) |
+| Dashboard en vivo (F5) | Tarjetas, gráficos y lista desde la API; actividad en tiempo real por SSE con reconexión |
+| Asistencias, calendario y parámetros (F3) | `features/attendance`, feriados, justificaciones (con adjunto) y parámetros conectados a la API |
+| Reportes y bitácora (F6) | `/reports` (Excel/PDF, registro del grupo, riesgo DPI) y `/audit` con filtros y detalle JSON |
+| Portal del estudiante y del docente (§8) | Inicio, horario, cursos, asistencias y justificaciones del estudiante; Mis grupos, horario y alumnos en riesgo del docente |
+| Foto de perfil (2026-10-23) | `shared/components/avatar`; `/profile` permite subir, cambiar y quitar la foto; se muestra en el sidebar |
+| Producción (F8) | `environment.ts` apunta a `/api/v1` y FastAPI sirve `dist/fareas/browser` con `FRONTEND_DIST_DIR` |
 | Cursos y matrículas REALES (F2, 2026-10-12) | `features/courses` (lista de cursos + detalle con grupos y grilla semanal) y `features/enrollments` (cupo 40, retiro y transferencia) conectados a la API |
 | Horarios por ciclo (F2b, 2026-10-22) | Cursos con ciclo I–X, filtro por ciclo y pestañas por ciclo en `/schedule`; el grupo hereda el ciclo del curso y los choques siguen siendo del periodo |
 | Importación OCR (F6b/F6c, 2026-10-23) | `/imports` importa horarios (PDF/foto, 3 pasos, tabla editable) y `/students` incorpora «Importar nómina» (diálogo 3 pasos, correo generado y matrícula opcional); ambos consumen los endpoints reales y son solo admin |
+| Centro de notificaciones (F4b, 2026-10-23) | Campanita en el header con contador cada 10 s, lista bajo demanda, marcar leída/todas y navegación al evento; cubre admin, docente y estudiante |
 | Host global de toasts (2026-10-12) | `app.html` incluye `<p-toast>`; sin él, TODOS los `toast.add()` de la app (errores 409 incluidos) quedaban invisibles |
 | Enrolamiento facial (F4, 2026-10-23) | `/faces` busca estudiantes, muestra estado y foto firmada, captura 3–5 fotos por webcam o archivos, exige consentimiento y permite eliminar el rostro; `/students` enlaza «Enrolar rostro» |
 | Build y tests OK | `ng build` pasa; `dist/fareas` generado. `ng test` 11/11 archivos, 47 pruebas (2026-10-23) |
@@ -354,7 +359,7 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   **Bloque 11 (R13, Ley 29733):** obligatorio un **checkbox de consentimiento** antes de enviar
   (sin `consent: true` el backend responde 422) y acción "Eliminar rostro" (admin) →
   `DELETE /students/{id}/faces` con dialog de confirmación (borra embeddings y el objeto local/R2).
-- [x] Manejo de errores del validador facial: 1 rostro por foto, consistencia ≥0.55,
+- [x] Manejo de errores del validador facial: 1 rostro por foto, consistencia de cada foto frente a las demás ≥0.40 (el mensaje indica qué foto reemplazar),
   duplicado → mensajes claros del backend en toasts.
 - [x] En `/students`: badge de enrolamiento + acción directa "Enrolar rostro".
 - **Verificación (2026-10-23):** `ng build` OK y `ng test` 11/11 archivos. La captura por webcam quedó implementada, pero no se probó con cámara física (el entorno no expone una); el flujo por archivos y el estado se validaron contra el backend real con un alumno temporal (creado y eliminado después).
@@ -365,12 +370,32 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 > El backend sube y firma; Angular **no** recibe credenciales R2 ni usa el SDK.
 - [x] **Enrolamiento:** mismas 3–5 fotos base64; `photo_url` sigue siendo el campo que consume
   `<img>`, ahora con URL firmada de 900 s. Si expira, recargar el estado (no cachear la URL). La UI ya lo consume así.
-- [ ] **Justificaciones:** input PDF/JPG/PNG ≤10 MB; después de crear la justificación,
-  `POST /justifications/{id}/document` (multipart); "Ver documento" usa la URL firmada;
-  eliminar la justificación borra el objeto. Se mantiene el campo URL externo por compatibilidad.
-- [ ] Manejo de 413 (tamaño), 415 (tipo), 422 (validación), 502/503 (R2) con mensajes claros.
-- [ ] **F8:** ninguna variable `R2_*` en Angular; el frontend solo conoce `apiUrl`.
+- [x] **Justificaciones:** el diálogo de alta incluye `app-file-drop` (PDF/JPG/PNG ≤10 MB) y sube el archivo con
+  `POST /justifications/{id}/document` tras crear la justificación (si falla, avisa y deja adjuntarlo después);
+  la tabla permite adjuntar, reemplazar y quitar el documento por fila; "Ver documento" usa la URL firmada.
+  Se mantiene el campo URL externo por compatibilidad.
+- [x] Manejo de errores (413, 415, 422, 503): se valida tipo y tamaño en el cliente y el detalle del backend se muestra en un aviso.
+- [x] **F8:** ninguna variable `R2_*` en Angular; el frontend solo conoce `apiUrl`.
 - **Entregable:** enrolar y adjuntar un documento desde la UI sin que el navegador vea credenciales del bucket.
+
+### F4b - Centro de notificaciones por rol (2026-10-23) - RF-24 - **✅ LISTO**
+> Backend: Bloque 16. La campanita vive en el header del layout compartido y
+> funciona para los tres roles; el contenido y los enlaces cambian según el rol
+> que generó el evento.
+- [x] `NotificationsApi` (`unreadCount`, `list`, `markRead`, `markAllRead`) y modelos
+  `AppNotification/NotificationList`.
+- [x] Contador con **polling de 10 s** (`interval` + `switchMap`, errores silenciosos);
+  la lista se pide **solo al abrir** la bandeja y al pulsar actualizar, sin polling.
+- [x] Panel con iconos/severidad por tipo, tiempo relativo, estado sin leer, carga,
+  error con reintento y vacío; botones «Marcar todas» y «Actualizar»; cierre por
+  clic fuera y Escape; enlace directo a Asistencias, Justificaciones, En riesgo o
+  Mis asistencias según el aviso.
+- [x] Badge con tope `99+`; se sincroniza al marcar leída/todas y al volver a abrir.
+- [x] Header reutiliza `<app-notifications-bell />` y elimina el badge fijo «1».
+- **Verificación (2026-10-23):** `ng build` OK, `ng test -- --watch=false`
+  **69/69**; en navegador: badge 2, lista de 3 avisos, marcar una → 1, marcar
+  todas → «Todo al día», aviso nuevo detectado por el polling y refresco manual
+  de la lista. Los avisos de prueba se borraron al terminar.
 
 ### F5 - Dashboard en vivo (2026-10-23) - **✅ LISTO (falta verificar con cámara real en F7)**
 > Tarjetas, banner y lista se refrescan cada 30 s (`DashboardApi.summary`, `AttendanceApi.today`); gráficos desde `GET /stats/hourly` (Hoy/Ayer, total por hora) y `GET /stats/distribution`; la tarjeta «Cámaras activas» enlaza a `/devices` solo para admin; banner ámbar con `sessions_to_review` que lleva a `/attendance`.
@@ -647,12 +672,13 @@ void loop() {
   (el ESP32 no soporta 5 GHz).
 
 ### F8 - Producción y demo de tesis (½ día) - (par con Bloque 10 del backend)
-- [ ] `environment.prod.ts` con `apiUrl: '/api/v1'` (mismo origen, sin CORS). Sin variables
-  `R2_*` en Angular: las URLs firmadas las entrega el backend.
-- [ ] `ng build --configuration production` → `dist/fareas/browser`.
-- [ ] Backend: montar los estáticos en `main.py` (`app.frontend()` pendiente del Bloque 10:
-  StaticFiles + fallback a `index.html` para rutas Angular) + `fastapi run` con
-  `ENVIRONMENT=production` (sin /docs) y `R2_ENABLED=true` con las claves en el entorno.
+- [x] `src/environments/environment.ts` (la configuración de producción) usa `apiUrl: '/api/v1'` (mismo origen, sin CORS);
+  el de desarrollo sigue en `environment.development.ts`. Sin variables `R2_*` en Angular.
+- [x] `ng build` (producción) → `dist/fareas/browser`. Solo queda el aviso de presupuesto inicial (633 kB frente a 600 kB).
+- [x] Backend: `app/frontend.py` sirve los estáticos y hace fallback a `index.html` para las rutas de Angular, sin tocar
+  `/api/v1`, `/docs` ni `/openapi.json`. Se activa con `FRONTEND_DIST_DIR=../dist/fareas/browser` en el `.env`
+  (`tests/test_frontend_mount.py`, 5 pruebas; verificado contra el build real).
+- [ ] Arranque final: `fastapi run` con `ENVIRONMENT=production` (sin /docs) y `R2_ENABLED=true` con las claves en el entorno.
 - [ ] Acceso externo: **Cloudflare Tunnel** (`cloudflared tunnel --url http://localhost:8000`)
   → URL pública para la sustentación.
 - [ ] **Guion de demo (10 min):** login admin → parámetros → crear curso/grupo/bloque (F2) →
@@ -712,10 +738,6 @@ la UI solo oculta botones con `@if (auth.isAdmin())`.
 ### 7.2 Pendientes del proyecto
 
 - `photo_url` y `document_url` guardan claves R2 en columnas llamadas «url»: documentarlo en el diccionario de datos.
-
-**Pendientes funcionales ya planeados pero sin construir**
-- `/reports` y `/audit` siguen como placeholder (F6) aunque el backend está listo.
-- Adjunto de justificación en la UI (F4.1) y producción (F8, `app.frontend()` en `main.py`).
 
 ---
 

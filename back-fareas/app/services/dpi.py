@@ -1,5 +1,5 @@
 import logging
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import text as sql_text
 from sqlmodel import select
@@ -75,9 +75,11 @@ async def procesar_alertas_cierre(db, session) -> int:
         )
     ).all()
 
+    from app.services.notification_center import notificar_dpi
     from app.services.notifications import send_dpi_alert
 
     enviadas = 0
+    procesadas = 0
     for fila in filas:
         sid = int(fila.student_id)
         percent = float(fila.absence_percent)
@@ -89,16 +91,25 @@ async def procesar_alertas_cierre(db, session) -> int:
         if not await marcar_enviado(db, sid, grupo.course_id, cfg.semester_label, nivel):
             continue
         alumno = await db.get(AppUser, sid)
-        if alumno is None or not alumno.email:
+        if alumno is None:
             continue
-        ok = await send_dpi_alert(
-            alumno.email, alumno.full_name, str(fila.course_code),
-            int(fila.sessions_held), int(fila.absences), percent,
-            float(cfg.dpi_limit_percent), nivel=nivel,
+        if alumno.email:
+            ok = await send_dpi_alert(
+                alumno.email, alumno.full_name, str(fila.course_code),
+                int(fila.sessions_held), int(fila.absences), percent,
+                float(cfg.dpi_limit_percent), nivel=nivel,
+            )
+            if ok:
+                enviadas += 1
+        await notificar_dpi(
+            db, student=alumno, course_id=int(grupo.course_id),
+            course_code=str(fila.course_code), level=nivel,
+            sessions=int(fila.sessions_held), absences=int(fila.absences),
+            percent=percent, semester=cfg.semester_label,
+            teacher_id=grupo.teacher_id,
         )
-        if ok:
-            enviadas += 1
-    if enviadas:
+        procesadas += 1
+    if enviadas or procesadas:
         await db.commit()
     return enviadas
 

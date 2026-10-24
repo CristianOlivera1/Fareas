@@ -43,6 +43,7 @@ class UserOut(BaseModel):
     full_name: str
     email: str
     must_change_password: bool
+    avatar_url: str | None = None
 
 class TokenPairResponse(BaseModel):
     access_token: str

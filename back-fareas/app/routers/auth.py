@@ -25,6 +25,7 @@ from app.schemas.auth import (
 )
 from app.services import otp
 from app.services.audit import audit
+from app.services.avatars import avatar_url
 from app.services.emailer import send_otp, send_password_changed_notice
 from app.services.refresh_tokens import (
     RefreshTokenError,
@@ -112,13 +113,14 @@ def _otp_http_error(exc: otp.OtpError) -> HTTPException:
         detail="El código expiró o no existe. Solicita uno nuevo.",
     )
 
-def _build_user_out(user: AppUser) -> UserOut:
+async def _build_user_out(user: AppUser) -> UserOut:
     return UserOut(
         id=user.id,
         role=user.role.value,
         full_name=user.full_name,
         email=user.email,
         must_change_password=user.must_change_password,
+        avatar_url=await avatar_url(user.avatar_key),
     )
 
 @router.post("/login", response_model=LoginResponse)
@@ -152,7 +154,7 @@ async def login(body: LoginRequest, request: Request, db: DbSession) -> LoginRes
         refresh_token=issued.refresh_token,
         expires_in=issued.expires_in,
         refresh_expires_in=issued.refresh_expires_in,
-        user=_build_user_out(user),
+        user=await _build_user_out(user),
     )
 
 @router.post("/refresh", response_model=TokenPairResponse)
@@ -208,7 +210,7 @@ async def logout_all(
 
 @router.get("/me", response_model=UserOut)
 async def me(user: CurrentUserPending) -> UserOut:
-    return _build_user_out(user)
+    return await _build_user_out(user)
 
 @router.post("/change-password/otp", response_model=ChangePasswordOtpResponse)
 async def request_change_password_otp(
