@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -6,6 +7,11 @@ from sqlalchemy import text as sql_text
 from sqlmodel import select
 
 from app.core.deps import DbSession, RequireRole
+from app.routers.courses import consultar_horario
+from app.services.report_data import CATALOGO, CONSTRUCTORES, ESTADOS, Filtros, construir_reporte
+from app.services.report_render import FORMATOS, nombre_archivo, renderizar
+from app.services.schedule_export import Opciones, exportar_horario
+from app.services.settings import semestre_vigente
 from app.services.exports import (
     excel_asistencia,
     excel_matriz_grupo,
@@ -270,4 +276,131 @@ async def reporte_riesgo_dpi(
         excel_riesgo_dpi(out, titulo_periodo=f"Nivel alerta ≥ {float(alerta):.0f}% · límite > {limite_f:.0f}%"),
         nombre_riesgo(datetime.now()),
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@router.get("/schedule/export")
+async def exportar_horario_general(
+    db: DbSession,
+    _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
+    format: Literal["pdf", "xlsx", "png"] = Query("pdf", description="Formato del archivo"),
+    semester: str | None = Query(None, max_length=40, description="Default: semestre vigente"),
+    cycle: int | None = Query(None, ge=1, le=10, description="Un ciclo; sin valor exporta todos"),
+    course_id: int | None = None,
+    teacher_id: int | None = None,
+    room_id: int | None = None,
+    show_teacher: bool = Query(True, description="Incluye el docente en cada celda"),
+    show_room: bool = Query(True, description="Incluye el aula en cada celda"),
+) -> StreamingResponse:
+    semestre = semester or await semestre_vigente(db)
+    filas = await consultar_horario(db, semestre, cycle, course_id, teacher_id, room_id)
+    if not filas:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No hay clases para exportar con esos filtros"
+        )
+    contenido, media_type, nombre = exportar_horario(
+        format, [fila.model_dump() for fila in filas], semestre, cycle,
+        Opciones(docente=show_teacher, aula=show_room),
+    )
+    return _respuesta(contenido, nombre, media_type)
+
+
+def _filtros_reporte(
+    desde: date | None, hasta: date | None, cycle: int | None, course_id: int | None,
+    group_id: int | None, teacher_id: int | None, room_id: int | None, status_csv: str | None,
+    q: str | None, only_risk: bool,
+) -> Filtros:
+    if desde and hasta and desde > hasta:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La fecha inicial no puede ser posterior a la final",
+        )
+    estados = [e.strip() for e in (status_csv or "").split(",") if e.strip()]
+    invalidos = [e for e in estados if e not in ESTADOS]
+    if invalidos:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Estado no válido: {', '.join(invalidos)}",
+        )
+    return Filtros(
+        desde=desde, hasta=hasta, cycle=cycle, course_id=course_id, group_id=group_id,
+        teacher_id=teacher_id, room_id=room_id, estados=estados, q=q, solo_riesgo=only_risk,
+    )
+
+
+def _exige_reporte(kind: str) -> None:
+    if kind not in CONSTRUCTORES:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reporte no encontrado")
+
+
+@router.get("/reports/catalog")
+async def catalogo_reportes(_user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE)) -> list[dict]:
+    return [
+        {
+            "key": r.clave, "title": r.titulo, "description": r.descripcion, "icon": r.icono,
+            "formats": list(r.formatos), "filters": list(r.filtros),
+        }
+        for r in CATALOGO
+    ]
+
+
+@router.get("/reports/preview")
+async def vista_previa_reporte(
+    db: DbSession,
+    user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
+    kind: str = Query(..., description="Reporte del catálogo"),
+    desde: date | None = None,
+    hasta: date | None = None,
+    cycle: int | None = Query(None, ge=1, le=10),
+    course_id: int | None = None,
+    group_id: int | None = None,
+    teacher_id: int | None = None,
+    room_id: int | None = None,
+    status_filter: str | None = Query(None, alias="status", description="Estados separados por coma"),
+    q: str | None = Query(None, max_length=80),
+    only_risk: bool = False,
+    limit: int = Query(8, ge=1, le=50),
+) -> dict:
+    _exige_reporte(kind)
+    filtros = _filtros_reporte(
+        desde, hasta, cycle, course_id, group_id, teacher_id, room_id, status_filter, q, only_risk
+    )
+    tabla = await construir_reporte(db, user, kind, filtros)
+    return {
+        "key": kind,
+        "title": tabla.titulo,
+        "description": tabla.descripcion,
+        "filters": [{"label": k, "value": v} for k, v in tabla.filtros],
+        "indicators": [{"label": i.etiqueta, "value": i.valor, "tone": i.tono} for i in tabla.indicadores],
+        "columns": [{"key": c.clave, "title": c.titulo, "align": c.alinear} for c in tabla.columnas],
+        "rows": [[{"value": c.valor, "tone": c.tono} for c in fila] for fila in tabla.filas[:limit]],
+        "total": len(tabla.filas),
+        "truncated": tabla.truncada,
+    }
+
+
+@router.get("/reports/export")
+async def exportar_reporte(
+    db: DbSession,
+    user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
+    kind: str = Query(..., description="Reporte del catálogo"),
+    format: Literal["pdf", "xlsx", "csv"] = Query("pdf"),
+    desde: date | None = None,
+    hasta: date | None = None,
+    cycle: int | None = Query(None, ge=1, le=10),
+    course_id: int | None = None,
+    group_id: int | None = None,
+    teacher_id: int | None = None,
+    room_id: int | None = None,
+    status_filter: str | None = Query(None, alias="status", description="Estados separados por coma"),
+    q: str | None = Query(None, max_length=80),
+    only_risk: bool = False,
+) -> StreamingResponse:
+    _exige_reporte(kind)
+    filtros = _filtros_reporte(
+        desde, hasta, cycle, course_id, group_id, teacher_id, room_id, status_filter, q, only_risk
+    )
+    tabla = await construir_reporte(db, user, kind, filtros)
+    return _respuesta(
+        renderizar(tabla, format), nombre_archivo(tabla, format, datetime.now()), FORMATOS[format][0]
     )

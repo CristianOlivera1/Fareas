@@ -897,3 +897,15 @@ La matriz por pantalla está en `PLAN-FRONTEND.md` §7. Pendientes del lado back
 - **Admin:** `GET /enrollment/package-letters` incluye la letra `A` cuando hay cursos del ciclo sin grupo, para poder matricular un ciclo recién cargado.
 - **Tests:** `tests/test_enrollment_center.py` cubre la selección (válidos, lleno, cruce, curso sin grupo, varios grupos, repetido, ventana cerrada) y la oferta con cursos pendientes.
 
+## 14. Exportar el horario general (2026-10-24) - ✅ COMPLETADO Y VERIFICADO
+- `GET /schedule/export?format=pdf|xlsx|png&semester&cycle&course_id&teacher_id&room_id&show_teacher&show_room`
+  (admin y docente). Reutiliza `consultar_horario` (extraída de `GET /schedule`).
+- `services/schedule_export.py`: `construir_rejilla` (paso de 60 o 30 min, carriles
+  para grupos solapados) y renderers Excel/PDF/PNG; PNG de varios ciclos en ZIP.
+- Tests `tests/test_schedule_export.py` (9).
+
+## 15. Cámara del dashboard y reportes profesionales (2026-10-24) - ✅ COMPLETADO Y VERIFICADO
+- **BD:** `db/013_camara_dashboard.sql` (`app_settings.live_room_id` → `room.id`, `ON DELETE SET NULL`; consolidado en `001`). `PATCH /settings` lo valida (aula existente y activa) y `GET /settings` lo devuelve.
+- **Reportes:** `GET /reports/catalog`, `GET /reports/preview` (indicadores + primeras filas) y `GET /reports/export?format=pdf|xlsx|csv` para `attendance`, `course-summary`, `student-summary` y `dpi-risk`. Filtros: `desde/hasta`, `cycle`, `course_id`, `group_id`, `teacher_id` (ignorado para docentes, que ven solo sus grupos), `room_id`, `status` (lista separada por comas), `q`, `only_risk`. Fechas invertidas o estados inválidos → 422; reporte desconocido → 404. El detalle se limita a 5 000 filas y lo indica.
+- Tests: `test_reports_catalog.py` (renderers, catálogo, todos los reportes × filtros × formatos contra el esquema real; los que dependen de una sesión «de hoy» se saltan en fin de semana) y `test_calendar_audit.py` (aula del dashboard).
+

@@ -784,6 +784,38 @@ la UI solo oculta botones con `@if (auth.isAdmin())`.
 
 ---
 
+### F6g - Exportar el horario general (2026-10-24) - **✅ LISTO**
+- Botón «Exportar» en `features/schedule/schedule-general` (admin y docente) que
+  abre `features/schedule/schedule-export`: formato PDF / Excel / PNG, periodo,
+  ciclo (uno o todos), mostrar docente y aula, y aplicar o no los filtros
+  actuales de la página.
+- Backend: `GET /schedule/export` (`routers/reports.py`, `services/schedule_export.py`).
+  La rejilla semanal se calcula una vez (clases de 2 h combinadas, grupos que se
+  solapan en columnas propias) y la dibujan openpyxl, reportlab y Pillow. Excel:
+  una hoja por ciclo + hoja «Lista»; PNG de varios ciclos se entrega en ZIP.
+  Sin clases devuelve 404.
+- Dashboard: «Actividad en tiempo real» muestra una sola cámara, la que se elige en
+  **Parámetros → Asistencia → Cámara del dashboard** (`app_settings.live_room_id`,
+  `db/013_camara_dashboard.sql`). Sin configurar usa la primera cámara activa; si
+  no hay cámaras activas lo indica. El stream SSE se abre filtrado por `room_id`.
+
+### F6h - Reportes profesionales (2026-10-24) - **✅ LISTO**
+- `features/reports`: catálogo a la izquierda (asistencia detallada, resumen por
+  curso y grupo, resumen por estudiante, riesgo de inasistencia, registro por grupo)
+  y, a la derecha, filtros del reporte elegido, **vista previa** (indicadores + 8
+  filas, con debounce) y descarga en **PDF / Excel / CSV**.
+- Filtros: periodo con atajos (hoy, semana, mes, últimos 30 días, periodo vigente,
+  personalizado), ciclo, curso, grupo, docente (solo admin), aula, estado
+  (asistió, tardanza, falta, justificada), estudiante (nombre/código) y «solo en
+  riesgo». Cada reporte solo muestra y envía los que admite.
+- El docente solo ve sus grupos (el backend lo fuerza por `cg.teacher_id`).
+- Backend: `GET /reports/catalog`, `/reports/preview`, `/reports/export`
+  (`services/report_data.py` construye la tabla; `services/report_render.py` la
+  dibuja en PDF con encabezado institucional, indicadores y «Página x de y», en
+  Excel con filtros, indicadores, colores y autofiltro, y en CSV con BOM UTF-8).
+  Los endpoints anteriores (`/reports/attendance.*`, `group-matrix`, `dpi-risk`)
+  se mantienen.
+
 ## 8. Estructura de menús por rol (2026-10-23) - **✅ IMPLEMENTADO**
 
 > Motivo: el estudiante veía una sola entrada y el docente heredaba menús de administración

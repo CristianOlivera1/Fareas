@@ -151,3 +151,19 @@ async def test_auditoria_solo_admin(client: AsyncClient, docente_headers: dict):
     doc_headers = docente_headers
     assert (await client.get(f"{API}/audit-log", headers=doc_headers)).status_code == 403
     assert (await client.get(f"{API}/audit-log")).status_code == 401
+
+
+async def test_aula_del_dashboard_se_configura_y_valida(client: AsyncClient, admin_headers: dict):
+    rooms = (await client.get(f"{API}/rooms", headers=admin_headers, params={"page_size": 1})).json()
+    room_id = rooms["items"][0]["id"]
+    try:
+        r = await client.patch(f"{API}/settings", headers=admin_headers, json={"live_room_id": room_id})
+        assert r.status_code == 200, r.text
+        assert r.json()["live_room_id"] == room_id
+        assert (await client.get(f"{API}/settings", headers=admin_headers)).json()["live_room_id"] == room_id
+
+        inexistente = await client.patch(f"{API}/settings", headers=admin_headers, json={"live_room_id": 999999})
+        assert inexistente.status_code == 422
+    finally:
+        limpiar = await client.patch(f"{API}/settings", headers=admin_headers, json={"live_room_id": None})
+        assert limpiar.json()["live_room_id"] is None

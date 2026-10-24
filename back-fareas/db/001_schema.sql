@@ -28,6 +28,7 @@ CREATE TABLE app_settings (
     dpi_min_sessions       INTEGER      NOT NULL DEFAULT 4,
     enrollment_start       DATE,
     enrollment_end         DATE,
+    live_room_id           INTEGER REFERENCES room(id) ON DELETE SET NULL,
     CONSTRAINT chk_dpi_levels     CHECK (dpi_alert_percent < dpi_limit_percent),
     CONSTRAINT chk_semester_dates CHECK (semester_start IS NULL OR semester_end IS NULL
                                          OR semester_start < semester_end),

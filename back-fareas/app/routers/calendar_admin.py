@@ -16,7 +16,7 @@ from app.services.justifications import crear as crear_justificacion
 from app.services.justifications import eliminar as eliminar_justificacion
 from app.services.settings import semesters_con_grupos
 from app.services.storage import detect_document_type, get_storage, justification_key
-from app.tables import AppSettings, AppUser, Course, Holiday, Justification, UserRole
+from app.tables import AppSettings, AppUser, Course, Holiday, Justification, Room, UserRole
 
 router = APIRouter(tags=["calendar"])
 logger = logging.getLogger("fareas.justifications")
@@ -411,6 +411,7 @@ def _settings_out(s: AppSettings) -> "SettingsOut":
         semester_end=str(s.semester_end) if s.semester_end else None,
         enrollment_start=str(s.enrollment_start) if s.enrollment_start else None,
         enrollment_end=str(s.enrollment_end) if s.enrollment_end else None,
+        live_room_id=s.live_room_id,
         block_minutes=s.block_minutes,
         late_tolerance_minutes=s.late_tolerance_minutes,
         early_open_minutes=s.early_open_minutes,
@@ -430,6 +431,7 @@ class SettingsOut(BaseModel):
     semester_end: str | None = None
     enrollment_start: str | None = None
     enrollment_end: str | None = None
+    live_room_id: int | None = None
     block_minutes: int
     late_tolerance_minutes: int
     early_open_minutes: int
@@ -466,6 +468,7 @@ class SettingsUpdate(BaseModel):
     semester_end: date | None = None
     enrollment_start: date | None = None
     enrollment_end: date | None = None
+    live_room_id: int | None = None
     block_minutes: int | None = Field(default=None, gt=0)
     late_tolerance_minutes: int | None = Field(default=None, ge=0)
     early_open_minutes: int | None = Field(default=None, ge=0, le=60)
@@ -500,12 +503,17 @@ async def update_settings(
     enrollment_end = data.get("enrollment_end", s.enrollment_end)
     if enrollment_start is not None and enrollment_end is not None and enrollment_start > enrollment_end:
         raise errors.DomainError("La matrícula debe empezar antes de terminar")
+    if data.get("live_room_id") is not None:
+        room = await db.get(Room, data["live_room_id"])
+        if room is None or not room.is_active:
+            raise errors.DomainError("El aula elegida para el dashboard no existe o está inactiva")
     old = {
         "semester_label": s.semester_label,
         "semester_start": str(s.semester_start) if s.semester_start else None,
         "semester_end": str(s.semester_end) if s.semester_end else None,
         "enrollment_start": str(s.enrollment_start) if s.enrollment_start else None,
         "enrollment_end": str(s.enrollment_end) if s.enrollment_end else None,
+        "live_room_id": s.live_room_id,
         "late_tolerance_minutes": s.late_tolerance_minutes,
         "early_open_minutes": s.early_open_minutes,
         "dpi_alert_percent": float(s.dpi_alert_percent),

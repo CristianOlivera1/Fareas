@@ -58,6 +58,7 @@ class AppSettings(SQLModel, table=True):
     dpi_min_sessions: int = 4
     enrollment_start: date | None = None
     enrollment_end: date | None = None
+    live_room_id: int | None = Field(default=None, foreign_key="room.id")
     face_match_threshold: Decimal = Field(default=Decimal("0.750"), max_digits=4, decimal_places=3)
     dpi_alert_percent: Decimal = Field(default=Decimal("20.00"), max_digits=5, decimal_places=2)
     dpi_limit_percent: Decimal = Field(default=Decimal("30.00"), max_digits=5, decimal_places=2)
