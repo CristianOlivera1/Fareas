@@ -62,7 +62,11 @@ async def list_audit_log(
 
     total = (await db.exec(count_stmt)).one()
     rows = (
-        await db.exec(stmt.order_by(AuditLog.created_at.desc()).offset(page.offset).limit(page.limit))
+        await db.exec(
+            stmt.order_by(AuditLog.created_at.desc().nullslast(), AuditLog.id.desc())
+            .offset(page.offset)
+            .limit(page.limit)
+        )
     ).all()
     items = [
         AuditEntryOut(

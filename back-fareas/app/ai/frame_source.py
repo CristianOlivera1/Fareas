@@ -6,7 +6,6 @@ from typing import Any
 import cv2
 import numpy as np
 
-
 os.environ.setdefault(
     "OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp|stimeout;5000000"
 )

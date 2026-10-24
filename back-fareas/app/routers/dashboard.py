@@ -13,6 +13,7 @@ from app.core.deps import DbSession, RequireRole
 from app.core.security import decode_access_token
 from app.database import SessionLocal
 from app.routers.dpi import TEACHER_SCOPE
+from app.services.course_groups import full_courses
 from app.services.camera_loop import todos_los_veredictos
 from app.tables import AppSettings, AppUser, UserRole
 
@@ -31,6 +32,7 @@ class Summary(BaseModel):
     alertas_dpi: int
     en_riesgo: int
     sessions_to_review: int
+    cursos_llenos: int = 0
     at: str
 
 async def _contar_marcas_hoy(db, teacher_id: int | None = None) -> dict:
@@ -120,6 +122,7 @@ async def summary(db: DbSession, user: RequireRole(UserRole.ADMIN, UserRole.DOCE
         alertas_dpi=alertas["limite"],
         en_riesgo=alertas["en_riesgo"],
         sessions_to_review=por_revisar,
+        cursos_llenos=len(await full_courses(db)) if docente_id is None else 0,
         at=datetime.now().isoformat(timespec="seconds"),
     )
 

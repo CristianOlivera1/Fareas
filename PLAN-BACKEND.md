@@ -867,3 +867,25 @@ La matriz por pantalla está en `PLAN-FRONTEND.md` §7. Pendientes del lado back
 - **Tests:** `tests/test_enrollment_center.py` (9: vista previa del paquete, parejas ok/fallidas/omitidas, grupo lleno, cruce de horario, códigos desconocidos, permisos, ventana cerrada por defecto, alta/cambio/retiro del estudiante, paquete del estudiante, ventana invertida) y la matriz de roles ampliada. Los alumnos de una tanda se procesan ordenados por código para que el reparto de los últimos cupos sea predecible.
 - **Nota de pruebas:** `test_no_abre_sesion_sin_docente_o_aula` dependía de que no hubiera ningún otro bloque real el lunes a las 08:05 (la base compartida tiene un horario real en esa hora); ahora comprueba solo la sesión de su propio escenario.
 - **Fuera de alcance (anotado):** aprobación de solicitudes, límite de créditos o de cursos por estudiante, prerrequisitos de la malla, lista de espera para cursos llenos y notificación por correo al matricular.
+
+---
+
+## 13. Bloque 19 - Cursos sin grupo y grupo inicial implícito (2026-10-24) - ✅ COMPLETADO Y VERIFICADO
+
+> Sin cambios de esquema: un grupo ya podía existir sin docente; lo que cambia es **quién lo crea y cuándo**.
+
+- **Grupo inicial implícito (`services/course_groups.py`):** `POST /courses/{course_id}/blocks` añade un bloque a un **curso**. Si el curso no tiene grupos activos en el periodo vigente se crea el grupo `A` (cupo 40, sin docente) en la misma transacción; si tiene uno se usa; si tiene varios exige `group_id` (422 «tiene varios grupos») y un `group_id` ajeno al curso devuelve 404. Si el bloque falla (choque de aula o docente), el grupo recién creado se revierte. La respuesta indica `group_code` y `group_created`. Auditoría `grupo_creado` con `implicito: true`.
+- **Docente opcional:** `POST /courses/{id}/groups` ya no exige `teacher_id`. Nuevo `PATCH /groups/{id}` (`teacher_id`, `null` lo quita; `capacity`, que no puede ser menor a los matriculados); valida docente activo y que no choque con el horario del grupo (409). Auditoría `grupo_actualizado`.
+- **Asistencia sin docente:** `bloques_candidatos` y `abrir_sesiones_del_dia` ya no exigen docente; siguen exigiendo **aula** y horario. Un docente solo ve los grupos que tiene asignados, así que lo registrado antes de asignarlo lo ve el administrador y, al asignarlo, el docente.
+- **Aviso de curso lleno:** `GET /courses/overflow` (admin) lista los cursos cuyos grupos activos del periodo están **todos** llenos; `GET /dashboard/summary` añade `cursos_llenos` (0 para docentes). Mientras tanto la matrícula sigue rechazando con «Grupo lleno»: el administrador decide cuándo crear el grupo B.
+- **Matrícula por ciclo:** `POST /enrollment/package` con la letra `A` crea el grupo inicial de los cursos del ciclo que no tienen ninguno y lo informa en `created_groups`; con otras letras no crea nada. La vista previa marca `will_create_group` en esos cursos.
+- **Tests:** `tests/test_implicit_groups.py` (10) — grupo inicial, docente opcional, reversión de un bloque fallido, varios grupos, asignar/quitar docente, choque de docente, cupo, aviso de curso lleno (y su desaparición con un grupo nuevo), paquete por ciclo y permisos; `test_sessions_lifecycle` ahora comprueba que **sin aula** no se abre sesión y que **sin docente sí**.
+- **Fuera de alcance (anotado):** crear automáticamente el grupo B al llenarse (se decidió que lo haga el administrador), lista de espera y copiar el horario de un grupo a otro.
+
+### Ajustes de la autogestión (2026-10-24, segunda pasada) - Bloque 18
+- **Oferta por curso:** `GET /me/enrollment/offer` ahora incluye también los cursos **sin grupo ni horario** (`group_id: null`, `will_create_group: true`, grupo «A», 40 cupos), para que el estudiante pueda marcarlos.
+- **Matrícula por selección:** `POST /me/enrollment/bulk` (`items: [{course_id, group_id?}]`, máx. 30) reemplaza a `POST /me/enrollment/package`. Por curso: con un solo grupo lo usa; sin grupos **crea el grupo A sin docente**; con varios exige `group_id`. Cada curso se procesa por separado (`ok`, `skipped` o `failed` con motivo) y los válidos se guardan aunque otros fallen. Exige la ventana abierta.
+- **Retirados:** `POST /me/enrollment/package` y `GET /me/courses` (no tenían uso tras quitar «Mis cursos» y el ciclo completo).
+- **Admin:** `GET /enrollment/package-letters` incluye la letra `A` cuando hay cursos del ciclo sin grupo, para poder matricular un ciclo recién cargado.
+- **Tests:** `tests/test_enrollment_center.py` cubre la selección (válidos, lleno, cruce, curso sin grupo, varios grupos, repetido, ventana cerrada) y la oferta con cursos pendientes.
+

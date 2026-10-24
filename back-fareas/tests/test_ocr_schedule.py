@@ -5,7 +5,7 @@ from reportlab.pdfgen import canvas as rl_canvas
 from sqlmodel import delete, select
 
 from app.services.import_matching import emparejar_aula, emparejar_docente, sugerir_curso
-from app.services.ocr_extract import DocumentoLeido, ItemTexto
+from app.services.ocr_extract import CeldaRect, DocumentoLeido, ItemTexto
 from app.services.ocr_schedule import extraer_horarios, extraer_horarios_documento
 from app.tables import AppUser, Course, CourseGroup, Room, ScheduleBlock, UserRole
 from tests.helpers_b6 import crear, limpiar
@@ -314,3 +314,36 @@ async def test_preview_escaneo_y_tamano(client, admin_headers):
 
     r = await _subir(client, admin_headers, b"", filename="vacio.pdf")
     assert r.status_code == 422
+
+
+def test_extraer_horarios_cuadricula_con_celdas_fusionadas_y_grupos_lado_a_lado():
+    items = [
+        _item("LUNES", 230, 15, 80),
+        _item("MARTES", 590, 15, 100),
+        _item("07:00-", 10, 66, 60, 28),
+        _item("08:00", 10, 87, 60, 28),
+        _item("08:00-", 10, 138, 60, 28),
+        _item("09:00", 10, 160, 60, 28),
+        _item("AGG2 MATEMÁTICA BÁSICA GRUPO A (AULA 103)", 110, 80, 280),
+        _item("AGG2 MATEMÁTICA BÁSICA GRUPO B (AULA 104)", 110, 150, 280),
+        _item("AGG3 HISTORIA DEL PERÚ (AULA 104)", 440, 110, 300),
+        _item("TUTORÍA", 440, 190, 80),
+    ]
+    celdas = [
+        CeldaRect(x=100, y=52, ancho=315, alto=93, pagina=1),
+        CeldaRect(x=100, y=145, ancho=315, alto=54, pagina=1),
+        CeldaRect(x=415, y=52, ancho=383, alto=147, pagina=1),
+        CeldaRect(x=415, y=199, ancho=383, alto=60, pagina=1),
+        CeldaRect(x=100, y=5, ancho=315, alto=40, pagina=1),
+    ]
+    documento = DocumentoLeido(tipo="imagen", paginas=1, items=items, lineas=[], celdas=celdas)
+
+    bloques = extraer_horarios_documento(documento)
+
+    assert [(b.weekday, b.start_time, b.end_time, b.course_code, b.group_code) for b in bloques] == [
+        (1, "07:00", "08:00", "AGG2", "A"),
+        (1, "08:00", "09:00", "AGG2", "B"),
+        (2, "07:00", "09:00", "AGG3", "A"),
+    ]
+    assert bloques[0].room_code == "AULA 103"
+    assert bloques[0].course_name == "MATEMÁTICA BÁSICA"

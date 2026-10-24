@@ -20,7 +20,7 @@ from app.tables import (
 )
 
 API = "/api/v1"
-COURSES = ("TSTCEN1", "TSTCEN2", "TSTCEN3", "TSTCEN4")
+COURSES = ("TSTCEN1", "TSTCEN2", "TSTCEN3", "TSTCEN4", "TSTCEN5")
 ROOM = "TST-CEN-ROOM"
 EMAILS = [f"temp.center{n}@unamba.edu.pe" for n in (1, 2, 3)]
 TEACHER = "temp.center.teacher@unamba.edu.pe"
@@ -78,6 +78,7 @@ async def world(db_session):
         Course(code="TSTCEN2", name="Curso centro dos", cycle=CYCLE),
         Course(code="TSTCEN3", name="Curso centro tres", cycle=CYCLE),
         Course(code="TSTCEN4", name="Curso centro cuatro", cycle=CYCLE + 1),
+        Course(code="TSTCEN5", name="Curso centro cinco", cycle=CYCLE + 1),
     ]
     db_session.add_all([room, teacher, *students, *courses])
     await db_session.flush()
@@ -110,7 +111,7 @@ async def world(db_session):
     await db_session.commit()
     for obj in (*students, teacher, *vars(groups).values()):
         await db_session.refresh(obj)
-    yield SimpleNamespace(students=students, groups=groups, teacher=teacher)
+    yield SimpleNamespace(students=students, groups=groups, teacher=teacher, courses=courses)
     await _purge(db_session)
 
 
@@ -233,21 +234,90 @@ async def test_student_enrolls_switches_and_withdraws_within_the_window(client, 
     assert withdrawn.status_code == 200, withdrawn.text
 
 
-async def test_student_package_and_rule_errors_are_reported(client, admin_headers, world):
+async def test_student_selection_enrolls_the_valid_courses_and_reports_the_rest(client, admin_headers, world):
     await _open_window(client, admin_headers)
-    first, second = world.students[0], world.students[1]
-    await client.post(f"{API}/enrollment/package", headers=admin_headers, json={"student_ids": [second.id], "cycle": CYCLE, "group_code": "A"})
-    await client.post(f"{API}/enrollment/package", headers=admin_headers, json={"student_ids": [world.students[2].id], "cycle": CYCLE, "group_code": "A"})
+    first, second, third = world.students
+    c1, c2, c3, c4, c5 = world.courses
+    await client.post(
+        f"{API}/enrollment/bulk",
+        headers=admin_headers,
+        json={"student_ids": [second.id, third.id], "group_ids": [world.groups.c2a.id]},
+    )
 
-    r = await client.post(f"{API}/me/enrollment/package", headers=_student_headers(first), json={"cycle": CYCLE, "group_code": "A"})
+    r = await client.post(
+        f"{API}/me/enrollment/bulk",
+        headers=_student_headers(first),
+        json={"items": [
+            {"course_id": c1.id, "group_id": world.groups.c1a.id},
+            {"course_id": c2.id},
+            {"course_id": c3.id},
+            {"course_id": c4.id},
+            {"course_id": c5.id},
+        ]},
+    )
 
     assert r.status_code == 200, r.text
-    rows = _by_course(r.json())
-    assert rows[("990101", "TSTCEN1")]["status"] == "ok"
-    assert rows[("990101", "TSTCEN2")]["status"] == "failed" and "lleno" in rows[("990101", "TSTCEN2")]["reason"]
+    rows = {row["course_code"]: row for row in r.json()["results"]}
+    assert rows["TSTCEN1"]["status"] == "ok" and rows["TSTCEN1"]["group_code"] == "A"
+    assert rows["TSTCEN2"]["status"] == "failed" and "lleno" in rows["TSTCEN2"]["reason"]
+    assert rows["TSTCEN3"]["status"] == "ok"
+    assert rows["TSTCEN4"]["status"] == "failed" and "se cruza" in rows["TSTCEN4"]["reason"]
+    assert rows["TSTCEN5"]["status"] == "ok" and rows["TSTCEN5"]["group_code"] == "A"
+    assert (r.json()["ok"], r.json()["failed"]) == (3, 2)
 
-    full = await client.get(f"{API}/me/enrollment/offer?cycle={CYCLE}", headers=_student_headers(first))
-    assert next(row for row in full.json() if row["course_code"] == "TSTCEN2")["full"] is True
+
+async def test_a_course_with_several_groups_needs_the_group_to_be_chosen(client, admin_headers, world):
+    await _open_window(client, admin_headers)
+    headers = _student_headers(world.students[0])
+    course = world.courses[0]
+
+    ambiguous = await client.post(f"{API}/me/enrollment/bulk", headers=headers, json={"items": [{"course_id": course.id}]})
+    assert ambiguous.json()["results"][0]["status"] == "failed"
+    assert "varios grupos" in ambiguous.json()["results"][0]["reason"]
+
+    foreign = await client.post(
+        f"{API}/me/enrollment/bulk",
+        headers=headers,
+        json={"items": [{"course_id": course.id, "group_id": world.groups.c2a.id}]},
+    )
+    assert foreign.json()["results"][0]["status"] == "failed"
+
+    repeated = await client.post(
+        f"{API}/me/enrollment/bulk",
+        headers=headers,
+        json={"items": [{"course_id": course.id, "group_id": world.groups.c1b.id}]},
+    )
+    again = await client.post(
+        f"{API}/me/enrollment/bulk",
+        headers=headers,
+        json={"items": [{"course_id": course.id, "group_id": world.groups.c1b.id}]},
+    )
+    assert repeated.json()["ok"] == 1 and again.json()["skipped"] == 1
+
+
+async def test_the_selection_requires_an_open_window(client, world):
+    r = await client.post(
+        f"{API}/me/enrollment/bulk",
+        headers=_student_headers(world.students[0]),
+        json={"items": [{"course_id": world.courses[0].id, "group_id": world.groups.c1a.id}]},
+    )
+    assert r.status_code == 403
+
+
+async def test_the_offer_lists_courses_that_have_no_group_yet(client, world):
+    offer = await client.get(f"{API}/me/enrollment/offer", headers=_student_headers(world.students[0]))
+
+    pending = next(row for row in offer.json() if row["course_code"] == "TSTCEN5")
+    assert pending["group_id"] is None and pending["will_create_group"] is True and pending["blocks"] == []
+    scheduled = next(row for row in offer.json() if row["course_code"] == "TSTCEN1" and row["group_code"] == "A")
+    assert scheduled["group_id"] == world.groups.c1a.id and scheduled["will_create_group"] is False
+
+
+async def test_the_cycle_letter_list_offers_a_for_courses_without_groups(client, admin_headers, world):
+    letters = await client.get(f"{API}/enrollment/package-letters?cycle={CYCLE + 1}", headers=admin_headers)
+
+    a = next(row for row in letters.json() if row["group_code"] == "A")
+    assert a["courses_covered"] >= 2
 
 
 async def test_students_cannot_use_admin_endpoints_or_other_roles_the_portal(client, admin_headers, world):

@@ -75,7 +75,13 @@ async def list_courses(
         stmt = stmt.where(Course.cycle == cycle)
         count_stmt = count_stmt.where(Course.cycle == cycle)
     total = (await db.exec(count_stmt)).one()
-    courses = (await db.exec(stmt.order_by(Course.code).offset(page.offset).limit(page.limit))).all()
+    courses = (
+        await db.exec(
+            stmt.order_by(Course.created_at.desc().nullslast(), Course.id.desc())
+            .offset(page.offset)
+            .limit(page.limit)
+        )
+    ).all()
     return Page(
         items=[CourseOut(id=c.id, code=c.code, name=c.name, cycle=c.cycle) for c in courses],
         total=total, page=page.page, page_size=page.page_size,
@@ -168,7 +174,7 @@ async def delete_course(
 
 class GroupIn(BaseModel):
     group_code: str = Field(min_length=1, max_length=5, examples=["A"])
-    teacher_id: int
+    teacher_id: int | None = Field(default=None, description="Docente del grupo; se puede asignar después")
     capacity: int = Field(default=40, gt=0, description="Cupo del grupo (40 por defecto, R8)")
 
 class GroupOut(BaseModel):
@@ -273,10 +279,12 @@ async def create_group(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"El curso {course.code} ya tiene un grupo '{group_code}' en {semester}",
         )
-    teacher = await _get_or_404(db, AppUser, body.teacher_id, "Docente")
-    if teacher.role is not UserRole.DOCENTE or not teacher.is_active:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            detail="El usuario asignado debe ser un docente activo")
+    teacher = None
+    if body.teacher_id is not None:
+        teacher = await _get_or_404(db, AppUser, body.teacher_id, "Docente")
+        if teacher.role is not UserRole.DOCENTE or not teacher.is_active:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail="El usuario asignado debe ser un docente activo")
 
     group = CourseGroup(course_id=course_id, group_code=group_code,
                         teacher_id=body.teacher_id,
@@ -519,7 +527,13 @@ async def list_enrolled(
             select(AppUser, Enrollment.enrolled_at, Enrollment.withdrawn_at)
             .join(Enrollment, Enrollment.student_id == AppUser.id)
             .where(Enrollment.group_id == group_id)
-            .order_by(Enrollment.withdrawn_at.is_(None).desc(), AppUser.full_name)
+            .order_by(
+                Enrollment.withdrawn_at.is_(None).desc(),
+                func.coalesce(Enrollment.withdrawn_at, Enrollment.enrolled_at)
+                .desc()
+                .nullslast(),
+                Enrollment.id.desc(),
+            )
         )
     ).all()
     con_rostro: set[int] = set()

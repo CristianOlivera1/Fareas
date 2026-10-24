@@ -84,7 +84,13 @@ async def list_rooms(
         stmt = stmt.where(Room.code.ilike(like) | Room.name.ilike(like))
         count_stmt = count_stmt.where(Room.code.ilike(like) | Room.name.ilike(like))
     total = (await db.exec(count_stmt)).one()
-    rooms = (await db.exec(stmt.order_by(Room.code).offset(page.offset).limit(page.limit))).all()
+    rooms = (
+        await db.exec(
+            stmt.order_by(Room.created_at.desc().nullslast(), Room.id.desc())
+            .offset(page.offset)
+            .limit(page.limit)
+        )
+    ).all()
     return Page(items=[room_out(r) for r in rooms], total=total, page=page.page, page_size=page.page_size)
 
 @router.post("/rooms", response_model=RoomOut, status_code=status.HTTP_201_CREATED)
@@ -185,7 +191,13 @@ async def list_devices(
         stmt = stmt.where(Device.device_type == device_type)
         count_stmt = count_stmt.where(Device.device_type == device_type)
     total = (await db.exec(count_stmt)).one()
-    rows = (await db.exec(stmt.order_by(Device.device_key).offset(page.offset).limit(page.limit))).all()
+    rows = (
+        await db.exec(
+            stmt.order_by(Device.created_at.desc().nullslast(), Device.id.desc())
+            .offset(page.offset)
+            .limit(page.limit)
+        )
+    ).all()
     return Page(
         items=[device_out(d, rc) for d, rc in rows], total=total, page=page.page, page_size=page.page_size
     )
@@ -336,7 +348,11 @@ async def _paged_people(db, role: UserRole, page: PageParams, q: str | None) -> 
     stmt, count_stmt = _people_stmt(role, q)
     total = (await db.exec(count_stmt)).one()
     people = (
-        await db.exec(stmt.order_by(AppUser.full_name).offset(page.offset).limit(page.limit))
+        await db.exec(
+            stmt.order_by(AppUser.created_at.desc().nullslast(), AppUser.id.desc())
+            .offset(page.offset)
+            .limit(page.limit)
+        )
     ).all()
     items = await asyncio.gather(*(person_out(person) for person in people))
     return Page(items=items, total=total, page=page.page, page_size=page.page_size)
@@ -395,7 +411,11 @@ async def list_students(
         count_stmt = count_stmt.where(AppUser.semester == semester)
     total = (await db.exec(count_stmt)).one()
     students = (
-        await db.exec(stmt.order_by(AppUser.full_name).offset(page.offset).limit(page.limit))
+        await db.exec(
+            stmt.order_by(AppUser.created_at.desc().nullslast(), AppUser.id.desc())
+            .offset(page.offset)
+            .limit(page.limit)
+        )
     ).all()
     enrolled_ids: set[int] = set()
     if with_face and students:

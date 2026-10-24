@@ -551,11 +551,28 @@ confirmación se habilitó. No se confirmó para no crear cuentas de prueba;
 - **Pestaña «Por ciclo»** (por defecto): 1) elegir ciclo y grupo (se sugiere la letra que cubre más cursos) y ver el horario del paquete con docente, horario, cupos libres y los cursos que **no tienen ese grupo**; 2) elegir alumnos de tres maneras: **buscar** y agregar, **pegar códigos** de matrícula (informa los no encontrados) o **todo un ciclo** de alumnos (útil para ingresantes); 3) «N alumnos × M cursos = P matrículas» con aviso de cupos justos y botón **Matricular**. El resultado indica matriculados, los que ya estaban y los problemas **agrupados por alumno** (grupo lleno, cruce de horario…); el resto se matricula igual.
 - **Pestaña «Por grupo»:** el flujo anterior, sin selector de periodo y con **selección múltiple** de alumnos (más pegar códigos); conserva retiro, reactivación y transferencia.
 
-**Estudiante (`/my-enrollment`, menú «Mi matrícula»)**
-- Banner con el periodo y el estado de la ventana; **Mi horario** semanal con sus grupos; **Matricularme en un ciclo completo** (elige la letra y toma todos los cursos del ciclo; informa lo que no se pudo); y **Cursos disponibles** por ciclo (su ciclo primero) con búsqueda y, por grupo: docente, horario, cupos y estado — *Agregar*, *Cambiar desde A*, *Retirar* (con confirmación), *Lleno* o *Cruce de horario con X*. Fuera de la ventana todo queda en solo lectura.
+**Estudiante (`/my-enrollment`, menú «Mi matrícula»)** — simplificado (2026-10-24)
+- Se eliminó el menú **«Mis cursos»** (repetía a «Mi horario»; el avance de faltas por curso sigue en «Inicio») y de «Mi matrícula» se quitaron **«Mi horario»** y **«Matricularme en un ciclo completo»**.
+- La pantalla es una sola lista de **«Cursos disponibles»** con pestañas de ciclo (el suyo primero; puede mezclar **cualquier ciclo** y la selección se conserva al cambiar de pestaña). Cada curso tiene una **casilla**; al marcar varios aparece una barra fija con los cursos elegidos y **Confirmar matrícula**.
+- Un curso con un solo grupo muestra su horario, docente y cupos; con **varios grupos** pide elegir uno (los llenos o con cruce aparecen deshabilitados); un curso **sin horario aún** se muestra como «Horario por definir» y se puede marcar (al confirmar se crea el grupo A sin docente).
+- Antes de confirmar se avisan los **cruces entre los cursos marcados**; los llenos o que chocan con su matrícula actual no se pueden marcar.
+- Al confirmar se **matriculan los válidos y se informan los demás**: los que fallaron quedan marcados con su motivo. Los cursos ya matriculados muestran **Retirar** (con confirmación) y, si tienen varios grupos, **Cambiar a este grupo**. Fuera de la ventana todo queda en solo lectura.
+- **Administrador:** la pestaña «Por grupo» pasó a **«Por curso»** y solo pide grupo si el curso tiene varios; en «Por ciclo» la letra de grupo solo se pregunta si existen varias.
 
 **Archivos:** `features/enrollments/center/*` (contenedor y panel por ciclo), `features/enrollments/enrollments/*` (por grupo), `features/my-enrollment/*`, `core/services/enrollment-api.ts` y `core/models/enrollment.ts`. Specs: `cycle-enrollment.spec.ts`, `my-enrollment.spec.ts`.
 **Verificación:** `npm test` 100/100 y `npm run build` OK.
+
+### F6f - Cursos sin grupo: el grupo nace al llenarse el cupo (2026-10-24) - **✅ LISTO**
+> Decisiones acordadas: un curso puede estar en el horario **sin grupo ni docente** (por debajo se crea el grupo «A» sin docente);
+> el docente es opcional y se asigna después; los grupos adicionales (B, C…) los crea el **administrador** cuando el curso se llena
+> (el sistema avisa); una sesión de asistencia se abre **aunque el grupo no tenga docente**.
+
+- **Horario general (`/schedule`):** «Nuevo bloque» pide **Curso**, no grupo. Si el curso aún no tiene grupo se crea el A en silencio; si tiene uno, se usa; solo si ya tiene varios aparece «Grupo» para elegir. Docente opcional; aula obligatoria. Al editar un bloque se muestra el curso y grupo de solo lectura.
+- **Detalle del curso:** un curso sin grupos se muestra como «aún no está en el horario» con **Añadir al horario** (crea el grupo A al guardar el primer bloque). **Nuevo grupo** ya no pide docente y sugiere la siguiente letra. Cada grupo tiene **Asignar o cambiar docente** (valida que no choque con su horario). Si todos los grupos están llenos, un aviso ofrece **Crear grupo B**.
+- **Cursos (`/courses`) y Dashboard:** aviso «N cursos están llenos» (con el cupo de cada uno y acceso a su detalle). El tablero suma `cursos_llenos`, solo para el administrador.
+- **Matrícula:** en «Por ciclo», los cursos que no tienen grupo se avisan como «se creará el grupo A sin docente al matricular» (solo con la letra A) y el resultado indica los grupos creados. En «Por grupo», un curso sin grupo muestra **Crear grupo A**.
+- **Archivos:** `schedule-general.*`, `course-detail.*`, `courses.*`, `dashboard.*`, `enrollments.*`, `center/cycle-enrollment.*`, `courses-api.ts` (+ `courses-api.spec.ts`) y modelos `FullCourse`.
+- **Verificación:** `npm test` 103/103 y `npm run build` OK.
 
 ### F7 - Dispositivos reales: armado, instalación y puesta en marcha (única tarea pendiente: la prueba con el hardware)
 
@@ -769,7 +786,6 @@ la UI solo oculta botones con `@if (auth.isAdmin())`.
 | Inicio | `/me` | Clases de hoy, próxima clase y cursos en riesgo de inhabilitación | `GET /me/schedule`, `GET /attendance/me/dpi` |
 | Mi horario | `/my-schedule` | Semana Lun–Vie con curso, grupo, aula y docente | `GET /me/schedule` |
 | Mi matrícula | `/my-enrollment` | Armar su horario dentro de la ventana de matrícula: agregar, cambiar de grupo, retirar o tomar un ciclo completo | `GET /me/enrollment`, `/me/enrollment/offer`, `POST /me/enrollment…` |
-| Mis cursos | `/my-courses` | Cursos matriculados del periodo: grupo, docente, horario, faltas y faltas restantes | `GET /me/courses` + `GET /attendance/me/dpi` |
 | Mis asistencias | `/my-attendance` | Historial con filtro de fechas y rectificaciones (ya existía, movida desde `/me`) | `GET /attendance/me` |
 | Mis justificaciones | `/my-justifications` | Justificaciones registradas a su nombre, con motivo, cursos y documento | `GET /me/justifications` |
 

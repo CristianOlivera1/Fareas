@@ -71,7 +71,12 @@ async def my_attendance(
         .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)
         .join(Course, Course.id == CourseGroup.course_id)
         .where(AttendanceRecord.student_id == user.id)
-        .order_by(AttendanceSession.session_date.desc(), ScheduleBlock.start_time)
+        .order_by(
+            AttendanceSession.session_date.desc(),
+            AttendanceRecord.marked_at.desc().nullslast(),
+            ScheduleBlock.start_time,
+            AttendanceRecord.id.desc(),
+        )
     )
     if desde is not None:
         stmt = stmt.where(AttendanceSession.session_date >= desde)

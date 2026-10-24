@@ -9,7 +9,10 @@ from app.services.enrollment_bulk import (
     MAX_GROUPS,
     MAX_STUDENTS,
     PairResult,
+    courses_without_groups,
+    create_missing_default_groups,
     enroll_many,
+    is_default_letter,
     package_groups,
     package_letters,
     resolve_students,
@@ -43,6 +46,7 @@ class MissingCourseOut(BaseModel):
     course_id: int
     course_code: str
     course_name: str
+    will_create_group: bool = False
 
 
 class PackageOut(BaseModel):
@@ -113,6 +117,7 @@ class BulkOut(BaseModel):
     failed: int
     unknown: list[str]
     missing: list[MissingCourseOut]
+    created_groups: list[str] = Field(default_factory=list)
     results: list[PairOut]
 
 
@@ -129,6 +134,7 @@ async def build_package_out(db, cycle: int, group_code: str) -> PackageOut:
     from app.tables import AppUser, Room, ScheduleBlock
 
     found, missing = await package_groups(db, cycle, group_code)
+    without_groups = {course.id for course in await courses_without_groups(db, cycle)}
     group_ids = [item.group.id for item in found]
     blocks_by_group: dict[int, list[BlockInfo]] = {}
     teachers: dict[int, str] = {}
@@ -171,7 +177,10 @@ async def build_package_out(db, cycle: int, group_code: str) -> PackageOut:
             for item in found
         ],
         missing=[
-            MissingCourseOut(course_id=course.id, course_code=course.code, course_name=course.name)
+            MissingCourseOut(
+                course_id=course.id, course_code=course.code, course_name=course.name,
+                will_create_group=is_default_letter(group_code) and course.id in without_groups,
+            )
             for course in missing
         ],
     )
@@ -206,7 +215,10 @@ async def resolve(body: ResolveIn, db: DbSession, _admin: RequireRole(UserRole.A
     )
 
 
-async def _run(db, admin, request: Request, body: StudentRefIn, groups, missing, action: str, detail: dict) -> BulkOut:
+async def _run(
+    db, admin, request: Request, body: StudentRefIn, groups, missing, action: str, detail: dict,
+    created_groups: list[str] | None = None,
+) -> BulkOut:
     students, unknown = await resolve_students(db, body.student_ids, body.student_codes)
     if not students:
         raise HTTPException(
@@ -231,6 +243,7 @@ async def _run(db, admin, request: Request, body: StudentRefIn, groups, missing,
     await db.commit()
     return BulkOut(
         students=len(students), groups=len(groups), unknown=unknown, missing=missing,
+        created_groups=created_groups or [],
         results=[_pair_out(r) for r in results], **summary,
     )
 
@@ -252,6 +265,7 @@ async def bulk_enroll(body: BulkIn, request: Request, db: DbSession, admin: Requ
 
 @router.post("/package", response_model=BulkOut)
 async def package_enroll(body: PackageIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)) -> BulkOut:
+    created = await create_missing_default_groups(db, body.cycle) if is_default_letter(body.group_code) else []
     found, missing = await package_groups(db, body.cycle, body.group_code)
     if not found:
         raise HTTPException(
@@ -262,4 +276,5 @@ async def package_enroll(body: PackageIn, request: Request, db: DbSession, admin
         db, admin, request, body, [(item.group, item.course) for item in found],
         [MissingCourseOut(course_id=c.id, course_code=c.code, course_name=c.name) for c in missing],
         "matricula_por_ciclo", {"cycle": body.cycle, "group_code": body.group_code},
+        created_groups=created,
     )

@@ -243,7 +243,10 @@ async def list_justifications(
         .join(student_tbl, student_tbl.id == Justification.student_id)
         .outerjoin(Course, Course.id == Justification.course_id)
         .join(creator_tbl, creator_tbl.id == Justification.created_by)
-        .order_by(Justification.start_date.desc())
+        .order_by(
+            Justification.created_at.desc().nullslast(),
+            Justification.id.desc(),
+        )
     )
     if user.role is UserRole.DOCENTE:
         stmt = stmt.where(Justification.created_by == user.id)

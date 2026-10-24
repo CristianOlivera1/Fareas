@@ -5,6 +5,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
 
 from app.services import errors
+from app.services.course_groups import DEFAULT_GROUP_CODE, active_groups, ensure_default_group
 from app.services.enrollments import matricular
 from app.services.settings import get_settings_row, semestre_vigente
 from app.tables import AppSettings, AppUser, Course, CourseGroup, Enrollment, UserRole
@@ -152,10 +153,62 @@ async def package_letters(db: SQLModelAsyncSession, cycle: int) -> list[dict]:
     covered: dict[str, set[int]] = {}
     for group in groups:
         covered.setdefault(group.group_code.upper(), set()).add(group.course_id)
+    with_groups = {group.course_id for group in groups}
+    without_groups = {course.id for course in courses} - with_groups
+    if without_groups:
+        covered.setdefault(DEFAULT_GROUP_CODE, set()).update(without_groups)
     return [
         {"group_code": letter, "courses_covered": len(ids), "courses_total": len(courses)}
         for letter, ids in sorted(covered.items())
     ]
+
+
+async def enroll_courses_for_student(
+    db: SQLModelAsyncSession,
+    student: AppUser,
+    items: list[tuple[int, int | None]],
+    ip: str | None = None,
+) -> list[dict]:
+    student_id = student.id
+    period = await semestre_vigente(db)
+    results: list[dict] = []
+    for course_id, group_id in items:
+        course = await db.get(Course, course_id)
+        base = {"course_id": course_id, "course_code": course.code if course else str(course_id)}
+        if course is None:
+            results.append({**base, "group_id": None, "group_code": None, "status": "failed", "reason": "El curso no existe"})
+            continue
+        base["course_code"] = course.code
+        try:
+            if group_id is not None:
+                group = await db.get(CourseGroup, group_id)
+                if group is None or group.course_id != course_id or not group.is_active or group.semester_label != period:
+                    raise errors.NotFoundError("El grupo elegido no pertenece a este curso en el periodo vigente")
+            else:
+                groups = await active_groups(db, course_id, period)
+                if len(groups) > 1:
+                    raise errors.DomainError("Este curso tiene varios grupos: elige uno")
+                group = groups[0] if groups else (await ensure_default_group(db, course, period))[0]
+            group_info = (group.id, group.group_code)
+            already = (
+                await db.exec(
+                    select(Enrollment).where(
+                        Enrollment.student_id == student_id,
+                        Enrollment.group_id == group.id,
+                        Enrollment.withdrawn_at.is_(None),
+                    )
+                )
+            ).first()
+            if already is not None:
+                results.append({**base, "group_id": group_info[0], "group_code": group_info[1], "status": "skipped", "reason": "Ya estabas matriculado"})
+                continue
+            await matricular(db, student, group_id=group.id, student_id=student_id, ip=ip)
+            results.append({**base, "group_id": group_info[0], "group_code": group_info[1], "status": "ok", "reason": None})
+        except errors.DomainError as exc:
+            await db.rollback()
+            student = await db.get(AppUser, student_id)
+            results.append({**base, "group_id": group_id, "group_code": None, "status": "failed", "reason": str(exc)})
+    return results
 
 
 async def enroll_many(
@@ -198,3 +251,25 @@ async def enroll_many(
                 actor = await db.get(AppUser, actor_id)
                 results.append(PairResult(*base, "failed", str(exc)))
     return results
+
+
+async def courses_without_groups(db: SQLModelAsyncSession, cycle: int) -> list[Course]:
+    period = await semestre_vigente(db)
+    courses = (await db.exec(select(Course).where(Course.cycle == cycle).order_by(Course.code))).all()
+    return [course for course in courses if not await active_groups(db, course.id, period)]
+
+
+async def create_missing_default_groups(db: SQLModelAsyncSession, cycle: int) -> list[str]:
+    period = await semestre_vigente(db)
+    created: list[str] = []
+    for course in await courses_without_groups(db, cycle):
+        _group, was_created = await ensure_default_group(db, course, period)
+        created.append(course.code)
+        _ = was_created
+    if created:
+        await db.commit()
+    return created
+
+
+def is_default_letter(group_code: str) -> bool:
+    return group_code.strip().upper() == DEFAULT_GROUP_CODE

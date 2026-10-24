@@ -14,6 +14,8 @@ _EMAILS_TMP = [
     "temp.docente.b4@unamba.edu.pe",
     "temp.estudiante.b4@unamba.edu.pe",
     "temp.estudiante.b5@unamba.edu.pe",
+    "temp.estudiante.reciente1@unamba.edu.pe",
+    "temp.estudiante.reciente2@unamba.edu.pe",
     "temp.docente.patch@unamba.edu.pe",
 ]
 
@@ -150,6 +152,40 @@ async def test_crear_estudiante_y_ciclo(client: AsyncClient, admin_headers: dict
     r = await client.get(f"{API}/students", headers=admin_headers, params={"semester": 9, "q": "Bloque4"})
     assert r.status_code == 200
     assert any(s["id"] == student["id"] for s in r.json()["items"])
+
+async def test_estudiantes_se_listan_del_mas_reciente_al_mas_antiguo(
+    client: AsyncClient, admin_headers: dict
+):
+    created_ids = []
+    for index, (email, dni, code) in enumerate(
+        [
+            ("temp.estudiante.reciente1@unamba.edu.pe", "71234511", "998871"),
+            ("temp.estudiante.reciente2@unamba.edu.pe", "71234512", "998872"),
+        ],
+        start=1,
+    ):
+        response = await client.post(
+            f"{API}/students",
+            headers=admin_headers,
+            json={
+                "full_name": f"Estudiante Reciente {index}",
+                "email": email,
+                "dni": dni,
+                "code": code,
+                "semester": 1,
+            },
+        )
+        assert response.status_code == 201, response.text
+        created_ids.append(response.json()["id"])
+
+    response = await client.get(
+        f"{API}/students",
+        headers=admin_headers,
+        params={"q": "Estudiante Reciente", "page_size": 1},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["id"] == created_ids[-1]
 
 async def test_admin_no_se_crea_por_api_y_patch_protege_admin(client: AsyncClient, admin_headers: dict):
     me = (await client.get(f"{API}/auth/me", headers=admin_headers)).json()
