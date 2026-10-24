@@ -78,8 +78,6 @@ export class ScheduleImportPage {
   readonly confirming = signal(false);
   readonly error = signal<string | null>(null);
 
-  readonly semesters = signal<string[]>([]);
-  readonly currentSemester = signal<string | null>(null);
   readonly teachers = signal<Option<number>[]>([]);
   readonly rooms = signal<Option<number>[]>([]);
   readonly defaultTeacherId = signal<number | null>(null);
@@ -113,20 +111,12 @@ export class ScheduleImportPage {
 
   private async loadContext(): Promise<void> {
     try {
-      const [settings, semesterLabels, teacherPage, roomPage] = await Promise.all([
+      const [settings, teacherPage, roomPage] = await Promise.all([
         this.calendar.settings().toPromise(),
-        this.calendar.semesters().toPromise(),
         this.catalog.teachers({ page_size: 100 }).toPromise(),
         this.catalog.rooms({ page_size: 100 }).toPromise(),
       ]);
-      const currentSemester = settings?.semester_label ?? null;
-      this.currentSemester.set(currentSemester);
-      this.semesters.set(
-        [...new Set([currentSemester ?? '', ...(semesterLabels ?? [])])].filter(Boolean),
-      );
-      if (!this.semester()) {
-        this.semester.set(currentSemester ?? semesterLabels?.[0] ?? null);
-      }
+      this.semester.set(settings?.semester_label ?? null);
       this.hourFrom.set(
         settings?.attendance_hour_start ? formatTime(settings.attendance_hour_start) : '07:00',
       );

@@ -33,7 +33,6 @@ export const NAV: readonly NavEntry[] = [
   { label: 'Inicio', route: '/me', icon: 'material-symbols:home-outline', roles: SOLO_ESTUDIANTE },
   { label: 'Mi horario', route: '/my-schedule', icon: 'material-symbols:calendar-view-week', roles: SOLO_ESTUDIANTE },
   { label: 'Mi matrícula', route: '/my-enrollment', icon: 'material-symbols:how-to-reg-outline', roles: SOLO_ESTUDIANTE },
-  { label: 'Mis cursos', route: '/my-courses', icon: 'material-symbols:auto-stories-outline', roles: SOLO_ESTUDIANTE },
   { label: 'Mis asistencias', route: '/my-attendance', icon: 'material-symbols:fact-check-outline', roles: SOLO_ESTUDIANTE },
   { label: 'Mis justificaciones', route: '/my-justifications', icon: 'material-symbols:medical-information-outline', roles: SOLO_ESTUDIANTE },
   { label: 'Dashboard', route: '/dashboard', icon: 'material-symbols:dashboard-outline', roles: TODOS },

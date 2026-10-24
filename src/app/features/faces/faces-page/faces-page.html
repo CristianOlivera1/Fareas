@@ -14,6 +14,12 @@
     <app-ui-input class="mt-3 block" icon="material-symbols:search" placeholder="Buscar estudiante…"
       [ngModel]="search()" (ngModelChange)="onSearch($event)" />
 
+    <label class="mt-3 flex flex-col gap-1 text-xs font-medium text-gray-500">
+      <span>Ciclo</span>
+      <p-select class="w-full" appendTo="body" [options]="cycleOptions" optionLabel="label" optionValue="value"
+        placeholder="Todos los ciclos" [ngModel]="cycle()" (ngModelChange)="onCycle($event)" />
+    </label>
+
     <div class="mt-3 max-h-[60vh] space-y-1 overflow-auto">
       @if (searching()) {
       <div class="space-y-2" aria-label="Buscando estudiantes">

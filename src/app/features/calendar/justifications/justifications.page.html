@@ -6,14 +6,14 @@
 </app-page-header>
 
 <div class="mb-4 grid gap-3 sm:grid-cols-3">
-  <label class="space-y-1 sm:col-span-2">
+  <label class="flex sm:col-span-2 flex-col gap-1">
     <span class="text-xs font-medium text-gray-500">Alumno</span>
     <p-select class="w-full" appendTo="body" [options]="studentOptions()" optionLabel="label"
       optionValue="value" placeholder="Busca por nombre, correo o código" [filter]="true"
       [showClear]="true" [loading]="searchingStudents()" (onFilter)="onStudentFilter($event)"
       [ngModel]="filterStudentId()" (ngModelChange)="onFilterStudent($event)" />
   </label>
-  <label class="space-y-1">
+  <label class="flex flex-col gap-1">
     <span class="text-xs font-medium text-gray-500">Curso</span>
     <p-select class="w-full" appendTo="body" [options]="courseOptions()" optionLabel="label"
       optionValue="value" placeholder="Todos los cursos" [filter]="true" filterBy="label"
@@ -103,7 +103,7 @@
 <p-dialog header="Nueva justificación" [(visible)]="createVisible" [modal]="true"
   [style]="{ width: '560px' }">
   <div class="space-y-4 pt-2">
-    <label class="block space-y-1">
+    <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-gray-700">Alumno <span class="text-red-500">*</span></span>
       <p-select class="w-full" appendTo="body" [options]="studentOptions()" optionLabel="label"
         optionValue="value" placeholder="Busca por nombre, correo o código" [filter]="true"
@@ -111,7 +111,7 @@
         [ngModel]="form().student_id" (ngModelChange)="patch({ student_id: $event })" />
     </label>
 
-    <label class="block space-y-1">
+    <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-gray-700">
         Curso
         @if (!auth.isAdmin()) { <span class="text-red-500">*</span> }
@@ -130,19 +130,19 @@
     </label>
 
     <div class="grid gap-3 sm:grid-cols-2">
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Desde <span class="text-red-500">*</span></span>
         <input type="date" [ngModel]="form().start_date" (ngModelChange)="patch({ start_date: $event })"
           class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
       </label>
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Hasta <span class="text-red-500">*</span></span>
         <input type="date" [ngModel]="form().end_date" (ngModelChange)="patch({ end_date: $event })"
           class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)" />
       </label>
     </div>
 
-    <label class="block space-y-1">
+    <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-gray-700">Motivo <span class="text-red-500">*</span></span>
       <textarea rows="3" [ngModel]="form().reason" (ngModelChange)="patch({ reason: $event })"
         placeholder="Certificado médico por reposo de 3 días (mínimo 5 caracteres)"

@@ -96,13 +96,6 @@ export const routes: Routes = [
         data: { title: 'Mi horario' },
       },
       {
-        path: 'my-courses',
-        canActivate: [navGuard('/my-courses')],
-        loadComponent: () =>
-          import('./features/my-courses/my-courses').then((m) => m.MyCoursesPage),
-        data: { title: 'Mis cursos' },
-      },
-      {
         path: 'my-enrollment',
         canActivate: [navGuard('/my-enrollment')],
         loadComponent: () =>

@@ -20,11 +20,11 @@ import { UiButton } from '../../../shared/components/ui-button/ui-button';
 import { EnrollmentsPage } from '../enrollments/enrollments';
 import { CycleEnrollment } from './cycle-enrollment';
 
-type Panel = 'cycle' | 'group';
+type Panel = 'cycle' | 'course';
 
 const TABS: readonly TabOption[] = [
   { id: 'cycle', label: 'Por ciclo', icon: 'material-symbols:groups-outline' },
-  { id: 'group', label: 'Por grupo', icon: 'material-symbols:person-add-outline' },
+  { id: 'course', label: 'Por curso', icon: 'material-symbols:person-add-outline' },
 ];
 
 function todayIso(): string {

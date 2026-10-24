@@ -15,6 +15,15 @@
   }
 </app-page-header>
 
+@if (allGroupsFull() && auth.isAdmin() && isCurrentPeriod()) {
+  <app-ui-alert variant="warning" title="Todos los grupos de este curso están llenos" class="mb-4 block">
+    <span>Nadie más puede matricularse en este curso hasta que haya un grupo con cupo.</span>
+    <app-ui-button size="sm" class="ml-2" icon="material-symbols:add" (click)="openCreateGroup()">
+      Crear grupo {{ nextGroupCode() }}
+    </app-ui-button>
+  </app-ui-alert>
+}
+
 @if (error(); as msg) {
   <app-ui-alert variant="danger" title="No se pudieron cargar los grupos" class="mb-4 block">
     {{ msg }}
@@ -75,19 +84,19 @@
     <div class="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center">
       <iconify-icon icon="material-symbols:groups-outline" width="36" class="text-gray-300"></iconify-icon>
       <h3 class="mt-3 font-semibold text-gray-900">
-        {{ isCurrentPeriod() ? 'Este curso aún no tiene grupos' : 'Sin grupos en este periodo' }}
+        {{ isCurrentPeriod() ? 'Este curso aún no está en el horario' : 'Sin grupos en este periodo' }}
       </h3>
       <p class="mx-auto mt-1 max-w-md text-sm text-gray-500">
         @if (isCurrentPeriod()) {
-          Un curso se divide en grupos (A, B, C…) cuando se llena el cupo de 40. Cada grupo tiene su
-          docente y su horario; el aula se elige en cada bloque (puede cambiar según el día).
+          Añade su primer bloque de horario: el curso aparece en el horario sin necesidad de docente y el grupo A
+          se crea solo. Los grupos adicionales (B, C…) se crean cuando se llena el cupo de 40; cada uno con su docente.
         } @else {
           No hay grupos registrados para {{ semester() || 'el periodo seleccionado' }}.
         }
       </p>
       @if (auth.isAdmin() && isCurrentPeriod()) {
         <div class="mt-4 flex justify-center">
-          <app-ui-button icon="material-symbols:add" (click)="openCreateGroup()">Crear primer grupo</app-ui-button>
+          <app-ui-button icon="material-symbols:add" (click)="openCreateBlock()">Añadir al horario</app-ui-button>
         </div>
       }
     </div>
@@ -142,6 +151,12 @@
 
             @if (auth.isAdmin()) {
               <div class="flex items-center gap-1">
+                <button type="button"
+                  class="grid size-7 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-blue-50 hover:text-(--fareas-primary) focus:outline-none focus-visible:ring-2 focus-visible:ring-(--fareas-primary)"
+                  [attr.aria-label]="'Asignar docente al grupo ' + g.group_code" title="Asignar o cambiar docente"
+                  (click)="openTeacher(g)">
+                  <iconify-icon icon="material-symbols:person-edit-outline" width="16"></iconify-icon>
+                </button>
                 @if (g.is_active) {
                   <button type="button"
                     class="grid size-7 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
@@ -194,7 +209,7 @@
     <p class="mt-2 text-xs text-gray-400">
       Las clases pueden programarse de lunes a viernes entre {{ attendanceStartTime() }} y
       {{ attendanceEndTime() }}. Cada bloque tiene su propia aula y se gestiona como una sesión
-      independiente. Si no tiene docente o aula asignados, queda pendiente y no genera una sesión.
+      independiente. El docente es opcional; sin aula el bloque no puede guardarse.
     </p>
   </section>
 }
@@ -208,11 +223,12 @@
       <app-ui-input label="Cupo" [required]="true" type="number"
         [ngModel]="groupForm().capacity" (ngModelChange)="patch({ capacity: +$event })" />
     </div>
-    <label class="block space-y-1">
-      <span class="text-sm font-medium text-gray-700">Docente <span class="text-red-500">*</span></span>
+    <label class="flex flex-col gap-1">
+      <span class="text-sm font-medium text-gray-700">Docente (opcional)</span>
       <p-select class="w-full" appendTo="body" [options]="teacherOptions()" optionLabel="label" optionValue="value"
-        placeholder="Selecciona el docente" [filter]="true" filterBy="label" [ngModel]="groupForm().teacher_id"
+        placeholder="Sin docente por ahora" [filter]="true" filterBy="label" [showClear]="true" [ngModel]="groupForm().teacher_id"
         (ngModelChange)="patch({ teacher_id: $event })" />
+      <span class="text-xs text-gray-400">Puedes asignarlo o cambiarlo después desde la tarjeta del grupo.</span>
     </label>
   </div>
   <ng-template pTemplate="footer">
@@ -221,29 +237,45 @@
   </ng-template>
 </p-dialog>
 
+<p-dialog header="Docente del grupo" [(visible)]="teacherDialogVisible" [modal]="true"
+  [style]="{ width: '92vw', maxWidth: '420px' }">
+  <div class="space-y-3 pt-2">
+    @if (teacherGroup(); as tg) {
+      <p class="text-sm text-gray-600">Grupo {{ tg.group_code }} de {{ tg.course_code }}. El docente se valida contra su propio horario.</p>
+    }
+    <p-select class="w-full" appendTo="body" [options]="teacherOptions()" optionLabel="label" optionValue="value"
+      placeholder="Sin docente" [filter]="true" filterBy="label" [showClear]="true" [ngModel]="teacherChoice()"
+      (ngModelChange)="teacherChoice.set($event)" />
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="teacherDialogVisible = false">Cancelar</app-ui-button>
+    <app-ui-button [loading]="saving()" (click)="saveTeacher()">Guardar</app-ui-button>
+  </ng-template>
+</p-dialog>
+
 <p-dialog [header]="editingBlockId() !== null ? 'Editar bloque de horario' : 'Nuevo bloque de horario'"
   [(visible)]="blockDialogVisible" [modal]="true" [style]="{ width: '92vw', maxWidth: '440px' }">
   <div class="space-y-4 pt-2">
-    <label class="block space-y-1">
+    <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-gray-700">Día <span class="text-red-500">*</span></span>
       <p-select class="w-full" appendTo="body" [options]="weekdays" optionLabel="label" optionValue="value"
         [ngModel]="blockForm().weekday" (ngModelChange)="patchBlock({ weekday: $event })" />
     </label>
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Inicio <span class="text-red-500">*</span></span>
         <p-select class="w-full" appendTo="body" [options]="startHours" optionLabel="label"
           optionValue="value" [ngModel]="blockForm().start_time"
           (ngModelChange)="onStartTime($event)" />
       </label>
-      <label class="block space-y-1">
+      <label class="flex flex-col gap-1">
         <span class="text-sm font-medium text-gray-700">Fin <span class="text-red-500">*</span></span>
         <p-select class="w-full" appendTo="body" [options]="endHours()" optionLabel="label"
           optionValue="value" [ngModel]="blockForm().end_time"
           (ngModelChange)="patchBlock({ end_time: $event })" />
       </label>
     </div>
-    <label class="block space-y-1">
+    <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-gray-700">Docente (opcional)</span>
       <p-select class="w-full" appendTo="body" [options]="teacherOptions()" optionLabel="label"
         optionValue="value" placeholder="Sin asignar" [filter]="true" filterBy="label"
@@ -251,7 +283,7 @@
         (ngModelChange)="patchBlock({ teacher_id: $event })" />
       <span class="text-xs text-gray-400">Se aplica a todo el grupo.</span>
     </label>
-    <label class="block space-y-1">
+    <label class="flex flex-col gap-1">
       <span class="text-sm font-medium text-gray-700">Aula (opcional)</span>
       <p-select class="w-full" appendTo="body" [options]="roomOptions()" optionLabel="label" optionValue="value"
         placeholder="Sin asignar" [filter]="true" filterBy="label" [showClear]="true"

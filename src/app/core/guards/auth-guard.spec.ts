@@ -104,7 +104,6 @@ describe('navForRole', () => {
       'Inicio',
       'Mi horario',
       'Mi matrícula',
-      'Mis cursos',
       'Mis asistencias',
       'Mis justificaciones',
     ]);

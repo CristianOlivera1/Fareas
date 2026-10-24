@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { apiUrl, BaseApi, Page, ListParams } from '../api/api-url';
-import { Block, Course, EnrolledStudent, Group, ScheduleRow } from '../models/catalog';
+import { Block, Course, EnrolledStudent, FullCourse, Group, ScheduleRow } from '../models/catalog';
 import {
   CurriculumConfirmIn,
   CurriculumPreview,
@@ -42,7 +42,7 @@ export class CoursesApi extends BaseApi {
   }
   createGroup(
     courseId: number,
-    body: { group_code: string; teacher_id: number; capacity: number },
+    body: { group_code: string; teacher_id: number | null; capacity: number },
   ) {
     return this.post<Group>(`/courses/${courseId}/groups`, body);
   }
@@ -66,6 +66,28 @@ export class CoursesApi extends BaseApi {
 
   blocks(groupId: number) {
     return this.get<Block[]>(`/groups/${groupId}/blocks`);
+  }
+  createCourseBlock(
+    courseId: number,
+    body: {
+      weekday: number;
+      start_time: string;
+      end_time: string;
+      room_id: number | null;
+      teacher_id: number | null;
+      group_id?: number | null;
+    },
+  ) {
+    return this.post<Block & { group_code: string; group_created: boolean }>(
+      `/courses/${courseId}/blocks`,
+      body,
+    );
+  }
+  updateGroup(groupId: number, body: { teacher_id?: number | null; capacity?: number }) {
+    return this.patch<Group>(`/groups/${groupId}`, body);
+  }
+  overflowCourses() {
+    return this.get<FullCourse[]>('/courses/overflow');
   }
   createBlock(
     groupId: number,

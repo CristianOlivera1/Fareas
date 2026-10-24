@@ -353,18 +353,66 @@ export class CourseDetailPage {
     this.groupForm.update((form) => ({ ...form, ...p }));
   }
 
+  readonly allGroupsFull = computed(
+    () => this.groups().length > 0 && this.groups().every((group) => group.enrolled_count >= group.capacity),
+  );
+
+  readonly nextGroupCode = computed(() => {
+    const used = new Set(this.groups().map((group) => group.group_code.toUpperCase()));
+    for (let code = 65; code <= 90; code += 1) {
+      const letter = String.fromCharCode(code);
+      if (!used.has(letter)) return letter;
+    }
+    return '';
+  });
+
   openCreateGroup(): void {
-    this.groupForm.set({ group_code: '', teacher_id: null, capacity: 40 });
+    this.groupForm.set({ group_code: this.nextGroupCode(), teacher_id: null, capacity: 40 });
     this.groupDialogVisible = true;
+  }
+
+  readonly teacherGroup = signal<Group | null>(null);
+  readonly teacherChoice = signal<number | null>(null);
+  teacherDialogVisible = false;
+
+  openTeacher(group: Group): void {
+    this.teacherGroup.set(group);
+    this.teacherChoice.set(group.teacher_id);
+    this.teacherDialogVisible = true;
+  }
+
+  async saveTeacher(): Promise<void> {
+    const group = this.teacherGroup();
+    if (!group) return;
+    this.saving.set(true);
+    try {
+      await this.api.updateGroup(group.id, { teacher_id: this.teacherChoice() }).toPromise();
+      this.toast.add({
+        severity: 'success',
+        summary: this.teacherChoice() ? 'Docente asignado' : 'Docente retirado',
+        life: 3000,
+      });
+      this.teacherDialogVisible = false;
+      await this.loadGroups();
+    } catch (err) {
+      this.toast.add({
+        severity: 'error',
+        summary: 'No se pudo actualizar el docente',
+        detail: extractDetail(err),
+        life: 5500,
+      });
+    } finally {
+      this.saving.set(false);
+    }
   }
 
   async saveGroup(): Promise<void> {
     const form = this.groupForm();
-    if (!form.group_code.trim() || !form.teacher_id) {
+    if (!form.group_code.trim()) {
       this.toast.add({
         severity: 'warn',
         summary: 'Completa el grupo',
-        detail: 'El código del grupo y el docente son obligatorios',
+        detail: 'El código del grupo es obligatorio; el docente puedes asignarlo después',
         life: 3500,
       });
       return;
@@ -381,7 +429,7 @@ export class CourseDetailPage {
       this.toast.add({
         severity: 'success',
         summary: 'Grupo creado',
-        detail: 'Añade ahora sus bloques de horario',
+        detail: 'Añade sus bloques de horario y asígnale docente cuando lo tengas',
         life: 3500,
       });
       this.groupDialogVisible = false;
@@ -424,21 +472,11 @@ export class CourseDetailPage {
       room_id: lastWeekdayBlock?.room_id ?? this.blocks().at(-1)?.room_id ?? null,
       teacher_id: group?.teacher_id ?? null,
     });
-    if (!group) {
-      this.toast.add({
-        severity: 'warn',
-        summary: 'Selecciona un grupo',
-        detail: 'El horario pertenece a un grupo concreto',
-        life: 3000,
-      });
-      return;
-    }
     this.blockDialogVisible = true;
   }
 
   async saveBlock(): Promise<void> {
     const group = this.selectedGroup();
-    if (!group) return;
     const form = this.blockForm();
     if (!form.start_time || !form.end_time) {
       this.toast.add({ severity: 'warn', summary: 'Indica hora de inicio y de fin', life: 3000 });
@@ -468,7 +506,7 @@ export class CourseDetailPage {
           })
           .toPromise();
         this.toast.add({ severity: 'success', summary: 'Bloque actualizado', life: 2500 });
-      } else {
+      } else if (group) {
         await this.api
           .createBlock(group.id, {
             weekday: Number(form.weekday),
@@ -479,10 +517,27 @@ export class CourseDetailPage {
           })
           .toPromise();
         this.toast.add({ severity: 'success', summary: 'Bloque añadido', life: 2500 });
+      } else {
+        await this.api
+          .createCourseBlock(this.courseId, {
+            weekday: Number(form.weekday),
+            start_time: form.start_time,
+            end_time: form.end_time,
+            room_id: form.room_id,
+            teacher_id: form.teacher_id,
+          })
+          .toPromise();
+        this.toast.add({
+          severity: 'success',
+          summary: 'Curso añadido al horario',
+          detail: 'Se creó el grupo A sin docente; puedes asignarlo cuando lo tengas',
+          life: 4500,
+        });
       }
       this.blockDialogVisible = false;
       this.editingBlockId.set(null);
-      await this.loadBlocks(group.id);
+      if (group) await this.loadBlocks(group.id);
+      else await this.loadGroups();
     } catch (err) {
       this.toast.add({
         severity: 'error',

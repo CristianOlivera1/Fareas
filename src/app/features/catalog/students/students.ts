@@ -101,7 +101,7 @@ export class StudentsPage {
     { id: 'email', header: 'Correo', hiddenOnMobile: true },
     { id: 'semester', header: 'Ciclo', align: 'center' },
     { id: 'is_active', header: 'Estado', align: 'center', hiddenOnMobile: true },
-    { id: 'actions', header: '', align: 'center', width: '96px' },
+    { id: 'actions', header: 'Acciones', align: 'center', width: '128px' },
   ];
 
   readonly q = this.qp.filter('q');
@@ -118,6 +118,7 @@ export class StudentsPage {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly saving = signal(false);
+  readonly resendingId = signal<number | null>(null);
 
   dialogVisible = false;
   importVisible = false;
@@ -207,6 +208,28 @@ export class StudentsPage {
 
   openFaces(s: Person): void {
     void this.router.navigate(['/admin/faces'], { queryParams: { student: s.id } });
+  }
+
+  async resend(s: Person): Promise<void> {
+    this.resendingId.set(s.id);
+    try {
+      const res = await this.api.resendCredentials(s.id).toPromise();
+      this.toast.add({
+        severity: 'success',
+        summary: 'Clave enviada',
+        detail: res?.message,
+        life: 3500,
+      });
+    } catch (err) {
+      this.toast.add({
+        severity: 'error',
+        summary: 'No se pudo enviar',
+        detail: extractDetail(err),
+        life: 4000,
+      });
+    } finally {
+      this.resendingId.set(null);
+    }
   }
 
   openEdit(s: Person): void {

@@ -27,7 +27,7 @@ import { ModalDelete } from '../../../shared/components/modal-delete/modal-delet
 import { DataTable } from '../../../shared/components/data-table/data-table';
 import { DataTableCellDirective } from '../../../shared/components/data-table/data-table-cell.directive';
 import { TableColumn } from '../../../core/models/table-column';
-import { Course } from '../../../core/models/catalog';
+import { Course, FullCourse } from '../../../core/models/catalog';
 import { CYCLES, toRoman } from '../../../shared/utils/cycles';
 import { CoursesImportDialog } from './courses-import.dialog';
 
@@ -92,9 +92,11 @@ export class CoursesPage {
 
   dialogVisible = false;
   importVisible = false;
+  readonly fullCourses = signal<FullCourse[]>([]);
   deleteVisible = false;
 
   constructor() {
+    this.loadFullCourses();
     effect(() => {
       this.q();
       this.cycle();
@@ -124,7 +126,20 @@ export class CoursesPage {
     void this.qp.update({ page_size: size, page: null });
   }
 
+  private loadFullCourses(): void {
+    if (!this.auth.isAdmin()) return;
+    this.api.overflowCourses().subscribe({
+      next: (courses) => this.fullCourses.set(courses),
+      error: () => this.fullCourses.set([]),
+    });
+  }
+
+  openFullCourse(course: FullCourse): void {
+    void this.router.navigate([course.course_id], { relativeTo: this.route });
+  }
+
   reload(): void {
+    this.loadFullCourses();
     void this.load();
   }
 

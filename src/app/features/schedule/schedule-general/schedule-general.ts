@@ -26,7 +26,7 @@ import {
   ScheduleEntry,
   ScheduleTable,
 } from '../../../shared/components/schedule-table/schedule-table';
-import { Group, ScheduleRow } from '../../../core/models/catalog';
+import { Course, Group, ScheduleRow } from '../../../core/models/catalog';
 import { CYCLES, toRoman } from '../../../shared/utils/cycles';
 import {
   BLOCK_END_HOUR,
@@ -46,6 +46,7 @@ interface Option<T> {
 }
 
 interface BlockForm {
+  course_id: number | null;
   group_id: number | null;
   weekday: number;
   start_time: string;
@@ -84,6 +85,7 @@ export class ScheduleGeneralPage {
   readonly rows = signal<ScheduleRow[]>([]);
   readonly groups = signal<Group[]>([]);
   readonly courseOptions = signal<Option<number>[]>([]);
+  readonly courses = signal<Course[]>([]);
   readonly teacherOptions = signal<Option<number>[]>([]);
   readonly roomOptions = signal<Option<number>[]>([]);
   readonly loading = signal(false);
@@ -157,13 +159,38 @@ export class ScheduleGeneralPage {
       }));
   });
 
+  readonly blockCourseOptions = computed<Option<number>[]>(() => {
+    const cycle = this.cycleId();
+    return this.courses()
+      .filter((course) => !cycle || course.cycle === cycle)
+      .map((course) => ({
+        label: `${course.code} · ${course.name} · Ciclo ${this.roman(course.cycle)}`,
+        value: course.id,
+      }));
+  });
+
   readonly blockForm = signal<BlockForm>({
+    course_id: null,
     group_id: null,
     weekday: 1,
     start_time: '08:00',
     end_time: '10:00',
     room_id: null,
     teacher_id: null,
+  });
+  readonly courseGroups = computed(() =>
+    this.groups().filter((group) => group.course_id === this.blockForm().course_id),
+  );
+  readonly needsGroupChoice = computed(() => this.courseGroups().length > 1);
+  readonly groupChoiceOptions = computed<Option<number>[]>(() =>
+    this.courseGroups().map((group) => ({
+      label: `Grupo ${group.group_code} · ${group.teacher_name ?? 'Sin docente'} · ${group.enrolled_count}/${group.capacity}`,
+      value: group.id,
+    })),
+  );
+  readonly editingBlock = computed(() => {
+    const id = this.editingBlockId();
+    return id === null ? null : (this.rows().find((row) => row.id === id) ?? null);
   });
   readonly editingBlockId = signal<number | null>(null);
   readonly startHours = blockStartOptions();
@@ -202,6 +229,7 @@ export class ScheduleGeneralPage {
       if (!this.semester() && currentSemester) {
         await this.qp.update({ semester: currentSemester });
       }
+      this.courses.set(coursePage?.items ?? []);
       this.courseOptions.set(
         (coursePage?.items ?? []).map((course) => ({
           label: `${course.code} · ${course.name}`,
@@ -317,6 +345,7 @@ export class ScheduleGeneralPage {
     const startTime = hour !== undefined ? this.formatHour(hour) : '08:00';
     this.editingBlockId.set(null);
     this.blockForm.set({
+      course_id: this.courseId() || null,
       group_id: null,
       weekday: weekday ?? 1,
       start_time: startTime,
@@ -332,6 +361,7 @@ export class ScheduleGeneralPage {
     if (!row) return;
     this.editingBlockId.set(row.id);
     this.blockForm.set({
+      course_id: row.course_id,
       group_id: row.group_id,
       weekday: row.weekday,
       start_time: formatTime(row.start_time),
@@ -340,6 +370,16 @@ export class ScheduleGeneralPage {
       teacher_id: row.teacher_id,
     });
     this.blockDialogVisible = true;
+  }
+
+  async onBlockCourse(courseId: number | null): Promise<void> {
+    const groups = this.groups().filter((group) => group.course_id === courseId);
+    this.patchBlock({
+      course_id: courseId,
+      group_id: groups.length === 1 ? groups[0].id : null,
+      teacher_id: groups.length === 1 ? groups[0].teacher_id : null,
+    });
+    if (groups.length === 1) await this.onGroup(groups[0].id);
   }
 
   async onGroup(value: number | null): Promise<void> {
@@ -369,8 +409,12 @@ export class ScheduleGeneralPage {
 
   async saveBlock(): Promise<void> {
     const form = this.blockForm();
-    if (!form.group_id) {
-      this.toast.add({ severity: 'warn', summary: 'Elige el grupo del bloque', life: 3000 });
+    if (this.editingBlockId() === null && !form.course_id) {
+      this.toast.add({ severity: 'warn', summary: 'Elige el curso del bloque', life: 3000 });
+      return;
+    }
+    if (this.editingBlockId() === null && this.needsGroupChoice() && !form.group_id) {
+      this.toast.add({ severity: 'warn', summary: 'Este curso tiene varios grupos: elige a cuál va el bloque', life: 4000 });
       return;
     }
     if (!validBlockRange(form.start_time, form.end_time)) {
@@ -398,16 +442,22 @@ export class ScheduleGeneralPage {
           .toPromise();
         this.toast.add({ severity: 'success', summary: 'Bloque actualizado', life: 2500 });
       } else {
-        await this.api
-          .createBlock(form.group_id, {
+        const created = await this.api
+          .createCourseBlock(form.course_id as number, {
             weekday: Number(form.weekday),
             start_time: form.start_time,
             end_time: form.end_time,
             room_id: form.room_id,
             teacher_id: form.teacher_id,
+            group_id: form.group_id,
           })
           .toPromise();
-        this.toast.add({ severity: 'success', summary: 'Bloque añadido', life: 2500 });
+        this.toast.add({
+          severity: 'success',
+          summary: 'Bloque añadido',
+          detail: created?.group_created ? 'El curso quedó en el horario; puedes asignarle docente cuando lo tengas.' : undefined,
+          life: 3500,
+        });
       }
       this.blockDialogVisible = false;
       this.editingBlockId.set(null);

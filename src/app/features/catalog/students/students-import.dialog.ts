@@ -225,7 +225,7 @@ export class StudentsImportDialog {
     } else if (field === 'email') {
       this.updateRow(key, { email: value, email_generado: false });
     } else {
-      this.updateRow(key, { whatsapp: value });
+      this.updateRow(key, { whatsapp: value.replace(/\D/g, '') });
     }
   }
 
@@ -277,6 +277,9 @@ export class StudentsImportDialog {
     if (row.full_name.trim().length < 3) issues.push('Nombre completo');
     if (!this.validEmail(row.email)) issues.push('Correo válido');
     if (!row.semester || row.semester < 1 || row.semester > 12) issues.push('Ciclo');
+    if (row.whatsapp.trim() && !/^9\d{8}$/.test(row.whatsapp.trim())) {
+      issues.push('WhatsApp de 9 dígitos que empiece con 9');
+    }
     issues.push(...row.errores);
     issues.push(...this.duplicateIssues(row));
     return [...new Set(issues)];

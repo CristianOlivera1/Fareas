@@ -90,6 +90,9 @@ export class CycleEnrollment {
     () => this.picked().length > 0 && (this.pkg()?.courses.length ?? 0) > 0 && !this.confirming(),
   );
 
+  readonly willCreate = computed(() => (this.pkg()?.missing ?? []).filter((course) => course.will_create_group));
+  readonly reallyMissing = computed(() => (this.pkg()?.missing ?? []).filter((course) => !course.will_create_group));
+
   readonly failures = computed(() => this.groupFailures(this.result()?.results ?? []));
 
   async onCycle(cycle: number | null): Promise<void> {
