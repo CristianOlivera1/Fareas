@@ -26,6 +26,8 @@ import {
   ScheduleEntry,
   ScheduleTable,
 } from '../../../shared/components/schedule-table/schedule-table';
+import { ScheduleExport } from '../schedule-export/schedule-export';
+import type { ScheduleExportFilters } from '../schedule-export/schedule-export';
 import { Course, Group, ScheduleRow } from '../../../core/models/catalog';
 import { CYCLES, toRoman } from '../../../shared/utils/cycles';
 import {
@@ -59,7 +61,7 @@ interface BlockForm {
   selector: 'app-schedule-general-page',
   imports: [
     FormsModule, PageHeader, UiButton, UiAlert, ModalDelete,
-    DialogModule, SelectModule, ScheduleTable,
+    DialogModule, SelectModule, ScheduleTable, ScheduleExport,
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './schedule-general.html',
@@ -196,6 +198,12 @@ export class ScheduleGeneralPage {
   readonly startHours = blockStartOptions();
   readonly endHours = computed(() => blockEndOptions(this.blockForm().start_time));
   blockDialogVisible = false;
+  exportVisible = false;
+  readonly exportFilters = computed<ScheduleExportFilters>(() => ({
+    courseId: this.courseId(),
+    teacherId: this.teacherId(),
+    roomId: this.roomId(),
+  }));
 
   readonly deleteTarget = signal<ScheduleRow | null>(null);
   deleteVisible = false;

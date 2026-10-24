@@ -5,6 +5,10 @@
   <app-ui-button variant="ghost" icon="material-symbols:refresh" (click)="load()">
     Actualizar
   </app-ui-button>
+  <app-ui-button variant="outline" icon="material-symbols:download" [disabled]="rows().length === 0"
+    (click)="exportVisible = true">
+    Exportar
+  </app-ui-button>
   @if (auth.isAdmin()) {
     <app-ui-button icon="material-symbols:add" (click)="openCreateBlock()">
       Nuevo bloque
@@ -206,4 +210,12 @@
   [warning]="'La clase dejará de abrir sesiones; el historial de asistencias ya registrado se conserva.'"
   (confirmed)="confirmDelete()"
   (canceled)="deleteVisible = false"
+/>
+
+<app-schedule-export
+  [(visible)]="exportVisible"
+  [semesters]="semesters()"
+  [semester]="semester()"
+  [cycle]="cycleId()"
+  [filters]="exportFilters()"
 />

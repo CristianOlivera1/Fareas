@@ -1,0 +1,67 @@
+<p-dialog header="Exportar horario" [visible]="visible()" (visibleChange)="visible.set($event)"
+  [modal]="true" [style]="{ width: '480px' }">
+  <div class="space-y-4 pt-2">
+    <fieldset>
+      <legend class="mb-1.5 text-xs font-medium text-gray-500">Formato</legend>
+      <div class="grid grid-cols-3 gap-2">
+        @for (option of formats; track option.value) {
+          <button type="button" (click)="format.set(option.value)" [attr.aria-pressed]="format() === option.value"
+            [class]="
+              'flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-center transition-colors ' +
+              (format() === option.value
+                ? 'border-(--fareas-primary) bg-blue-50 text-(--fareas-primary)'
+                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50')
+            ">
+            <iconify-icon [attr.icon]="option.icon" width="24"></iconify-icon>
+            <span class="text-sm font-semibold">{{ option.label }}</span>
+            <span class="text-[11px] leading-tight text-gray-500">{{ option.hint }}</span>
+          </button>
+        }
+      </div>
+      @if (note(); as message) {
+        <p class="mt-2 text-xs text-gray-500">{{ message }}</p>
+      }
+    </fieldset>
+
+    <div class="grid gap-3 sm:grid-cols-2">
+      <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
+        <span>Periodo</span>
+        <p-select appendTo="body" [options]="semesters()" placeholder="Vigente"
+          [ngModel]="chosenSemester()" (ngModelChange)="chosenSemester.set($event)" />
+      </label>
+      <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
+        <span>Ciclo</span>
+        <p-select appendTo="body" [options]="cycleOptions" optionLabel="label" optionValue="value"
+          [ngModel]="chosenCycle()" (ngModelChange)="chosenCycle.set($event)" />
+      </label>
+    </div>
+
+    <fieldset class="space-y-2">
+      <legend class="mb-1 text-xs font-medium text-gray-500">Qué mostrar en cada clase</legend>
+      <label class="flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" class="size-4 rounded border-gray-300 accent-blue-600"
+          [checked]="showTeacher()" (change)="showTeacher.set($any($event.target).checked)" />
+        Docente
+      </label>
+      <label class="flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" class="size-4 rounded border-gray-300 accent-blue-600"
+          [checked]="showRoom()" (change)="showRoom.set($any($event.target).checked)" />
+        Aula
+      </label>
+      @if (hasFilters()) {
+        <label class="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" class="size-4 rounded border-gray-300 accent-blue-600"
+            [checked]="useFilters()" (change)="useFilters.set($any($event.target).checked)" />
+          Aplicar los filtros actuales (curso, docente, aula)
+        </label>
+      }
+    </fieldset>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="visible.set(false)">Cancelar</app-ui-button>
+    <app-ui-button icon="material-symbols:download" [loading]="busy()" (click)="export()">
+      Exportar
+    </app-ui-button>
+  </ng-template>
+</p-dialog>

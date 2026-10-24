@@ -78,8 +78,15 @@
     <div class="grid min-h-64 place-items-center rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center">
       <div>
         <iconify-icon icon="material-symbols:videocam-outline" width="36" class="text-gray-300" />
-        <p class="mt-2 text-sm font-medium text-gray-700">Esperando actividad</p>
-        <p class="mt-1 text-xs text-gray-500">Los ingresos detectados por las cámaras aparecerán aquí al instante.</p>
+        @if (camerasLoaded() && !hasCameras()) {
+          <p class="mt-2 text-sm font-medium text-gray-700">No hay cámaras activas</p>
+          <p class="mt-1 text-xs text-gray-500">Registra una cámara en Dispositivos y elige el aula en Parámetros.</p>
+        } @else {
+          <p class="mt-2 text-sm font-medium text-gray-700">Esperando actividad</p>
+          <p class="mt-1 text-xs text-gray-500">
+            Los ingresos detectados por la cámara de {{ roomLabel() ?? 'el aula elegida' }} aparecerán aquí al instante.
+          </p>
+        }
       </div>
     </div>
   }

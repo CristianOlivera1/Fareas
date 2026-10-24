@@ -1,93 +1,253 @@
-<app-page-header title="Reportes" subtitle="Exporta la asistencia en Excel o PDF{{ isTeacher() ? ' de tus grupos' : '' }}." />
+<app-page-header title="Reportes"
+  subtitle="Elige un reporte, ajusta los filtros, revisa las cifras y descárgalo en el formato que necesites{{ isTeacher() ? ' (solo de tus grupos)' : '' }}." />
 
-<div class="grid gap-4 lg:grid-cols-2">
-  <section class="rounded-2xl border border-gray-100 bg-white p-5 lg:col-span-2" aria-labelledby="rep-attendance">
-    <div class="flex items-start gap-3">
-      <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-(--fareas-primary)/10 text-(--fareas-primary)">
-        <iconify-icon icon="material-symbols:table-chart-outline" width="22"></iconify-icon>
-      </span>
-      <div class="min-w-0">
-        <h2 id="rep-attendance" class="text-base font-semibold tracking-tight text-gray-900">Asistencia detallada</h2>
-        <p class="mt-0.5 text-sm text-gray-500">Un registro por alumno y sesión dentro del periodo. No incluye clases canceladas ni sesiones por revisar.</p>
+<div class="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+  <nav class="space-y-2" aria-label="Catálogo de reportes">
+    @for (report of reports(); track report.key) {
+      <button type="button" (click)="select(report.key)" [attr.aria-current]="selectedKey() === report.key"
+        [class]="
+          'flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors ' +
+          (selectedKey() === report.key
+            ? 'border-(--fareas-primary) bg-blue-50'
+            : 'border-gray-200 bg-white hover:bg-gray-50')
+        ">
+        <span [class]="
+          'grid size-9 shrink-0 place-items-center rounded-lg ' +
+          (selectedKey() === report.key ? 'bg-(--fareas-primary) text-white' : 'bg-gray-100 text-gray-600')
+        ">
+          <iconify-icon [attr.icon]="report.icon" width="20"></iconify-icon>
+        </span>
+        <span class="min-w-0">
+          <span class="block text-sm font-semibold text-gray-900">{{ report.title }}</span>
+          <span class="mt-0.5 line-clamp-2 block text-xs text-gray-500">{{ report.description }}</span>
+          <span class="mt-1.5 flex gap-1">
+            @for (format of report.formats; track format) {
+              <span class="rounded bg-white/80 px-1.5 py-0.5 text-[10px] font-medium uppercase text-gray-500 ring-1 ring-gray-200">
+                {{ format }}
+              </span>
+            }
+          </span>
+        </span>
+      </button>
+    }
+  </nav>
+
+  <section class="min-w-0 space-y-4" [attr.aria-label]="selected().title">
+    <div class="rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
+      <div class="flex flex-wrap items-start justify-between gap-2">
+        <div class="min-w-0">
+          <h2 class="text-base font-semibold tracking-tight text-gray-900">{{ selected().title }}</h2>
+          <p class="mt-0.5 text-sm text-gray-500">{{ selected().description }}</p>
+        </div>
+        @if (activeFilters() > 0) {
+          <app-ui-button variant="ghost" size="sm" icon="material-symbols:filter-alt-off" (click)="clearFilters()">
+            Limpiar filtros ({{ activeFilters() }})
+          </app-ui-button>
+        }
       </div>
+
+      @if (usesPeriod()) {
+        <div class="mt-4">
+          <span class="text-xs font-medium text-gray-500">Periodo</span>
+          <div class="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Periodo del reporte">
+            @for (option of presets; track option.value) {
+              <button type="button" (click)="applyPreset(option.value)" [attr.aria-pressed]="preset() === option.value"
+                [class]="
+                  'rounded-full border px-3 py-1 text-xs font-medium transition-colors ' +
+                  (preset() === option.value
+                    ? 'border-(--fareas-primary) bg-blue-50 text-(--fareas-primary)'
+                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50')
+                ">
+                {{ option.label }}
+              </button>
+            }
+          </div>
+          <div class="mt-3 grid gap-3 sm:grid-cols-2 xl:max-w-md">
+            <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+              Desde
+              <input type="date" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                [value]="from()" [max]="to()" (change)="onDate('from', $any($event.target).value)" />
+            </label>
+            <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+              Hasta
+              <input type="date" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                [value]="to()" [min]="from()" (change)="onDate('to', $any($event.target).value)" />
+            </label>
+          </div>
+          @if (rangeError(); as message) {
+            <p class="mt-2 text-xs text-red-600" role="alert">{{ message }}</p>
+          }
+        </div>
+      }
+
+      <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        @if (has('ciclo')) {
+          <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+            Ciclo
+            <p-select appendTo="body" [options]="cycleOptions" optionLabel="label" optionValue="value"
+              [ngModel]="cycle()" (ngModelChange)="onCycle($event)" class="w-full" />
+          </label>
+        }
+        @if (has('curso')) {
+          <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+            Curso
+            <p-select appendTo="body" [options]="courseOptions()" optionLabel="label" optionValue="value"
+              [filter]="true" filterBy="label" [ngModel]="courseId()" (ngModelChange)="onCourse($event)"
+              class="w-full" />
+          </label>
+        }
+        @if (has('grupo')) {
+          <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+            Grupo
+            <p-select appendTo="body" [options]="groupOptions()" optionLabel="label" optionValue="value"
+              [filter]="true" filterBy="label" [ngModel]="groupId()" (ngModelChange)="groupId.set($event)"
+              [placeholder]="isMatrix() ? 'Elige un grupo' : 'Todos los grupos'" class="w-full" />
+          </label>
+        }
+        @if (has('docente') && !isTeacher()) {
+          <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+            Docente
+            <p-select appendTo="body" [options]="teacherOptions()" optionLabel="label" optionValue="value"
+              [filter]="true" filterBy="label" [ngModel]="teacherId()" (ngModelChange)="teacherId.set($event)"
+              class="w-full" />
+          </label>
+        }
+        @if (has('aula')) {
+          <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+            Aula
+            <p-select appendTo="body" [options]="roomOptions()" optionLabel="label" optionValue="value"
+              [filter]="true" filterBy="label" [ngModel]="roomId()" (ngModelChange)="roomId.set($event)"
+              class="w-full" />
+          </label>
+        }
+        @if (has('alumno')) {
+          <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+            Estudiante (nombre o código)
+            <input type="search" maxlength="80" placeholder="Ej. 221181 o Quispe"
+              class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+              [value]="search()" (input)="search.set($any($event.target).value)" />
+          </label>
+        }
+      </div>
+
+      @if (has('estado')) {
+        <div class="mt-4">
+          <span class="text-xs font-medium text-gray-500">Estado de asistencia</span>
+          <div class="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Estados a incluir">
+            @for (option of statuses; track option.value) {
+              <button type="button" (click)="toggleStatus(option.value)"
+                [attr.aria-pressed]="chosenStatuses().includes(option.value)"
+                [class]="
+                  'rounded-full border px-3 py-1 text-xs font-medium transition-colors ' +
+                  (chosenStatuses().includes(option.value)
+                    ? 'border-(--fareas-primary) bg-blue-50 text-(--fareas-primary)'
+                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50')
+                ">
+                {{ option.label }}
+              </button>
+            }
+          </div>
+          <p class="mt-1 text-xs text-gray-400">Sin selección se incluyen todos los estados.</p>
+        </div>
+      }
+
+      @if (has('riesgo')) {
+        <label class="mt-4 flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" class="size-4 rounded border-gray-300 accent-blue-600"
+            [checked]="onlyRisk()" (change)="onlyRisk.set($any($event.target).checked)" />
+          Solo alumnos en alerta o en el límite de faltas
+        </label>
+      }
     </div>
 
-    <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
-        Desde
-        <input type="date" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
-          [value]="from()" [max]="to()" (change)="from.set($any($event.target).value)" />
-      </label>
-      <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
-        Hasta
-        <input type="date" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
-          [value]="to()" [min]="from()" (change)="to.set($any($event.target).value)" />
-      </label>
-      <label class="flex flex-col gap-1 text-xs font-medium text-gray-600 sm:col-span-2">
-        Curso
-        <p-select appendTo="body" [options]="courseOptions()" optionLabel="label" optionValue="value"
-          [ngModel]="courseId()" (ngModelChange)="courseId.set($event)" [filter]="true"
-          placeholder="Todos los cursos" aria-label="Curso" class="w-full" />
-      </label>
-    </div>
+    @if (!isMatrix()) {
+      <div class="rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
+        <div class="flex items-center justify-between gap-2">
+          <h3 class="text-sm font-semibold text-gray-900">Vista previa</h3>
+          @if (previewLoading()) {
+            <span class="text-xs text-gray-400">Actualizando…</span>
+          }
+        </div>
 
-    @if (rangeError(); as message) {
-      <p class="mt-2 text-xs text-red-600" role="alert">{{ message }}</p>
+        @if (previewError(); as message) {
+          <p class="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{{ message }}</p>
+        } @else if (preview(); as data) {
+          @if (data.indicators.length > 0) {
+            <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+              @for (indicator of data.indicators; track indicator.label) {
+                <div [class]="'rounded-lg p-3 ' + toneClass(indicator.tone)">
+                  <p class="text-[11px] opacity-80">{{ indicator.label }}</p>
+                  <p class="mt-0.5 text-lg font-semibold tabular-nums">{{ indicator.value }}</p>
+                </div>
+              }
+            </div>
+          }
+
+          @if (data.total === 0) {
+            <div class="mt-4 rounded-lg border border-dashed border-gray-200 p-6 text-center">
+              <iconify-icon icon="material-symbols:search-off" width="28" class="text-gray-300"></iconify-icon>
+              <p class="mt-1 text-sm font-medium text-gray-700">Sin registros con estos filtros</p>
+              <p class="text-xs text-gray-500">Amplía el periodo o quita algún filtro.</p>
+            </div>
+          } @else {
+            <div class="mt-3 overflow-x-auto rounded-lg border border-gray-200">
+              <table class="w-full min-w-[640px] border-collapse text-left text-xs">
+                <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                  <tr>
+                    @for (column of data.columns; track column.key) {
+                      <th class="px-2.5 py-2 font-medium" [class.text-right]="column.align === 'right'"
+                        [class.text-center]="column.align === 'center'">{{ column.title }}</th>
+                    }
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  @for (row of data.rows; track $index) {
+                    <tr>
+                      @for (cell of row; track $index; let i = $index) {
+                        <td class="px-2.5 py-1.5 text-gray-700" [class]="cellClass(cell.tone)"
+                          [class.text-right]="data.columns[i].align === 'right'"
+                          [class.text-center]="data.columns[i].align === 'center'">{{ cell.value }}</td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <p class="mt-2 text-xs text-gray-500">
+              Mostrando {{ data.rows.length }} de {{ data.total }} fila(s).
+              @if (data.truncated) {
+                <span class="text-amber-700">El reporte se limita a los primeros 5 000 registros; acota el periodo.</span>
+              }
+            </p>
+          }
+        } @else if (!rangeError()) {
+          <div class="mt-3 h-24 animate-pulse rounded-lg bg-gray-50" aria-busy="true"></div>
+        }
+      </div>
     }
 
-    <div class="mt-4 flex flex-wrap gap-2">
-      <app-ui-button icon="material-symbols:download" [disabled]="!!rangeError()" [loading]="busy() === 'xlsx'"
-        (click)="downloadAttendance('xlsx')">Descargar Excel</app-ui-button>
-      <app-ui-button variant="outline" icon="material-symbols:picture-as-pdf-outline" [disabled]="!!rangeError()"
-        [loading]="busy() === 'pdf'" (click)="downloadAttendance('pdf')">Descargar PDF</app-ui-button>
-    </div>
-  </section>
-
-  <section class="rounded-2xl border border-gray-100 bg-white p-5" aria-labelledby="rep-matrix">
-    <div class="flex items-start gap-3">
-      <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-green-50 text-green-700">
-        <iconify-icon icon="material-symbols:grid-on-outline" width="22"></iconify-icon>
-      </span>
-      <div class="min-w-0">
-        <h2 id="rep-matrix" class="text-base font-semibold tracking-tight text-gray-900">Registro de asistencia del grupo</h2>
-        <p class="mt-0.5 text-sm text-gray-500">Matriz de alumnos por fecha con A (asistió), T (tardanza), F (falta) y FJ (falta justificada).</p>
+    <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
+      <div>
+        <span class="text-xs font-medium text-gray-500">Formato</span>
+        <div class="mt-1.5 flex gap-1.5" role="group" aria-label="Formato de descarga">
+          @for (option of selected().formats; track option) {
+            <button type="button" (click)="format.set(option)" [attr.aria-pressed]="format() === option"
+              [class]="
+                'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ' +
+                (format() === option
+                  ? 'border-(--fareas-primary) bg-blue-50 text-(--fareas-primary)'
+                  : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50')
+              ">
+              <iconify-icon [attr.icon]="formatLabels[option].icon" width="18"></iconify-icon>
+              {{ formatLabels[option].label }}
+            </button>
+          }
+        </div>
       </div>
-    </div>
-
-    <label class="mt-4 flex flex-col gap-1 text-xs font-medium text-gray-600">
-      Grupo
-      <p-select appendTo="body" [options]="groupOptions()" optionLabel="label" optionValue="value"
-        [ngModel]="groupId()" (ngModelChange)="groupId.set($event)" [filter]="true"
-        placeholder="Elige un grupo" aria-label="Grupo" class="w-full" />
-    </label>
-
-    <div class="mt-4">
-      <app-ui-button icon="material-symbols:download" [disabled]="groupId() === null" [loading]="busy() === 'matrix'"
-        (click)="downloadMatrix()">Descargar Excel</app-ui-button>
-    </div>
-  </section>
-
-  <section class="rounded-2xl border border-gray-100 bg-white p-5" aria-labelledby="rep-dpi">
-    <div class="flex items-start gap-3">
-      <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-red-50 text-red-600">
-        <iconify-icon icon="material-symbols:warning-outline" width="22"></iconify-icon>
-      </span>
-      <div class="min-w-0">
-        <h2 id="rep-dpi" class="text-base font-semibold tracking-tight text-gray-900">Riesgo de inasistencia</h2>
-        <p class="mt-0.5 text-sm text-gray-500">Alumnos en alerta o sobre el límite de faltas del periodo vigente, con las faltas que les quedan.</p>
-      </div>
-    </div>
-
-    <label class="mt-4 flex flex-col gap-1 text-xs font-medium text-gray-600">
-      Curso
-      <p-select appendTo="body" [options]="courseOptions()" optionLabel="label" optionValue="value"
-        [ngModel]="dpiCourseId()" (ngModelChange)="dpiCourseId.set($event)" [filter]="true"
-        placeholder="Todos los cursos" aria-label="Curso" class="w-full" />
-    </label>
-
-    <div class="mt-4">
-      <app-ui-button icon="material-symbols:download" [loading]="busy() === 'dpi'"
-        (click)="downloadDpiRisk()">Descargar Excel</app-ui-button>
+      <app-ui-button icon="material-symbols:download" [disabled]="!canDownload()" [loading]="downloading()"
+        (click)="download()">
+        Descargar {{ formatLabels[format()].label }}
+      </app-ui-button>
     </div>
   </section>
 </div>
