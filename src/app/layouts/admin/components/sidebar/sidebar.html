@@ -9,16 +9,12 @@
   ">
   <div class="relative flex items-center justify-between h-14 px-3 shrink-0 z-70">
     <div class="absolute bottom-0 left-6 right-0 h-px bg-gray-100"></div>
-    <a [routerLink]="homeRoute()" class="flex items-center min-w-0 z-80 ">
+    <a [routerLink]="homeRoute()" aria-label="Fareas, ir al inicio"
+      [class]="'z-80 flex min-w-0 items-center gap-2'+ (isOpen() ? ' ml-3' : ' ml-0')">
+      <img src="/assets/img/metadata/fareas-icon.webp" alt="" width="30" height="30"
+        class="size-7 shrink-0 object-contain">
       @if (isOpen()) {
-      <span class="text-lg font-semibold tracking-tight text-gray-900 truncate">
-        Fareas<span class="text-(--fareas-primary)">.</span>
-      </span>
-      } @else {
-      <span
-        class="flex size-8 items-center justify-center rounded-lg bg-(--fareas-primary) text-white text-sm font-bold">
-        F
-      </span>
+      <img src="/assets/svg/fareas.svg" alt="Fareas" width="84" height="11" class="h-auto w-26">
       }
     </a>
     <button (click)="toggleSidebar()" aria-label="Alternar menú"
@@ -28,7 +24,7 @@
   </div>
 
   <nav class="nav-pill bg-admin-pill sidebar-transition" [class]="
-      'my-2 flex flex-col flex-1 min-h-0 ' +
+      'my-1 flex flex-col flex-1 min-h-0 ' +
       (isOpen() ? 'rounded-r-[40px] mr-4' : 'rounded-r-[48px] mr-2 items-center')
     ">
     <div class="sq-top" [class.is-closed]="!isOpen()"></div>
@@ -107,10 +103,7 @@
     <div
       [class]=" 'flex items-center rounded-2xl p-2 cursor-pointer hover:bg-gray-50 transition-colors ' + (isOpen() ? 'gap-2.5' : 'justify-center') "
       (click)="isOpen() ? toggleUserMenu() : toggleSidebar()">
-      <div
-        class="w-8 h-8 rounded-full bg-(--fareas-primary) text-white text-xs font-bold flex items-center justify-center shrink-0">
-        {{ auth.userInitials() }}
-      </div>
+      <app-avatar [name]="currentUser()?.full_name ?? null" [src]="auth.avatarUrl()" size="sm" />
       <div class="flex flex-col min-w-0 flex-1" [class.hidden]="!isOpen()">
         <span class="text-sm font-semibold text-gray-900 truncate leading-snug">
           {{ currentUser()?.full_name }}

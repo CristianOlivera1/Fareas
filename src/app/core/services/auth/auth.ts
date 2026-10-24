@@ -86,6 +86,8 @@ export class AuthService {
   readonly isEstudiante = computed(() => this.session()?.role === 'estudiante');
   readonly mustChangePassword = computed(() => this.session()?.must_change_password ?? false);
 
+  readonly avatarUrl = computed(() => this.session()?.avatar_url ?? null);
+
   readonly userInitials = computed(() => {
     const user = this.session();
     if (!user?.full_name) return 'U';
@@ -173,6 +175,20 @@ export class AuthService {
         this.writeStorage(SESSION_KEY, JSON.stringify(sessionUser));
       }),
     );
+  }
+
+  uploadAvatar(file: File): Observable<{ avatar_url: string | null }> {
+    const body = new FormData();
+    body.append('file', file);
+    return this.http
+      .put<{ avatar_url: string | null }>(`${this.api}/auth/me/avatar`, body)
+      .pipe(tap((result) => this.patchSession({ avatar_url: result.avatar_url })));
+  }
+
+  removeAvatar(): Observable<void> {
+    return this.http
+      .delete<void>(`${this.api}/auth/me/avatar`)
+      .pipe(tap(() => this.patchSession({ avatar_url: null })));
   }
 
   validateToken(): Observable<boolean> {
@@ -344,6 +360,14 @@ export class AuthService {
     }
   }
 
+  private patchSession(changes: Partial<SessionUser>): void {
+    const current = this.session();
+    if (!current) return;
+    const updated = { ...current, ...changes };
+    this.session.set(updated);
+    this.writeStorage(SESSION_KEY, JSON.stringify(updated));
+  }
+
   private persistTokens(tokens: TokenPairResponse): void {
     const now = Date.now();
     const accessSeconds = Number.isFinite(tokens.expires_in) ? tokens.expires_in : 0;
@@ -467,6 +491,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       must_change_password: user.must_change_password,
+      avatar_url: user.avatar_url ?? null,
     };
   }
 

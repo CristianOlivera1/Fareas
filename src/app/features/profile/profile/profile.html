@@ -14,17 +14,39 @@
 
     @if (user(); as u) {
       <div class="mt-4 flex items-center gap-3">
-        <div class="w-12 h-12 rounded-full bg-(--fareas-primary) text-white text-base font-bold flex items-center justify-center shrink-0">
-          {{ auth.userInitials() }}
-        </div>
+        <app-avatar [name]="u.full_name" [src]="auth.avatarUrl()" size="xl" />
         <div class="min-w-0">
           <p class="truncate text-base font-semibold text-gray-900">{{ u.full_name }}</p>
           <p class="truncate text-sm text-gray-500">{{ u.email }}</p>
+          <span
+            class="mt-1 inline-flex items-center gap-1 rounded-full bg-(--fareas-canvas) px-2.5 py-0.5 text-xs font-medium text-(--fareas-primary)">
+            {{ roleLabel() }}
+          </span>
         </div>
-        <span
-          class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-(--fareas-canvas) px-2.5 py-1 text-xs font-medium text-(--fareas-primary)">
-          {{ roleLabel() }}
-        </span>
+      </div>
+
+      <div class="mt-4 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <input #avatarPicker type="file" class="hidden" accept="image/jpeg,image/png,image/webp"
+            (change)="onAvatarSelected($event)" />
+          <app-ui-button size="sm" variant="outline" icon="material-symbols:photo-camera-outline"
+            [loading]="avatarBusy()" (click)="avatarPicker.click()">
+            {{ auth.avatarUrl() ? 'Cambiar foto' : 'Subir foto' }}
+          </app-ui-button>
+          @if (auth.avatarUrl()) {
+            <app-ui-button size="sm" variant="ghost" icon="material-symbols:delete-outline" [disabled]="avatarBusy()"
+              (click)="removeAvatar()">
+              Quitar
+            </app-ui-button>
+          }
+        </div>
+        <p class="mt-2 text-xs text-gray-500">
+          JPG, PNG o WEBP de hasta 5 MB; se recorta en cuadrado. Es solo tu foto de perfil: no se usa para el
+          reconocimiento facial ni reemplaza el enrolamiento.
+        </p>
+        @if (avatarError(); as message) {
+          <p class="mt-2 text-xs text-red-600" role="alert">{{ message }}</p>
+        }
       </div>
 
       @if (u.must_change_password) {
@@ -198,14 +220,15 @@
           </div>
 
           <app-ui-input formControlName="new_password" label="Nueva contraseña" type="password"
-            icon="material-symbols:lock-reset" placeholder="Mínimo 8 caracteres" autocomplete="new-password"
-            [customId]="'profile-new-password'" [showPasswordToggle]="true"
-            hint="Usa al menos 8 caracteres con letras y números."
+            icon="material-symbols:lock-reset" placeholder="8 a 128 caracteres" autocomplete="new-password"
+            [customId]="'profile-new-password'" [showPasswordToggle]="true" [maxlength]="128"
+            hint="Usa entre 8 y 128 caracteres, con al menos una letra y un número."
             [error]="fieldError('new_password')" />
 
           <app-ui-input formControlName="confirm_password" label="Confirmar nueva contraseña" type="password"
             icon="material-symbols:lock-reset" placeholder="Repite la nueva contraseña"
             autocomplete="new-password" [customId]="'profile-confirm-password'" [showPasswordToggle]="true"
+            [maxlength]="128"
             [error]="fieldError('confirm_password')" />
 
           <app-ui-button type="submit" variant="primary" icon="material-symbols:lock-reset" [fullWidth]="true"

@@ -12,6 +12,7 @@ export interface UserOut {
   readonly full_name: string;
   readonly email: string;
   readonly must_change_password: boolean;
+  readonly avatar_url?: string | null;
 }
 
 export interface TokenPairResponse {
@@ -92,4 +93,5 @@ export interface SessionUser {
   readonly email: string;
   readonly role: UserRole;
   readonly must_change_password: boolean;
+  readonly avatar_url?: string | null;
 }

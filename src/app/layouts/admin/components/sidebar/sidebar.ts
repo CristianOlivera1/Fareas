@@ -15,11 +15,12 @@ import { filter } from 'rxjs';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { ROLE_LABELS } from '../../../../core/models/user';
 import { AuthService } from '../../../../core/services/auth/auth';
+import { Avatar } from '../../../../shared/components/avatar/avatar';
 import { ADMIN_PREFIX, ROLE_HOME, navForRole, type NavEntry } from '../../../../core/constants/nav';
 
 @Component({
   selector: 'app-sidebar',
-  imports: [RouterModule],
+  imports: [RouterModule, Avatar],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',

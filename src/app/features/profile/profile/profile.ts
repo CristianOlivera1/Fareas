@@ -9,22 +9,34 @@ import {
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import type { AbstractControl, ValidationErrors } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DialogModule } from 'primeng/dialog';
 import { AuthService } from '../../../core/services/auth/auth';
 import { ROLE_LABELS } from '../../../core/models/user';
+import { Avatar } from '../../../shared/components/avatar/avatar';
 import { PageHeader } from '../../../shared/components/page-header/page-header';
 import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
 import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { extractDetail } from '../../../shared/utils/api-error';
 
+const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const AVATAR_MAX_MB = 5;
+const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d).+$/;
+
 type PasswordStep = 1 | 2 | 3;
 type PasswordField = 'current_password' | 'otp_code' | 'new_password' | 'confirm_password';
 
+function passwordsMatch(control: AbstractControl): ValidationErrors | null {
+  const password = control.parent?.get('new_password')?.value;
+  if (!control.value || !password) return null;
+  return control.value === password ? null : { mismatch: true };
+}
+
 @Component({
   selector: 'app-profile-page',
-  imports: [ReactiveFormsModule, PageHeader, UiAlert, UiButton, UiInput, DialogModule],
+  imports: [ReactiveFormsModule, PageHeader, UiAlert, UiButton, UiInput, DialogModule, Avatar],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './profile.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -34,6 +46,8 @@ export class ProfilePage {
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
 
+  readonly avatarBusy = signal(false);
+  readonly avatarError = signal('');
   readonly loading = signal(false);
   readonly loadError = signal('');
   readonly isSendingOtp = signal(false);
@@ -70,10 +84,21 @@ export class ProfilePage {
   });
 
   readonly form = this.fb.nonNullable.group({
-    current_password: ['', [Validators.required, Validators.minLength(6)]],
+    current_password: ['', [Validators.required, Validators.minLength(6), Validators.maxLength(128)]],
     otp_code: ['', [Validators.required, Validators.pattern(/^\d{6}$/)]],
-    new_password: ['', [Validators.required, Validators.minLength(8)]],
-    confirm_password: ['', [Validators.required, Validators.minLength(8)]],
+    new_password: [
+      '',
+      [
+        Validators.required,
+        Validators.minLength(8),
+        Validators.maxLength(128),
+        Validators.pattern(PASSWORD_PATTERN),
+      ],
+    ],
+    confirm_password: [
+      '',
+      [Validators.required, Validators.minLength(8), Validators.maxLength(128), passwordsMatch],
+    ],
   });
 
   private resendTimer: ReturnType<typeof setInterval> | null = null;
@@ -90,7 +115,51 @@ export class ProfilePage {
         }
       });
 
+    this.form.controls.new_password.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => {
+        this.form.controls.confirm_password.updateValueAndValidity({ emitEvent: false });
+      });
+
     this.destroyRef.onDestroy(() => this.stopResendTimer());
+  }
+
+  onAvatarSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    if (!file) return;
+
+    const invalid = this.avatarProblem(file);
+    this.avatarError.set(invalid);
+    if (invalid) return;
+
+    this.avatarBusy.set(true);
+    this.auth.uploadAvatar(file).subscribe({
+      next: () => this.avatarBusy.set(false),
+      error: (err) => {
+        this.avatarBusy.set(false);
+        this.avatarError.set(extractDetail(err));
+      },
+    });
+  }
+
+  removeAvatar(): void {
+    this.avatarBusy.set(true);
+    this.avatarError.set('');
+    this.auth.removeAvatar().subscribe({
+      next: () => this.avatarBusy.set(false),
+      error: (err) => {
+        this.avatarBusy.set(false);
+        this.avatarError.set(extractDetail(err));
+      },
+    });
+  }
+
+  private avatarProblem(file: File): string {
+    if (!AVATAR_TYPES.includes(file.type)) return 'La foto debe ser JPG, PNG o WEBP.';
+    if (file.size > AVATAR_MAX_MB * 1024 * 1024) return `La foto no puede superar ${AVATAR_MAX_MB} MB.`;
+    return '';
   }
 
   refresh(): void {
@@ -148,9 +217,14 @@ export class ProfilePage {
 
   fieldError(field: PasswordField): string {
     const control = this.form.get(field);
-    if (!control || !control.touched || !control.errors) return '';
+    if (!control || (!control.touched && !control.value) || !control.errors) return '';
     if (control.errors['required']) return 'Este campo es obligatorio.';
+    if (control.errors['maxlength']) return 'No puede superar los 128 caracteres.';
+    if (control.errors['serverPolicy'] || (field === 'new_password' && control.errors['pattern'])) {
+      return 'Usa entre 8 y 128 caracteres, con al menos una letra y un número.';
+    }
     if (control.errors['pattern']) return 'Ingresa los 6 dígitos del código.';
+    if (control.errors['mismatch']) return 'Las contraseñas no coinciden.';
     if (control.errors['minlength']) {
       return field === 'current_password' ? 'Mínimo 6 caracteres.' : 'Mínimo 8 caracteres.';
     }
@@ -266,6 +340,13 @@ export class ProfilePage {
       error: (err: HttpErrorResponse) => {
         this.isSubmitting.set(false);
         const detail = extractDetail(err);
+        if (err.status === 422 && /new_password/i.test(detail)) {
+          const password = this.form.controls.new_password;
+          password.setErrors({ ...password.errors, serverPolicy: true });
+          password.markAsTouched();
+          this.errorMessage.set('');
+          return;
+        }
         this.errorMessage.set(detail);
         if (/código|verifica/i.test(detail)) {
           this.step.set(2);
