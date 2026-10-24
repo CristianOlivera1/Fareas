@@ -349,6 +349,14 @@ async def rectificar(
         new_value={"status": str(body.new_status.value), "reason": body.reason.strip()},
         ip_address=_client_ip(request),
     )
+
+    from app.services.notification_center import notificar_rectificacion
+
+    await notificar_rectificacion(
+        db, record=record, session=session, actor=docente,
+        old_status=old["status"], new_status=body.new_status.value,
+        reason=body.reason.strip(),
+    )
     await db.commit()
     await db.refresh(record)
     return {

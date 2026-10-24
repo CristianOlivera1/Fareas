@@ -25,6 +25,7 @@ from app.schemas.auth import (
 )
 from app.services import otp
 from app.services.audit import audit
+from app.services.avatars import avatar_url
 from app.services.emailer import send_otp, send_password_changed_notice
 from app.services.refresh_tokens import (
     RefreshTokenError,
@@ -40,7 +41,6 @@ logger = logging.getLogger("fareas.auth")
 
 _OTP_TTL_SECONDS = otp.OTP_TTL_SECONDS
 _OTP_MAX_ATTEMPTS = otp.OTP_MAX_ATTEMPTS
-_otp_store = otp._store
 
 
 _LOGIN_MAX_ATTEMPTS = 5
@@ -103,18 +103,24 @@ def _otp_http_error(exc: otp.OtpError) -> HTTPException:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Verifica primero el código enviado a tu correo",
         )
+    if isinstance(exc, otp.OtpUsedError):
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este código ya se usó. Solicita uno nuevo.",
+        )
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail="El código expiró o no existe. Solicita uno nuevo.",
     )
 
-def _build_user_out(user: AppUser) -> UserOut:
+async def _build_user_out(user: AppUser) -> UserOut:
     return UserOut(
         id=user.id,
         role=user.role.value,
         full_name=user.full_name,
         email=user.email,
         must_change_password=user.must_change_password,
+        avatar_url=await avatar_url(user.avatar_key),
     )
 
 @router.post("/login", response_model=LoginResponse)
@@ -148,7 +154,7 @@ async def login(body: LoginRequest, request: Request, db: DbSession) -> LoginRes
         refresh_token=issued.refresh_token,
         expires_in=issued.expires_in,
         refresh_expires_in=issued.refresh_expires_in,
-        user=_build_user_out(user),
+        user=await _build_user_out(user),
     )
 
 @router.post("/refresh", response_model=TokenPairResponse)
@@ -204,7 +210,7 @@ async def logout_all(
 
 @router.get("/me", response_model=UserOut)
 async def me(user: CurrentUserPending) -> UserOut:
-    return _build_user_out(user)
+    return await _build_user_out(user)
 
 @router.post("/change-password/otp", response_model=ChangePasswordOtpResponse)
 async def request_change_password_otp(
@@ -225,7 +231,7 @@ async def request_change_password_otp(
         )
 
     try:
-        code = otp.issue(user.id, otp.OtpPurpose.CHANGE_PASSWORD)
+        code = await otp.issue(db, user.id, otp.OtpPurpose.CHANGE_PASSWORD)
     except otp.OtpError as exc:
         raise _otp_http_error(exc) from exc
 
@@ -251,9 +257,10 @@ async def request_change_password_otp(
 async def verify_change_password_otp(
     body: VerifyChangePasswordOtpRequest,
     user: CurrentUserPending,
+    db: DbSession,
 ) -> MessageResponse:
     try:
-        otp.verify(user.id, otp.OtpPurpose.CHANGE_PASSWORD, body.code)
+        await otp.verify(db, user.id, otp.OtpPurpose.CHANGE_PASSWORD, body.code)
     except otp.OtpError as exc:
         raise _otp_http_error(exc) from exc
     return MessageResponse(message="Código validado. Define tu nueva contraseña")
@@ -279,7 +286,7 @@ async def change_password(
     used_otp = not user.must_change_password
     if used_otp:
         try:
-            otp.consume(user.id, otp.OtpPurpose.CHANGE_PASSWORD)
+            await otp.consume(db, user.id, otp.OtpPurpose.CHANGE_PASSWORD)
         except otp.OtpError as exc:
             raise _otp_http_error(exc) from exc
 
@@ -322,7 +329,7 @@ async def recover(body: RecoverRequest, db: DbSession) -> RecoverResponse:
         logger.info("Recuperación solicitada para correo no registrado: %s", otp.mask_email(email))
     else:
         try:
-            code = otp.issue(user.id, otp.OtpPurpose.RECOVER)
+            code = await otp.issue(db, user.id, otp.OtpPurpose.RECOVER)
         except otp.OtpCooldownError as exc:
             logger.info(
                 "Recuperación en espera para %s: %s segundos",
@@ -356,7 +363,7 @@ async def verify_otp(body: VerifyOtpRequest, db: DbSession) -> MessageResponse:
             detail="Código expirado o inexistente",
         )
     try:
-        otp.verify(user.id, otp.OtpPurpose.RECOVER, body.code)
+        await otp.verify(db, user.id, otp.OtpPurpose.RECOVER, body.code)
     except otp.OtpError as exc:
         raise _otp_http_error(exc) from exc
     return MessageResponse(message="Código validado. Ahora define tu nueva contraseña")
@@ -367,7 +374,7 @@ async def reset_password(body: ResetPasswordRequest, db: DbSession) -> MessageRe
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cuenta no encontrada")
     try:
-        otp.consume(user.id, otp.OtpPurpose.RECOVER)
+        await otp.consume(db, user.id, otp.OtpPurpose.RECOVER)
     except otp.OtpError as exc:
         raise _otp_http_error(exc) from exc
 

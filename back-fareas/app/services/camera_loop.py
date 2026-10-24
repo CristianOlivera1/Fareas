@@ -3,7 +3,9 @@ import contextlib
 import logging
 import socket
 import time
+from datetime import datetime
 
+from sqlalchemy import update
 from sqlmodel import select
 
 from app.ai.runtime import vision_pipeline
@@ -32,6 +34,42 @@ _reintentar_desde: dict[int, float] = {}
 _BACKOFF_CAIDA = 60.0
 _fuentes: dict[int, object] = {}
 _fallos: dict[int, int] = {}
+
+
+_HEARTBEAT_EVERY_S = 30.0
+_last_heartbeat: dict[int, float] = {}
+
+
+async def _set_camera_state(db, cam: Device, online: bool) -> None:
+    if cam.is_online == online and not online:
+        return
+    cam.is_online = online
+    cam.last_heartbeat = datetime.now() if online else cam.last_heartbeat
+    db.add(cam)
+    await db.commit()
+    if online:
+        _last_heartbeat[cam.room_id] = time.monotonic()
+    else:
+        _last_heartbeat.pop(cam.room_id, None)
+    logger.info("[RF-35] Cámara %s %s", cam.device_key, "en línea" if online else "fuera de línea")
+
+
+async def _refresh_heartbeat(db, cam: Device) -> None:
+    if time.monotonic() - _last_heartbeat.get(cam.room_id, 0.0) < _HEARTBEAT_EVERY_S:
+        return
+    cam.is_online = True
+    cam.last_heartbeat = datetime.now()
+    db.add(cam)
+    await db.commit()
+    _last_heartbeat[cam.room_id] = time.monotonic()
+
+
+async def _reset_cameras_offline() -> None:
+    async with SessionLocal() as db:
+        await db.exec(
+            update(Device).where(Device.device_type == DeviceType.CAMARA).values(is_online=False)
+        )
+        await db.commit()
 
 
 def ultimo_veredicto(room_id: int) -> dict | None:
@@ -97,7 +135,9 @@ async def _procesar_aula(pipe, room_id: int) -> None:
             src = await _abrir_fuente(room_id, cam.rtsp_url)
             if src is None:
                 _reintentar_desde[room_id] = time.monotonic() + _BACKOFF_CAIDA
+                await _set_camera_state(db, cam, False)
                 return
+            await _set_camera_state(db, cam, True)
 
         ok, frame = await asyncio.to_thread(src.read)
         if not ok or frame is None:
@@ -108,8 +148,10 @@ async def _procesar_aula(pipe, room_id: int) -> None:
                 _fuentes.pop(room_id, None)
                 _fallos[room_id] = 0
                 _reintentar_desde[room_id] = time.monotonic() + _BACKOFF_CAIDA
+                await _set_camera_state(db, cam, False)
             return
         _fallos[room_id] = 0
+        await _refresh_heartbeat(db, cam)
 
         cfg = await get_settings_row(db)
         ahora = _naive_peru(ahora_peru())
@@ -209,6 +251,11 @@ async def _bucle() -> None:
         logger.info("Galería facial cargada: %s alumnos", n)
     except Exception:
         logger.exception("No se pudo cargar la galería facial; el bucle sigue")
+
+    try:
+        await _reset_cameras_offline()
+    except Exception:
+        logger.exception("No se pudo reiniciar el estado de las cámaras")
 
     while not _stop.is_set():
         try:

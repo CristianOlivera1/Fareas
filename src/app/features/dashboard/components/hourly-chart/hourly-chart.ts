@@ -5,21 +5,24 @@ import {
   ElementRef,
   OnDestroy,
   effect,
+  inject,
   signal,
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Chart, registerables } from 'chart.js';
 import { Select } from 'primeng/select';
+import { DashboardApi, HourlyPoint } from '../../../../core/services/dashboard-api';
 
 Chart.register(...registerables);
 
-const HOURS = ['7:00', '8:00', '9:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
-
-const MOCK_SERIES: Record<string, number[]> = {
-  Hoy: [62, 78, 84, 90, 71, 55, 12, 0, 48, 66, 74, 31, 0],
-  Ayer: [58, 74, 80, 87, 68, 52, 10, 0, 44, 60, 70, 28, 0],
-};
+function isoDay(offsetDays: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
 
 @Component({
   selector: 'app-hourly-chart',
@@ -32,16 +35,27 @@ export class HourlyChart implements AfterViewInit, OnDestroy {
   readonly period = signal<'Hoy' | 'Ayer'>('Hoy');
   readonly periodOptions = signal(['Hoy', 'Ayer']);
 
+  private readonly api = inject(DashboardApi);
+  private readonly points = signal<HourlyPoint[]>([]);
+
   private readonly canvas = viewChild.required<ElementRef<HTMLCanvasElement>>('chart');
   private chart?: Chart<'line'>;
 
   constructor() {
     effect(() => {
-      const period = this.period();
-      if (this.chart) {
-        this.chart.data.datasets[0].data = MOCK_SERIES[period];
-        this.chart.update();
-      }
+      const day = isoDay(this.period() === 'Ayer' ? -1 : 0);
+      this.api.hourly(day).subscribe({
+        next: (points) => this.points.set(points),
+        error: () => this.points.set([]),
+      });
+    });
+
+    effect(() => {
+      const points = this.points();
+      if (!this.chart) return;
+      this.chart.data.labels = points.map((point) => point.hour);
+      this.chart.data.datasets[0].data = points.map((point) => point.total);
+      this.chart.update();
     });
   }
 
@@ -49,10 +63,10 @@ export class HourlyChart implements AfterViewInit, OnDestroy {
     this.chart = new Chart(this.canvas().nativeElement, {
       type: 'line',
       data: {
-        labels: HOURS,
+        labels: this.points().map((point) => point.hour),
         datasets: [
           {
-            data: MOCK_SERIES[this.period()],
+            data: this.points().map((point) => point.total),
             borderColor: '#155dfc',
             borderWidth: 2,
             fill: true,
@@ -78,8 +92,7 @@ export class HourlyChart implements AfterViewInit, OnDestroy {
         scales: {
           y: {
             min: 0,
-            max: 100,
-            ticks: { stepSize: 25, color: '#9ca3af', font: { size: 11 } },
+            ticks: { precision: 0, color: '#9ca3af', font: { size: 11 } },
             grid: { color: '#f1f5f9' },
           },
           x: {

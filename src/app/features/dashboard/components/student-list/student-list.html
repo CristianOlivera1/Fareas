@@ -9,9 +9,11 @@
   <app-data-table
     [columns]="columns"
     [data]="students()"
-    [trackBy]="trackByCode"
-    emptyTitle="Sin estudiantes"
-    emptyMessage="No hay registros de asistencia para mostrar."
+    [trackBy]="trackByRecord"
+    [loading]="loading()"
+    [errorMessage]="error()"
+    emptyTitle="Sin asistencias hoy"
+    emptyMessage="Aún no hay registros de asistencia para hoy."
   >
     <ng-template appCell="code" let-row>
       <span class="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">{{ row.code }}</span>
@@ -29,10 +31,6 @@
         <span class="size-2.5 rounded-full {{ statusDot(row.status) }}"></span>
         {{ row.status }}
       </span>
-    </ng-template>
-    <ng-template appCell="actions" let-row>
-      <app-ui-button variant="ghost" size="sm" icon="material-symbols:visibility-outline" (click)="goToAttendance()">
-      </app-ui-button>
     </ng-template>
   </app-data-table>
 </div>

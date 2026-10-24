@@ -39,6 +39,66 @@ describe('ProfilePage', () => {
     expect(component.step()).toBe(1);
   });
 
+  it('valida el formato de la contraseña nueva y muestra una indicación clara', () => {
+    component.step.set(3);
+    const password = component.form.controls.new_password;
+
+    password.setValue('a'.repeat(129));
+    password.markAsTouched();
+
+    expect(password.invalid).toBe(true);
+    expect(component.fieldError('new_password')).toBe('No puede superar los 128 caracteres.');
+
+    password.setValue('soloLetras');
+
+    expect(password.valid).toBe(true);
+    password.setValue('12345678');
+    expect(password.invalid).toBe(true);
+    expect(component.fieldError('new_password')).toBe(
+      'Usa entre 8 y 128 caracteres e incluye al menos una letra.',
+    );
+  });
+
+  it('valida en tiempo real que ambas contraseñas coincidan', () => {
+    component.step.set(3);
+    const password = component.form.controls.new_password;
+    const confirmation = component.form.controls.confirm_password;
+
+    password.setValue('NuevaClave99');
+    confirmation.setValue('NuevaClave98');
+    confirmation.markAsTouched();
+    fixture.detectChanges();
+
+    expect(confirmation.hasError('mismatch')).toBe(true);
+    expect(component.fieldError('confirm_password')).toBe('Las contraseñas no coinciden.');
+
+    password.setValue('NuevaClave98');
+
+    expect(confirmation.valid).toBe(true);
+    expect(component.fieldError('confirm_password')).toBe('');
+  });
+
+  it('presenta errores de política del servidor junto al campo sin mostrar new_password', () => {
+    component.step.set(3);
+    component.form.controls.current_password.setValue('ClaveActual1');
+    component.form.controls.otp_code.setValue('123456');
+    component.form.controls.new_password.setValue('NuevaClave99');
+    component.form.controls.confirm_password.setValue('NuevaClave99');
+
+    component.onSubmit();
+
+    const request = httpMock.expectOne(`${API}/auth/change-password`);
+    request.flush(
+      { detail: 'new_password: Value error, La contraseña debe tener al menos 8 caracteres e incluir al menos una letra' },
+      { status: 422, statusText: 'Unprocessable Entity' },
+    );
+
+    expect(component.errorMessage()).not.toContain('new_password');
+    expect(component.fieldError('new_password')).toBe(
+      'Usa entre 8 y 128 caracteres e incluye al menos una letra.',
+    );
+  });
+
   it('recorre identidad → código → nueva contraseña y actualiza', () => {
     component.form.controls.current_password.setValue('ClaveActual1');
 

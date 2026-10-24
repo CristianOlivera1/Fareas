@@ -1,13 +1,32 @@
 <section class="space-y-4">
   <div>
     <h1 class="text-xl font-semibold tracking-tight text-gray-900">Dashboard de asistencias</h1>
-    <p class="mt-1 text-sm text-gray-500">Resumen simulado del reconocimiento facial y la asistencia de hoy.</p>
+    <p class="mt-1 text-sm text-gray-500">Resumen en vivo del reconocimiento facial y la asistencia de hoy.</p>
   </div>
+
+  @if (sessionsToReview() > 0) {
+  <a routerLink="/admin/attendance"
+    class="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition-colors hover:bg-amber-100">
+    <iconify-icon icon="material-symbols:pending-actions-outline" width="20"></iconify-icon>
+    <span class="flex-1">
+      <strong>{{ sessionsToReview() }}</strong>
+      {{ sessionsToReview() === 1 ? 'sesión cerrada sin marcas necesita' : 'sesiones cerradas sin marcas necesitan' }} revisión.
+    </span>
+    <span class="font-medium">Revisar</span>
+  </a>
+  }
 
   <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
     @for (card of cards(); track card.title) {
+    @if (card.title === 'Cámaras activas' && auth.isAdmin()) {
+    <a routerLink="/admin/devices" class="block min-w-0" title="Ver monitoreo de dispositivos">
+      <app-ui-card [title]="card.title" [value]="card.value" [detail]="card.detail" [icon]="card.icon"
+        [accent]="card.accent" />
+    </a>
+    } @else {
     <app-ui-card [title]="card.title" [value]="card.value" [detail]="card.detail" [icon]="card.icon"
       [accent]="card.accent" class="min-w-0" />
+    }
     }
   </div>
   <div class="grid gap-4 xl:grid-cols-3">

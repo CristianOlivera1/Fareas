@@ -37,9 +37,19 @@ async def _reset_login_rate_limit():
 async def _reset_otp_store():
     from app.services import otp
 
-    otp.clear()
+    async def _clear() -> None:
+        settings = get_settings()
+        engine = create_async_engine(settings.DATABASE_URL)
+        maker = async_sessionmaker(engine, expire_on_commit=False, class_=SQLModelAsyncSession)
+        try:
+            async with maker() as db:
+                await otp.clear(db)
+        finally:
+            await engine.dispose()
+
+    await _clear()
     yield
-    otp.clear()
+    await _clear()
 
 @pytest.fixture(autouse=True)
 def _no_smtp(monkeypatch: pytest.MonkeyPatch):

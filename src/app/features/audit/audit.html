@@ -1,0 +1,95 @@
+<app-page-header title="Bitácora" subtitle="Historial de acciones registradas en el sistema.">
+  <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="reload()">Actualizar</app-ui-button>
+</app-page-header>
+
+<div class="mb-4 flex flex-wrap items-end gap-3">
+  <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+    Acción
+    <input type="text" maxlength="40" placeholder="p. ej. justificacion_creada"
+      class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 sm:w-56"
+      [value]="action() ?? ''" (change)="setFilter('action', $any($event.target).value)" />
+  </label>
+  <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+    Entidad
+    <input type="text" maxlength="40" placeholder="p. ej. enrollment"
+      class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 sm:w-44"
+      [value]="entity() ?? ''" (change)="setFilter('entity', $any($event.target).value)" />
+  </label>
+  <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+    Rol de quien actuó
+    <p-select appendTo="body" class="w-full sm:w-44" [options]="roleOptions" optionLabel="label" optionValue="value"
+      [ngModel]="role()" (ngModelChange)="setFilter('actor_role', $event)" aria-label="Rol" />
+  </label>
+  <label class="flex flex-col gap-1 text-xs font-medium text-gray-600">
+    Desde
+    <input type="date" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
+      [value]="since() ?? ''" (change)="setFilter('since', $any($event.target).value)" />
+  </label>
+  @if (hasFilters()) {
+    <app-ui-button variant="ghost" size="sm" icon="material-symbols:filter-alt-off-outline" (click)="clearFilters()">
+      Limpiar
+    </app-ui-button>
+  }
+</div>
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudo cargar la bitácora" class="mb-4 block">{{ msg }}</app-ui-alert>
+}
+
+<app-data-table
+  [columns]="columns" [data]="entries()" [trackBy]="trackById" mode="server"
+  [serverPage]="page()" [serverTotal]="total()" [serverPageSize]="pageSize()"
+  [loading]="loading()" [errorMessage]="error()"
+  [showClearFilters]="hasFilters()" (clearFilters)="clearFilters()"
+  emptyTitle="Sin registros" emptyMessage="No hay acciones registradas con los filtros actuales."
+  emptyIcon="material-symbols:history-toggle-off-outline"
+  (pageChange)="onPage($event)" (perPageChange)="onPageSize($event)" (retry)="reload()"
+>
+  <ng-template appCell="created_at" let-row>
+    <span class="text-sm tabular-nums text-gray-700">{{ formatDate(row.created_at) }}</span>
+  </ng-template>
+  <ng-template appCell="actor" let-row>
+    <div class="min-w-0">
+      <div class="truncate text-sm font-medium text-gray-900">{{ row.actor_name ?? 'Sistema' }}</div>
+      <div class="text-xs text-gray-500">{{ roleLabel(row.actor_role) }}</div>
+    </div>
+  </ng-template>
+  <ng-template appCell="action" let-row>
+    <span class="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">{{ row.action }}</span>
+  </ng-template>
+  <ng-template appCell="entity" let-row>
+    <span class="text-sm text-gray-600">{{ row.entity }}{{ row.entity_id !== null ? ' #' + row.entity_id : '' }}</span>
+  </ng-template>
+  <ng-template appCell="ip_address" let-row>
+    <span class="font-mono text-xs text-gray-500">{{ row.ip_address ?? '—' }}</span>
+  </ng-template>
+  <ng-template appCell="detail" let-row>
+    <button type="button"
+      class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+      title="Ver valores anterior y nuevo" (click)="openDetail(row)">
+      <iconify-icon icon="material-symbols:data-object" width="18"></iconify-icon>
+    </button>
+  </ng-template>
+</app-data-table>
+
+<p-dialog header="Detalle del registro" [(visible)]="detailVisible" [modal]="true" [style]="{ width: '40rem' }"
+  [breakpoints]="{ '640px': '95vw' }" appendTo="body">
+  @if (selected(); as entry) {
+    <dl class="grid grid-cols-2 gap-3 text-sm">
+      <div><dt class="text-xs text-gray-500">Acción</dt><dd class="font-mono">{{ entry.action }}</dd></div>
+      <div><dt class="text-xs text-gray-500">Fecha</dt><dd>{{ formatDate(entry.created_at) }}</dd></div>
+      <div><dt class="text-xs text-gray-500">Quién</dt><dd>{{ entry.actor_name ?? 'Sistema' }} · {{ roleLabel(entry.actor_role) }}</dd></div>
+      <div><dt class="text-xs text-gray-500">Entidad</dt><dd>{{ entry.entity }}{{ entry.entity_id !== null ? ' #' + entry.entity_id : '' }}</dd></div>
+    </dl>
+    <div class="mt-4 grid gap-3 sm:grid-cols-2">
+      <div class="min-w-0">
+        <p class="mb-1 text-xs font-medium text-gray-500">Valor anterior</p>
+        <pre class="max-h-72 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-800">{{ entry.old_value === null ? '—' : (entry.old_value | json) }}</pre>
+      </div>
+      <div class="min-w-0">
+        <p class="mb-1 text-xs font-medium text-gray-500">Valor nuevo</p>
+        <pre class="max-h-72 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-800">{{ entry.new_value === null ? '—' : (entry.new_value | json) }}</pre>
+      </div>
+    </div>
+  }
+</p-dialog>

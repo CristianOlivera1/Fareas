@@ -1,6 +1,6 @@
 # PLAN DE IMPLEMENTACIÓN - FRONTEND FAREAS (Angular 21 + PrimeNG + Tailwind 4)
 
-> Complemento de `PLAN-BACKEND.md` (bloques 1-15 ✅). El backend ya expone TODOS los
+> Complemento de `PLAN-BACKEND.md` (bloques 1-16 ✅). El backend ya expone TODOS los
 > endpoints necesarios; este plan conecta la interfaz a datos reales por bloques,
 > cada uno terminando en algo navegable y verificable.
 > Principio rector: **profesional y técnico, no empresarial**. Sin SSR, sin PWA,
@@ -15,16 +15,22 @@
 |---|---|
 | Login completo RF-11/RF-12 | `features/auth/login`, `recover-password`, `change-password` + guards (`authGuard`, `loginGuard`, `mustChangePasswordGuard`) |
 | Mi perfil con OTP (2026-10-22) | `features/profile` → cambio guiado de 3 pasos (clave actual → código al correo → nueva clave), contador de reenvío y persistencia del token nuevo |
-| AuthService | signals `currentUser/isAuthenticated/isAdmin/isDocente/mustChangePassword`, rate-limit cliente, sin refresh tokens (coherente backend) |
-| Interceptor 401 | `core/interceptors/auth.ts` → limpia sesión y manda a `/login?reason=session_expired` |
-| Layout admin | `layouts/admin` con Sidebar + Header funcionales (menú PLANO: Dashboard, Asistencias) |
-| Dashboard mock | 4 tarjetas, activity-feed con `setInterval`, hourly-chart, distribution-chart, student-list (todos con MOCK data) |
-| Asistencia mock | `features/attendance` con tabla estática |
+| AuthService | signals `currentUser/isAuthenticated/isAdmin/isDocente/mustChangePassword`, rate-limit cliente, refresh tokens de 30 días (`/auth/refresh`) |
+| Interceptor | `core/interceptors/auth.ts` → ante 401 renueva con el refresh token y reintenta; si falla, limpia sesión y manda a `/login?reason=session_expired`; un 403 `must_change_password` lleva a `/auth/change-password` |
+| Layout y menús por rol | `layouts/admin` con Sidebar agrupado y Header; `core/constants/nav.ts` define el menú de admin, docente y estudiante (§8) |
+| Dashboard en vivo (F5) | Tarjetas, gráficos y lista desde la API; actividad en tiempo real por SSE con reconexión |
+| Asistencias, calendario y parámetros (F3) | `features/attendance`, feriados, justificaciones (con adjunto) y parámetros conectados a la API |
+| Reportes y bitácora (F6) | `/reports` (Excel/PDF, registro del grupo, riesgo DPI) y `/audit` con filtros y detalle JSON |
+| Portal del estudiante y del docente (§8) | Inicio, horario, cursos, asistencias y justificaciones del estudiante; Mis grupos, horario y alumnos en riesgo del docente |
+| Foto de perfil (2026-10-23) | `shared/components/avatar`; `/profile` permite subir, cambiar y quitar la foto; se muestra en el sidebar |
+| Producción (F8) | `environment.ts` apunta a `/api/v1` y FastAPI sirve `dist/fareas/browser` con `FRONTEND_DIST_DIR` |
 | Cursos y matrículas REALES (F2, 2026-10-12) | `features/courses` (lista de cursos + detalle con grupos y grilla semanal) y `features/enrollments` (cupo 40, retiro y transferencia) conectados a la API |
 | Horarios por ciclo (F2b, 2026-10-22) | Cursos con ciclo I–X, filtro por ciclo y pestañas por ciclo en `/schedule`; el grupo hereda el ciclo del curso y los choques siguen siendo del periodo |
 | Importación OCR (F6b/F6c, 2026-10-23) | `/imports` importa horarios (PDF/foto, 3 pasos, tabla editable) y `/students` incorpora «Importar nómina» (diálogo 3 pasos, correo generado y matrícula opcional); ambos consumen los endpoints reales y son solo admin |
+| Centro de notificaciones (F4b, 2026-10-23) | Campanita en el header con contador cada 10 s, lista bajo demanda, marcar leída/todas y navegación al evento; cubre admin, docente y estudiante |
 | Host global de toasts (2026-10-12) | `app.html` incluye `<p-toast>`; sin él, TODOS los `toast.add()` de la app (errores 409 incluidos) quedaban invisibles |
-| Build y tests OK | `ng build --configuration development` pasa; `dist/fareas` generado. `npm test` 7/7 (2026-10-23) |
+| Enrolamiento facial (F4, 2026-10-23) | `/faces` busca estudiantes, muestra estado y foto firmada, captura 3–5 fotos por webcam o archivos, exige consentimiento y permite eliminar el rostro; `/students` enlaza «Enrolar rostro» |
+| Build y tests OK | `ng build` pasa; `dist/fareas` generado. `ng test` 11/11 archivos, 47 pruebas (2026-10-23) |
 
 **Stack fijo:** Angular 21 (standalone + signals + OnPush), PrimeNG 20, Tailwind 4,
 Chart.js 4, material-symbols/akar-icons ya en uso.
@@ -63,13 +69,16 @@ Chart.js 4, material-symbols/akar-icons ya en uso.
 ## 2. Estructura de rutas objetivo (Bloque F1 las crea; F2-F6 las llenan)
 
 ```
-/admin                    → AdminLayout (authGuard + roleGuard admin|docente)
+/admin                    → AdminLayout (authGuard) + `navGuard(ruta)` por hijo; roles desde `core/constants/nav.ts`
+  /me                     → Mis asistencias + DPI (F3b)    [estudiante]
+  /profile                → Mi perfil (cambio de clave con OTP) [todos los roles]
+  /schedule               → Horario general (F2b)         [admin CRUD; docente lectura]
   /dashboard              → Dashboard REAL (F5)          [admin, docente]
   /attendance             → Asistencias REAL (F3)        [admin, docente]
   /courses                → Cursos y grupos + bloques (F2) [admin CRUD; docente lectura]
   /enrollments            → Matrículas por grupo (F2)     [admin CRUD; docente lectura]
   /teachers               → Docentes (F2)                 [admin]
-  /students               → Estudiantes + estado facial + importar nómina OCR (F2/F4/F6c) [admin; docente lee]
+  /students               → Estudiantes + estado facial + importar nómina OCR (F2/F4/F6c) [admin; docente lee solo los matriculados en sus grupos]
   /rooms                  → Aulas (F2)                    [admin]
   /devices                → Dispositivos + monitoreo RF-35 (F2/F5) [admin]
   /calendar/holidays      → Feriados (F3)                 [admin CRUD; docente lee]
@@ -80,17 +89,18 @@ Chart.js 4, material-symbols/akar-icons ya en uso.
   /reports                → Reportes Excel/PDF (F6)       [admin, docente]
   /audit                  → Bitácora RF-32 (F6)           [admin]
 /login  /auth/recover  /auth/change-password   → (ya existen, solo retoques visuales)
+**                        → NotFoundPage (404), sin redirigir a /login
 ```
 
-Guard nuevo en F1: `roleGuard` leyendo `data: { roles: ['admin'] }` de la ruta;
-el menú del sidebar filtra con la MISMA matriz (una sola fuente de verdad:
-`core/constants/nav.ts`).
+Fuente única de roles: `navGuard(ruta)` deriva los roles de `NAV` (`core/constants/nav.ts`)
+y el sidebar filtra con la misma matriz. Un rol rechazado vuelve a `ROLE_HOME[rol]` con aviso.
 
 ## 3. Menú del sidebar (agrupado, con roles)
 
 Fuente única: `core/constants/nav.ts` → `NavItem { label, route, icon, roles, children? }`.
 El sidebar actual (`layouts/admin/components/sidebar`) se extiende: grupos colapsables
-(uno abierto a la vez), badge opcional (p. ej. alertas DPI en Dashboard), mismo estilo.
+(todos abiertos por defecto y plegables a mano), badge opcional (p. ej. alertas DPI en Dashboard), mismo estilo.
+«Mi perfil» vive en el menú de usuario del pie del sidebar para todos los roles.
 
 **ADMIN ve:**
 
@@ -98,7 +108,8 @@ El sidebar actual (`layouts/admin/components/sidebar`) se extiende: grupos colap
 |---|---|---|
 | — | Dashboard (`/dashboard`) | `material-symbols:dashboard-outline` |
 | — | Asistencias (`/attendance`) | `material-symbols:fact-check-outline` |
-| Académico ▾ | Cursos y grupos (`/courses`) | `material-symbols:menu-book-outline` |
+| Académico ▾ | Cursos y grupos (`/courses`) | `material-symbols:auto-stories-outline` |
+| | Horario general (`/schedule`) | `material-symbols:calendar-view-week` |
 | | Matrículas (`/enrollments`) | `material-symbols:how-to-reg-outline` |
 | Catálogo ▾ | Docentes (`/teachers`) | `material-symbols:person-outline` |
 | | Estudiantes (`/students`) | `material-symbols:school-outline` |
@@ -112,8 +123,12 @@ El sidebar actual (`layouts/admin/components/sidebar`) se extiende: grupos colap
 | | Reportes (`/reports`) | `material-symbols:description-outline` |
 | | Bitácora (`/audit`) | `material-symbols:history-toggle-off-outline` |
 
-**DOCENTE ve:** Dashboard · Asistencias · Académico (Cursos, Matrículas — solo lectura)
-· Calendario (Feriados, Justificaciones — lectura) · Herramientas (Reportes).
+**DOCENTE ve:** Dashboard · Asistencias · Académico (Cursos, Horario general, Matrículas — solo lectura)
+· Catálogo (solo «Estudiantes», lectura y únicamente los matriculados en sus grupos; el backend filtra por
+privacidad de DNI/WhatsApp, Ley 29733) · Calendario (Feriados, Justificaciones — lectura) · Herramientas (Reportes).
+No accede a Enrolamiento facial (biometría: solo admin).
+
+**ESTUDIANTE ve:** únicamente «Mis asistencias» (`/me`) y «Mi perfil»; cualquier otra URL de `/admin` lo devuelve a `/admin/me` con aviso.
 Los botones de creación/edición se ocultan con `@if (auth.isAdmin())` en las vistas
 compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 
@@ -122,34 +137,34 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 ## 4. Bloques de implementación (cada uno termina verificable)
 
 ### F0-F1 - Infraestructura de datos + navegación (½ día)
-- [ ] `core/api/`: `api-url.ts` (dev: `environment.apiUrl`; prod: `/api/v1` relativo),
+- [x] `core/api/`: `api-url.ts` (dev: `environment.apiUrl`; prod: `/api/v1` relativo),
   `page.ts` (tipo `Page<T>` idéntico al backend), `params.ts` (serializa `?page=&page_size=&q=`).
-- [ ] `core/services/` genéricos por módulo: `catalog-api.ts` (rooms/devices/teachers/students
+- [x] `core/services/` genéricos por módulo: `catalog-api.ts` (rooms/devices/teachers/students
   con `Page<T>`), `courses-api.ts`, `calendar-api.ts` — HttpClient tipado, sin estado global
   (cada página recarga; PLAN §7: sin NgRx).
-- [ ] UI kit compartido: `shared/components/` → `page-header`, `data-table` (ya existe:
+- [x] UI kit compartido: `shared/components/` → `page-header`, `data-table` (ya existe:
   ampliar a `Page<T>` + paginador PrimeNG), `confirm-dialog` (PrimeNG ConfirmationService),
   `toasts` (MessageService global), `empty-state`, `skeleton-table`.
-- [ ] `roleGuard` + rutas hijas de `/admin` con `data.roles` (rutas creadas apuntando a
+- [x] `roleGuard` + rutas hijas de `/admin` con `data.roles` (rutas creadas apuntando a
   placeholders "En construcción" salvo las existentes).
-- [ ] Sidebar agrupado con `nav.ts` + submenús colapsables + roles.
+- [x] Sidebar agrupado con `nav.ts` + submenús colapsables + roles.
 - **Entregable:** login → panel con menú completo por rol; rutas nuevas navegan a placeholders.
 
 ### F2 - Catálogos y carga académica (1-1.5 días) - RF-02…RF-06, RF-22, RF-35
-- [ ] **Aulas** `/rooms`: tabla paginada + crear/editar (dialog) — `GET/POST /rooms`, `PATCH /rooms/{id}`.
-- [ ] **Docentes** `/teachers`: tabla + alta (dialog: nombre, email, DNI, WhatsApp) — `GET/POST /teachers`;
+- [x] **Aulas** `/rooms`: tabla paginada + crear/editar (dialog) — `GET/POST /rooms`, `PATCH /rooms/{id}`.
+- [x] **Docentes** `/teachers`: tabla + alta (dialog: nombre, email, DNI, WhatsApp) — `GET/POST /teachers`;
   botón "Reenviar clave" → `POST /accounts/{id}/send-temp-password`; editar → `PATCH /accounts/{id}`.
-- [ ] **Estudiantes** `/students`: tabla + alta (incluye `code` y `semester`) — `GET/POST /students`;
+- [x] **Estudiantes** `/students`: tabla + alta (incluye `code` y `semester`) — `GET/POST /students`;
   columna "Rostro" con badge Enrolado/Sin rostro (F4 lo conecta a `GET /students/{id}/faces`).
-- [ ] **Dispositivos** `/devices`: tabla + alta (tipo cámara exige `rtsp_url`) — `GET/POST /devices`,
+- [x] **Dispositivos** `/devices`: tabla + alta (tipo cámara exige `rtsp_url`) — `GET/POST /devices`,
   `PATCH /devices/{id}`; **pestaña "Monitoreo" RF-35**: tarjetas por aula con estado en línea
   (verde/gris) desde `GET /devices/status` (público) con auto-refresh cada 30 s.
-- [ ] **Cursos y grupos** `/courses`: lista de cursos (`GET/POST /courses`) → detalle de curso con
+- [x] **Cursos y grupos** `/courses`: lista de cursos (`GET/POST /courses`) → detalle de curso con
   sus grupos (`GET /courses/{id}/groups?semester=` — **Bloque 11: cada grupo trae `semester_label`,
   `capacity` y `enrolled_count`**), crear grupo (docente+aula+**cupo, 40 por defecto**: selects de
   `/teachers` y `/rooms`) → detalle de grupo con BLOQUES horarios (tabla semanal **LUN-VIE**,
   crear/patch/delete con detección de choque RF-06 mostrando el 409 del backend como toast).
-- [ ] **Matrículas** `/enrollments`: selector curso→grupo (`GET /courses` + `GET /courses/{id}/groups`)
+- [x] **Matrículas** `/enrollments`: selector curso→grupo (`GET /courses` + `GET /courses/{id}/groups`)
   + listar/alta/quitar alumnos (`GET/POST/DELETE /groups/{id}/students`, autocomplete de estudiantes).
   **Bloque 11 (R8):** el alta puede responder 409 con mensajes claros ("Grupo lleno 40/40",
   "ya está matriculado en el grupo B", "el horario se cruza con …"); el listado trae
@@ -230,15 +245,15 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   horario, contador de horas libres y alta de bloque con solo grupos del ciclo).
 
 ### F3 - Asistencia y calendario (1 día) - RF-09, RF-10, RF-15, RF-21, RF-26, RF-34
-- [ ] **Backend (~30 min, aprobado):** `GET /attendance/sessions-today` →
+- [x] **Backend (~30 min, aprobado):** `GET /attendance/sessions-today` →
   `[{session_id, course_code, course_name, group_code, room_code, weekday, start_time, end_time,
   status, total_marcas}]` (sesiones de hoy abiertas+cerradas del docente o todas para admin).
-- [ ] **Asistencias** `/attendance`: tabla en vivo de HOY desde `GET /attendance/today` con filtros
+- [x] **Asistencias** `/attendance`: tabla en vivo de HOY desde `GET /attendance/today` con filtros
   curso/aula/estado (refresh manual + botón); **modal marca manual RF-21**: seleccionar sesión
   (de `sessions-today`) → estudiante (solo matriculados del grupo) → estado → `POST /sessions/{id}/manual-mark`;
   **rectificar RF-15**: acción de fila con dialog motivo → `PATCH /attendance/{id}/rectify`;
   botón "Cerrar sesión" (admin) → `POST /sessions/{id}/close` con resumen de faltas.
-- [ ] **Bloque 11 (backend ya listo):**
+- [x] **Bloque 11 (backend ya listo):**
   - **Día sin clase / paro:** `POST /sessions/{id}/cancel` y `POST /blocks/{id}/cancel-day`
     (body `{reason, fecha?}`; admin también pre-cancela fechas futuras).
   - **Sesiones por revisar (R4):** `GET /attendance/sessions-review` (cerradas con cero marcas;
@@ -248,16 +263,16 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
     (solo admin/docente; el estado de la fila pasa a "Falta justificada", FJ).
   - **Plazo de rectificación:** el backend responde 403 a docentes fuera de los 7 días
     (`rectify_days`); la UI puede ocultar la acción en filas antiguas y mostrar el motivo.
-- [ ] **Feriados** `/calendar/holidays`: lista + alta/baja — `GET/POST /holidays`, `DELETE /holidays/{id}`;
+- [x] **Feriados** `/calendar/holidays`: lista + alta/baja — `GET/POST /holidays`, `DELETE /holidays/{id}`;
   **Bloque 11:** botón "Cargar feriados nacionales del año" → `POST /holidays/national?year=`
   (o body `{year}`) y "Paro por rango" → `POST /holidays/range` `{desde, hasta, descripcion,
   omitir_fines_de_semana}` → chip con `{creados, omitidos, sesiones_canceladas}`.
-- [ ] **Justificaciones** `/calendar/justifications`: lista filtrable por alumno + alta
+- [x] **Justificaciones** `/calendar/justifications`: lista filtrable por alumno + alta
   (rango fechas, motivo, curso opcional, documento URL) — `GET/POST /justifications`, `DELETE /justifications/{id}`.
   **Bloque 11 (R6):** la respuesta de alta trae `faltas_afectadas` (mostrarlo en el toast) y el
   docente está obligado a elegir curso; eliminar revierte las faltas (confirmar con dialog).
   **F4.1:** el campo "documento URL" se complementa con adjunto PDF/JPG/PNG (subida por backend).
-- [ ] **Parámetros** `/calendar/settings`: formulario semestre/bloque/tolerancia/**ventana de
+- [x] **Parámetros** `/calendar/settings`: formulario semestre/bloque/tolerancia/**ventana de
   apertura (early_open_minutes), rectify_days, dpi_min_sessions y fechas del semestre
   (semester_start/end)** — `GET/PATCH /settings` (aviso: "aplica a sesiones siguientes, nunca
   retroactivo" RF-34; validación cliente: aviso < límite; inicio < fin).
@@ -290,19 +305,19 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   y el buscador no se renderizaba; y Justificaciones pedía `page_size=200` cuando el backend
   limita a 100 (422 → el selector de cursos quedaba vacío).
 
-### F3b - "Mis asistencias" del ESTUDIANTE (nuevo, ½ día) - RF-22/RF-24 con vista propia
+### F3b - "Mis asistencias" del ESTUDIANTE (½ día) - RF-22/RF-24 - **✅ LISTO (2026-10-23)**
+> Implementado en `/admin/me` (reutiliza el layout con sidebar y cierre de sesión): tarjetas de inasistencias por curso desde `GET /attendance/me/dpi` (porcentaje, barra, nivel En regla/En riesgo/Límite superado, tardanzas, justificadas y faltas restantes), filtro de fechas `desde/hasta` y tabla de `GET /attendance/me` con badge propio para la falta justificada, método y motivo de rectificación. Archivos: `features/my-attendance/*` (con spec) y `MyAttendance/MyDpi` en `attendance-api.ts`. Los puntos de abajo son el diseño original.
 > Decisión 1 revisada: el estudiante SÍ entra a la app. El backend YA expone
 > `GET /attendance/me` (Bloque 6b del PLAN-BACKEND: solo rol estudiante, filtros
 > ?desde=&hasta=, devuelve curso, grupo, estado, marked_at, method y correct_reason).
-- [ ] Ruta `​/me` (o `/my-attendance`) FUERA de `/admin` (otro guard: solo rol estudiante;
-  el panel admin/docente sigue con roleGuard) con layout propio simple.
-- [ ] Pantalla: lista de asistencias del alumno (curso, grupo, fecha/franja, badge de estado
+- [x] Rutas `/me` y `/my-attendance` dentro de `/admin`, con `navGuard` solo para el rol estudiante (reutiliza el layout con sidebar y cierre de sesión).
+- [x] Pantalla: lista de asistencias del alumno (curso, grupo, fecha/franja, badge de estado
   asistio/tardanza/falta con colores Tabla 8, método facial/manual) + filtro de rango de fechas.
   **Bloque 11:** la respuesta trae `is_justified` → badge propio para la **falta justificada (FJ)**
   (no cuenta para el 30 %); añadir una tarjeta de **DPI por curso** con `GET /attendance/me/dpi`
   (porcentaje, nivel alerta/límite, sesiones planificadas y faltas restantes).
-- [ ] Mostrar `correct_reason` si la marca fue rectificada (RF-15 visible para el alumno).
-- [ ] El estudiante no puede navegar a `/admin` (authGuard y roleDocente ya lo bloquean;
+- [x] Mostrar `correct_reason` si la marca fue rectificada (RF-15 visible para el alumno).
+- [x] El estudiante no puede navegar a `/admin` (authGuard y roleDocente ya lo bloquean;
   verificar la redirección de login para rol estudiante → `/me` y no a `/admin/dashboard`).
 - **Entregable:** el estudiante entra con su cuenta del BD (código o correo), ve SU historial
   y sus alertas DPI siguen llegando por correo (RF-24) sin cambio en el backend.
@@ -335,51 +350,81 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   `shared/components/ui-input/ui-input.{ts,html}`.
 - **Verificación:** `npm run build` OK y `npm test -- --watch=false` OK.
 
-### F4 - Enrolamiento facial (½-1 día) - RF-04, RF-20
-- [ ] Página `/faces`: buscar estudiante → `GET /students/{id}/faces` muestra estado actual
+### F4 - Enrolamiento facial (½-1 día) - RF-04, RF-20 - **✅ LISTO (2026-10-23)**
+- [x] Página `/faces`: buscar estudiante → `GET /students/{id}/faces` muestra estado actual
   (enrolado sí/no, foto, fecha); flujo de captura: **webcam** (`navigator.mediaDevices.getUserMedia`,
   botón capturar ×N) O **subir archivos** (input multiple); client-side: comprimir a JPEG ~640px,
   convertir a base64 → `POST /students/{id}/faces` con `{photos: [...], consent: true}`.
   **Bloque 11 (R13, Ley 29733):** obligatorio un **checkbox de consentimiento** antes de enviar
   (sin `consent: true` el backend responde 422) y acción "Eliminar rostro" (admin) →
   `DELETE /students/{id}/faces` con dialog de confirmación (borra embeddings y el objeto local/R2).
-- [ ] Manejo de errores del validador facial: 1 rostro por foto, consistencia ≥0.55,
+- [x] Manejo de errores del validador facial: 1 rostro por foto, consistencia de cada foto frente a las demás ≥0.40 (el mensaje indica qué foto reemplazar),
   duplicado → mensajes claros del backend en toasts.
-- [ ] En `/students`: badge de enrolamiento + acción directa "Enrolar rostro".
+- [x] En `/students`: badge de enrolamiento + acción directa "Enrolar rostro".
+- **Verificación (2026-10-23):** `ng build` OK y `ng test` 11/11 archivos. La captura por webcam quedó implementada, pero no se probó con cámara física (el entorno no expone una); el flujo por archivos y el estado se validaron contra el backend real con un alumno temporal (creado y eliminado después).
 - **Entregable:** enrolar a un alumno desde la webcam y verlo identificado en el video demo
   (`scripts/simulate_camera.py`) sin tocar la BD a mano.
 
 ### F4.1 - Archivos en Cloudflare R2 (transversal, par con Bloque 13)
 > El backend sube y firma; Angular **no** recibe credenciales R2 ni usa el SDK.
-- [ ] **Enrolamiento:** mismas 3–5 fotos base64; `photo_url` sigue siendo el campo que consume
-  `<img>`, ahora con URL firmada de 900 s. Si expira, recargar el estado (no cachear la URL).
-- [ ] **Justificaciones:** input PDF/JPG/PNG ≤10 MB; después de crear la justificación,
-  `POST /justifications/{id}/document` (multipart); "Ver documento" usa la URL firmada;
-  eliminar la justificación borra el objeto. Se mantiene el campo URL externo por compatibilidad.
-- [ ] Manejo de 413 (tamaño), 415 (tipo), 422 (validación), 502/503 (R2) con mensajes claros.
-- [ ] **F8:** ninguna variable `R2_*` en Angular; el frontend solo conoce `apiUrl`.
+- [x] **Enrolamiento:** mismas 3–5 fotos base64; `photo_url` sigue siendo el campo que consume
+  `<img>`, ahora con URL firmada de 900 s. Si expira, recargar el estado (no cachear la URL). La UI ya lo consume así.
+- [x] **Justificaciones:** el diálogo de alta incluye `app-file-drop` (PDF/JPG/PNG ≤10 MB) y sube el archivo con
+  `POST /justifications/{id}/document` tras crear la justificación (si falla, avisa y deja adjuntarlo después);
+  la tabla permite adjuntar, reemplazar y quitar el documento por fila; "Ver documento" usa la URL firmada.
+  Se mantiene el campo URL externo por compatibilidad.
+- [x] Manejo de errores (413, 415, 422, 503): se valida tipo y tamaño en el cliente y el detalle del backend se muestra en un aviso.
+- [x] **F8:** ninguna variable `R2_*` en Angular; el frontend solo conoce `apiUrl`.
 - **Entregable:** enrolar y adjuntar un documento desde la UI sin que el navegador vea credenciales del bucket.
 
-### F5 - Dashboard en vivo (1 día) - RF-13, RF-35, PLAN §5
-- [ ] `DashboardApi`: `GET /dashboard/summary` → las tarjetas reales (asistencias/tardanzas/
+### F4b - Centro de notificaciones por rol (2026-10-23) - RF-24 - **✅ LISTO**
+> Backend: Bloque 16. La campanita vive en el header del layout compartido y
+> funciona para los tres roles; el contenido y los enlaces cambian según el rol
+> que generó el evento.
+- [x] `NotificationsApi` (`unreadCount`, `list`, `markRead`, `markAllRead`) y modelos
+  `AppNotification/NotificationList`.
+- [x] Contador con **polling de 10 s** (`interval` + `switchMap`, errores silenciosos);
+  la lista se pide **solo al abrir** la bandeja y al pulsar actualizar, sin polling.
+- [x] Panel con iconos/severidad por tipo, tiempo relativo, estado sin leer, carga,
+  error con reintento y vacío; botones «Marcar todas» y «Actualizar»; cierre por
+  clic fuera y Escape; enlace directo a Asistencias, Justificaciones, En riesgo o
+  Mis asistencias según el aviso.
+- [x] Badge con tope `99+`; se sincroniza al marcar leída/todas y al volver a abrir.
+- [x] Header reutiliza `<app-notifications-bell />` y elimina el badge fijo «1».
+- **Verificación (2026-10-23):** `ng build` OK, `ng test -- --watch=false`
+  **69/69**; en navegador: badge 2, lista de 3 avisos, marcar una → 1, marcar
+  todas → «Todo al día», aviso nuevo detectado por el polling y refresco manual
+  de la lista. Los avisos de prueba se borraron al terminar.
+
+### F5 - Dashboard en vivo (2026-10-23) - **✅ LISTO (falta verificar con cámara real en F7)**
+> Tarjetas, banner y lista se refrescan cada 30 s (`DashboardApi.summary`, `AttendanceApi.today`); gráficos desde `GET /stats/hourly` (Hoy/Ayer, total por hora) y `GET /stats/distribution`; la tarjeta «Cámaras activas» enlaza a `/devices` solo para admin; banner ámbar con `sessions_to_review` que lleva a `/attendance`.
+> Actividad en tiempo real: servicio `core/services/live-feed.ts` (un `EventSource` por componente, token por query, reconexión con backoff 1→30 s y token renovado, estado En vivo / Reconectando) y feed que muestra el último veredicto (`asistio`, `tardanza`, `denegado`, `desconocido`, `sin_registro`; ignora `sin_rostro`), con nombre/código resueltos por `GET /accounts/{id}` y aula por `GET /rooms`. Specs: `live-feed.spec.ts`.
+> **Limitación del backend detectada:** `camaras_activas` cuenta las cámaras con `is_active`, no las que están en línea (`streams_caidos` siempre 0). El SSE solo trae ids y similitud, sin nombre ni curso; el frontend los completa con peticiones extra.
+
+### F5 (diseño original) - Dashboard en vivo (1 día) - RF-13, RF-35, PLAN §5
+- [x] `DashboardApi`: `GET /dashboard/summary` → las tarjetas reales (asistencias/tardanzas/
   ausencias con %, cámaras activas, alertas DPI) con auto-refresh 30 s. **Bloque 11:** la tarjeta
   DPI distingue `en_riesgo` (≥ 20 %) de `alertas_dpi` (> 30 %, inhabilitación) y hay un
   **banner/contador `sessions_to_review`** que enlaza a la pantalla de sesiones por revisar (F3).
-- [ ] **Activity-feed con SSE real** (reemplaza el `setInterval`):
+- [x] **Activity-feed con SSE real** (reemplaza el `setInterval`):
   `new EventSource(\`${api}/dashboard/live?access_token=${token}&room_id=...\`)`
   evento `verdict` → feed con nombre/código/similitud/veredicto (colores Tabla 8);
   `onerror` → reconexión con backoff y banner "En vivo / Reconectando…";
   cerrar en `onDestroy` (sin fugas).
-- [ ] **hourly-chart**: `GET /stats/hourly` (serie total por hora, misma estética Chart.js actual,
+- [x] **hourly-chart**: `GET /stats/hourly` (serie total por hora, misma estética Chart.js actual,
   selector Hoy con `day=` para Ayer).
-- [ ] **distribution-chart**: `GET /stats/distribution` (dona con asistio/tardanza/falta/sin_registro).
-- [ ] **student-list**: consume `GET /attendance/today` (ya con F3).
-- [ ] Tarjeta "Cámaras activas" enlaza a `/devices` (pestaña Monitoreo RF-35).
+- [x] **distribution-chart**: `GET /stats/distribution` (dona con asistio/tardanza/falta/sin_registro).
+- [x] **student-list**: consume `GET /attendance/today` (ya con F3).
+- [x] Tarjeta "Cámaras activas" enlaza a `/devices` (pestaña Monitoreo RF-35).
 - **Entregable:** el dashboard refleja la BD y el feed muestra los veredictos REALES del
   bucle de cámaras (verificable con `simulate_camera.py` + `simulate_esp32.py` corriendo).
 
-### F6 - Reportes, importación OCR y bitácora (½-1 día; F6b/F6c aparte) - RF-16, RF-07, RF-32
-- [ ] **Reportes** `/reports`: filtros desde/hasta + curso (opcional) + botones
+### F6 - Reportes y bitácora (2026-10-23) - **✅ LISTO**
+> `/reports` (`features/reports`): tres tarjetas — asistencia detallada (rango de fechas + curso opcional, Excel y PDF), registro de asistencia del grupo (matriz A/T/F/FJ; el docente solo ve sus grupos) y riesgo de inasistencia (curso opcional). Descarga con `ReportsApi` (blob + nombre desde `Content-Disposition`, con `expose_headers` añadido al CORS del backend) y `shared/utils/download.ts`; los errores del backend llegan como blob y se leen como JSON para mostrar el motivo.
+> `/audit` (`features/audit`, solo admin): tabla paginada de `GET /audit-log` con filtros acción, entidad, rol de quien actuó y fecha (en la URL) y diálogo con los valores anterior y nuevo en JSON. Specs: `reports-api.spec.ts`.
+
+### F6 (diseño original) - Reportes, importación OCR y bitácora (½-1 día; F6b/F6c aparte) - RF-16, RF-07, RF-32
+- [x] **Reportes** `/reports`: filtros desde/hasta + curso (opcional) + botones
   "Excel" / "PDF" → `GET /reports/attendance.xlsx|pdf` con `responseType: 'blob'` +
   descarga vía `URL.createObjectURL` (respeta el `filename` del Content-Disposition);
   docente ve solo SUS grupos (el backend ya filtra).
@@ -391,7 +436,7 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   tabla editable y confirmación transaccional con resumen).
 - [x] **Importar nómina de alumnos** en `/students` (RF-02/RF-03/RF-08): implementado en
   F6c (diálogo de 3 pasos, correo generado, matrícula opcional y errores por fila).
-- [ ] **Bitácora** `/audit` (admin): tabla paginada `GET /audit-log` con filtros
+- [x] **Bitácora** `/audit` (admin): tabla paginada `GET /audit-log` con filtros
   action/entity/entity_id/actor/**actor_role**/since (backend ya los soporta) + visor de
   old/new_value (JSON); la respuesta trae `actor_name` y `actor_role` para la columna "Quién".
   **Bloque 11:** aquí se ven las acciones nuevas (sesión cancelada/revisada, justificación,
@@ -486,158 +531,148 @@ confirmación se habilitó. No se confirmó para no crear cuentas de prueba;
 `students-import.dialog.spec.ts` verifica el cuerpo de `POST
 /students/import-confirm` (incluido `group_id` opcional).
 
-### F7 - DISPOSITIVOS REALES: cámara + ESP32 (1-1.5 días) — guía completa de armado
-> Orden: primero la CÁMARA (solo configuración de red, sin soldar nada),
-> luego el ESP32 (hardware). Todo queda monitoreado en `/devices` (RF-35, F2).
+### F7 - Dispositivos reales: armado, instalación y puesta en marcha (única tarea pendiente: la prueba con el hardware)
 
-#### 7A. Cámara Hikvision PoE (RF-17) — SOLO software y red
-**¿Se descarga el programa del link que me pasaste (iVMS-4200)?** SÍ conviene, pero NO
-es estrictamente obligatorio. Lo imprescindible es **SADP Tool** (viene dentro de iVMS-4200
-o se descarga aparte, búsqueda "SADP tool Hikvision"): es el que DESCUBRE la cámara en la red,
-la ACTIVA (primer uso: define usuario/contraseña) y le pone IP fija. iVMS-4200 añade vista
-en vivo y gestión cómoda desde Windows — recomendado para la tesis (capturas de pantalla).
+> Todo el software (frontend y backend) está terminado y probado con simuladores. Este apartado reúne, en un solo
+> lugar, lo necesario para armar y conectar los equipos reales: red, cámara Hikvision, nodo ESP32, instalación
+> de programas en Windows, configuración del código y verificación. Reemplaza las guías sueltas que había en F7,
+> F8 y en el PLAN-BACKEND §4.
 
-1. **Cableado:** cámara → puerto **PoE+** del TP-Link LS108GP con cable Cat6 (datos+energía
-   en un solo cable). PC también al switch. La cámara y tu PC en la MISMA red.
-2. **Instalar SADP/iVMS-4200** en Windows y abrir: la cámara aparece como "Inactive".
-3. **Activar:** definir contraseña fuerte (GUÁRDALA: va dentro del `rtsp_url`) — p. ej. `Fareas2026*`.
-4. **IP fija** desde SADP: p. ej. `10.14.5.11` (máscara/gateway de tu red) → la cámara reinicia.
-5. **Verificar web:** navegador a `http://10.14.5.11` → login admin → ver imagen en vivo.
-6. **URL RTSP** (la que va a la BD): SUB-STREAM recomendado (menos CPU):
-   `rtsp://admin:Fareas2026*@10.14.5.11:554/Streaming/Channels/102`
-7. **Probar sin backend:** `python scripts/test_rtsp.py "rtsp://..."` → muestra 1 frame.
-8. **Registrar en BD** (ya hay 6 cámaras del seed; actualiza la del aula):
-   `UPDATE device SET rtsp_url='rtsp://...', ip_address='10.14.5.11' WHERE device_key='cam-lab305';`
-9. **Verificación final:** backend arriba → `/devices` Monitoreo la muestra EN LÍNEA tras el
-   primer frame; persona enfrente de la cámara → marca en `/attendance` + LED del ESP32 (7B).
+#### 7.1 Materiales y arquitectura
 
-#### 7B. ESP32 + anillo NeoPixel 16 + buzzer (RF-25, RF-27…RF-29, RF-33)
-**Materiales:** ESP32 DevKit (30 pines) · anillo WS2812B 16 LEDs · buzzer ACTIVO 5 V ·
-resistencia 330–470 Ω · condensador electrolítico 1000 µF (≥6.3 V) · jumpers hembra-hembra ·
-cable USB con DATOS · protoboard (opcional).
+| Equipo | Función |
+|---|---|
+| Cámara Hikvision PoE | Ve la puerta del aula; el backend lee su stream RTSP y reconoce rostros |
+| Switch TP-Link LS108GP (PoE+) | Alimenta la cámara y conecta la PC por cable de red |
+| PC con Windows 11 | Corre PostgreSQL, el backend (FastAPI), el reconocimiento facial y sirve el frontend |
+| ESP32 DevKit (30 pines) + anillo NeoPixel WS2812B de 16 LED + buzzer activo 5 V | Nodo de la puerta: muestra el veredicto con color y sonido |
+| Router WiFi 2.4 GHz | El ESP32 solo usa 2.4 GHz y debe estar en la misma red que la PC |
 
-**Cableado (con el ESP32 DESCONECTADO de USB):**
+Flujo: **cámara → (RTSP) → backend → reconoce y registra → (WebSocket) → ESP32 → LED y buzzer**. El navegador ve el
+resultado en el dashboard por SSE. La cámara y el ESP32 son independientes: la asistencia se registra aunque el ESP32 esté apagado.
 
-| Del | Al | Nota |
+#### 7.2 Programas que se instalan en Windows
+
+| Programa | Para qué | Notas |
 |---|---|---|
-| Anillo 5V (VCC) | VIN/5V del ESP32 | alimentado por el USB |
-| Anillo GND | GND del ESP32 | común |
-| Anillo DIN | **GPIO 13** vía resistencia 330–470 Ω | en serie, acorta el cable de datos |
-| Condensador 1000 µF | entre 5V y GND del anillo | banda larga (++) a 5V — protege picos |
-| Buzzer + | **GPIO 26** | ⚠️ actualizado en el Bloque 11: GPIO 12 es pin de ARRANQUE del ESP32 y colgaba el boot. Si el buzzer es de 5 V "duro": transistor 2N2222 (base 1 kΩ a GPIO26) |
-| Buzzer − | GND | |
+| PostgreSQL 17 | Base de datos `fareas` | Ya instalado; aplicar `001_schema.sql`, `002_seed.sql` y los `0NN_*.sql` posteriores |
+| Python 3.13 y el entorno `back-fareas\.venv` | Backend | `pip install -r requirements.txt` (incluye onnxruntime, OpenCV, RapidOCR) |
+| Node.js (con fnm) | Compilar Angular | `npm install` y `npm run build` |
+| **SADP Tool** (viene con iVMS-4200) | Descubrir, activar y fijar la IP de la cámara | Es el único imprescindible; iVMS-4200 añade vista en vivo para capturas de la tesis |
+| **Arduino IDE 2.x** | Cargar el firmware al ESP32 | Driver **CP210x** (Silicon Labs) o CH340 si el puerto COM no aparece |
+| `cloudflared` | Túnel público para la sustentación | `winget install Cloudflare.cloudflared` |
 
-**Software en la PC:**
-1. **Arduino IDE 2.x** (arduino.cc). Boards Manager → URL de Espressif:
-   `https://espressif.github.io/arduino-esp32/package_esp32_index.json` → instalar
-   **"esp32 by Espressif Systems"**. Placa: **DOIT ESP32 DEVKIT V1**. Si el puerto COM no
-   aparece: driver CP210x (Silicon Labs).
-2. **Library Manager:** instalar `Adafruit NeoPixel` y `WebSockets` (de Markus Sattler / Links2004).
+Arduino IDE → Preferencias → *URLs del gestor de placas*: `https://espressif.github.io/arduino-esp32/package_esp32_index.json`.
+Gestor de placas: instalar **esp32 by Espressif Systems**; placa **DOIT ESP32 DEVKIT V1**. Gestor de bibliotecas:
+`Adafruit NeoPixel`, `WebSockets` (Markus Sattler / Links2004) y `ArduinoJson` **7.x**.
 
-**Firmware (`fareas_nodo.ino`)** — habla EXACTAMENTE el protocolo del backend:
+#### 7.3 Red (hacerlo primero)
 
-```cpp
-#include <WiFi.h>
-#include <WebSocketsClient.h>
-#include <Adafruit_NeoPixel.h>
+1. Cable Cat6: cámara → puerto **PoE+** del switch; PC → otro puerto del switch (o del router, si el switch cuelga de él).
+2. Todos los equipos en la misma subred. Anota la subred real (`ipconfig` en la PC); los ejemplos usan `192.168.1.x`.
+3. En el router, **reserva una IP fija (DHCP) para la PC** (p. ej. `192.168.1.50`). El firmware del ESP32 apunta a esa IP.
+4. Marca la red de la PC como **Privada** (Configuración → Red e Internet → propiedades de la red). Con perfil Público, Windows bloquea las conexiones entrantes.
+5. Firewall de Windows (PowerShell **como administrador**), solo una vez:
+   `New-NetFirewallRule -DisplayName "Fareas API 8000" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow -Profile Private`
 
-const char* WIFI_SSID = "TU_RED";
-const char* WIFI_PASS = "TU_CLAVE";
-// token = DEVICE_TOKEN_SECRET del .env del backend
-const char* WS_HOST = "192.168.1.XX";   // IP de la PC con el backend
-const uint16_t WS_PORT = 8000;
-const char* WS_PATH = "/api/v1/ws/devices?token=COPIA_DEVICE_TOKEN_SECRET";
-const char* DEVICE_ID = "esp32-lab305";  // device.device_key en la BD
+#### 7.4 Cámara Hikvision (RF-17)
 
-#define LED_PIN 13
-#define BUZZ_PIN 26   // Bloque 11: GPIO12 es pin de arranque (bootstrapping)
-#define LED_COUNT 16
+1. Abre **SADP**: la cámara aparece como *Inactive*. Actívala con una contraseña fuerte (guárdala) y fija su IP en tu subred
+   (p. ej. `192.168.1.64`), con la máscara y la puerta de enlace de tu red.
+2. Verifica en el navegador `http://<ip-camara>` (usuario `admin`) que se ve la imagen.
+3. URL RTSP del **sub-stream** (menos CPU, suficiente para reconocer):
+   `rtsp://admin:CLAVE@192.168.1.64:554/Streaming/Channels/102`.
+   Si la clave tiene caracteres especiales, codifícalos (`@` → `%40`, `#` → `%23`, `:` → `%3A`).
+4. Prueba sin el backend: `python scripts\test_rtsp.py "rtsp://admin:CLAVE@192.168.1.64:554/Streaming/Channels/102"` debe mostrar un fotograma.
+5. En la web, **Catálogo → Dispositivos**, edita la cámara del aula (`cam-lab305`) y pega la URL RTSP y la IP. El listado la enmascara; solo el detalle del administrador la muestra completa.
+6. Coloca la cámara a la altura del rostro, de frente a la puerta, con luz frontal y sin contraluz. Un rostro pequeño o de perfil baja la similitud.
 
-Adafruit_NeoPixel ring(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
-WebSocketsClient ws;
-uint32_t lastBeat = 0;
+#### 7.5 Nodo ESP32 (RF-25, RF-27…RF-29, RF-33)
 
-void mostrar(const char* color, int beeps, int ms, int segundos) {
-  uint32_t c = ring.Color(0,0,0);
-  if (!strcmp(color,"verde"))    c = ring.Color(0,180,0);
-  if (!strcmp(color,"amarillo")) c = ring.Color(220,140,0);
-  if (!strcmp(color,"rojo"))     c = ring.Color(200,0,0);
-  if (!strcmp(color,"azul"))     c = ring.Color(0,60,200);
-  ring.fill(c); ring.show();
-  for (int i=0;i<beeps;i++){ digitalWrite(BUZZ_PIN,HIGH); delay(ms); digitalWrite(BUZZ_PIN,LOW); delay(120); }
-  delay(segundos*1000);
-  ring.clear(); ring.show();                 // vuelve a reposo
-}
+Conexión con el ESP32 **desconectado del USB**:
 
-void onEvent(WStype_t type, uint8_t* payload, size_t len) {
-  if (type == WStype_CONNECTED) {
-    enviarHello();                            // Bloque 11: el hello va AQUÍ
-  }
-  if (type == WStype_TEXT) {
-    StaticJsonDocument<384> doc;
-    if (deserializeJson(doc, payload, len)) return;
-    if (!strcmp(doc["type"],"verdict"))
-      mostrar(doc["color"], doc["buzzer"]=="beep_2"?2:doc["buzzer"]=="beep_1"?1:4,
-              doc["buzzer"]=="tono_denegado"?600:120, doc["seconds"]|3);
-    Serial.printf("[WS] %s\n", (char*)payload);
-  }
-}
+| Desde | Hasta | Nota |
+|---|---|---|
+| Anillo 5V (VCC) | VIN / 5V del ESP32 | Lo alimenta el USB |
+| Anillo GND | GND del ESP32 | Tierra común |
+| Anillo DIN | **GPIO 13**, a través de una resistencia de 330–470 Ω | En serie y lo más cerca posible del anillo |
+| Condensador 1000 µF | Entre 5V y GND del anillo | Pata larga (+) a 5V; evita picos al encender |
+| Buzzer (+) | **GPIO 26** | No uses el GPIO 12: es pin de arranque y el ESP32 no inicia. Si el buzzer exige más corriente: transistor NPN 2N2222 con resistencia de base de 1 kΩ al GPIO 26 |
+| Buzzer (−) | GND | |
 
-void setup() {
-  Serial.begin(115200);
-  pinMode(BUZZ_PIN, OUTPUT);
-  ring.begin(); ring.setBrightness(60); ring.clear(); ring.show();
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  while (WiFi.status() != WL_CONNECTED) { delay(400); Serial.print("."); }
-  ws.begin(WS_HOST, WS_PORT, WS_PATH);
-  ws.onEvent(onEvent);
-  ws.setReconnectInterval(5000);
-}
+Cable USB **con datos** (no solo de carga). Brillo del anillo limitado a 60 en el firmware para que no sobrecargue el USB.
 
-void enviarHello() {  // Bloque 11: al CONECTAR, no en setup()
-  String hello = String("{\"type\":\"hello\",\"device_id\":\"") + DEVICE_ID + "\",\"mac\":\"" + WiFi.macAddress() + "\"}";
-  ws.sendTXT(hello);                          // presentación RF-33
-}
+Firmware: `back-fareas\firmware\fareas_nodo\fareas_nodo.ino` (abrir la carpeta `fareas_nodo` en Arduino IDE). Edita solo el bloque de constantes del inicio:
 
-void loop() {
-  ws.loop();
-  if (millis() - lastBeat > 30000) {          // latido cada 30 s
-    lastBeat = millis();
-    ws.sendTXT("{\"type\":\"heartbeat\"}");
-  }
-}
+| Constante | Valor |
+|---|---|
+| `WIFI_SSID`, `WIFI_PASS` | Tu red de **2.4 GHz** |
+| `SERVER_HOST` | La IP fija de la PC (p. ej. `192.168.1.50`) |
+| `SERVER_PORT` | `8000` |
+| `DEVICE_TOKEN` | Exactamente el `DEVICE_TOKEN_SECRET` del `.env` (si tiene símbolos, codifícalos en URL) |
+| `DEVICE_ID` | El `device_key` del nodo en `/devices` (p. ej. `esp32-lab305`) |
+
+Placa *DOIT ESP32 DEVKIT V1* → seleccionar el puerto COM → *Subir*. Si no sube, mantén pulsado **BOOT** al iniciar la carga. El monitor serie (115200) debe mostrar la IP del WiFi y `[WS] conectado`.
+El firmware no se pudo compilar en este entorno (no hay Arduino IDE): se probó el protocolo con `scripts\simulate_esp32.py`, pero la primera compilación real es parte de la prueba con el hardware.
+
+Veredictos (Tabla 8): verde + 1 pitido (asistió) · amarillo + 2 pitidos (tardanza) · rojo + tono largo de 700 ms (no matriculado en esa aula) · azul sin sonido (desconocido o sin clase activa).
+
+#### 7.6 Configuración del backend para producción (`back-fareas\.env`)
+
+| Variable | Valor |
+|---|---|
+| `ENVIRONMENT` | `production` (desactiva `/docs`) |
+| `DEVICE_TOKEN_SECRET` | Una cadena larga y propia; **no dejes el valor de ejemplo**. Debe coincidir con el firmware |
+| `JWT_SECRET_KEY` | Una cadena larga y aleatoria propia |
+| `FRONTEND_DIST_DIR` | `../dist/fareas/browser` (el backend sirve Angular en el mismo origen) |
+| `R2_ENABLED`, `R2_*` | `true` con las claves del bucket privado `fareas-assets` (fotos de enrolamiento, adjuntos y fotos de perfil) |
+| `MAIL_ENABLED`, `MAIL_*` | `true` con la cuenta Gmail y su **contraseña de aplicación** (credenciales temporales, OTP y alertas DPI) |
+| `CORS_ORIGINS`, `FRONTEND_BASE_URL` | Origen público (el del túnel) si se usa |
+
+Y en la base de datos: cada aula con cámara necesita su dispositivo `camara` (con `rtsp_url`) y su dispositivo `esp32` (con el `device_key` del firmware), ambos activos y en la **misma aula** que el horario.
+
+#### 7.7 Puesta en marcha
+
 ```
-(Añadir `#include <ArduinoJson.h>` — instalar también la librería **ArduinoJson**.)
+cd C:\Users\USUARIO\OneDrive\Documentos\DWeb\angular\fareas
+npm run build
+cd back-fareas
+.venv\Scripts\fastapi run --host 0.0.0.0 --port 8000
+```
 
-**Registro y red:**
-- El device_key DEBE existir: el seed trae `esp32-lab305` (o créalo en `/devices` → tipo ESP32).
-- **Firewall de Windows** para que el ESP32 alcance tu API (requiere permiso del usuario;
-  en F7 se pide aprobación y se ejecuta):
-  `netsh advfirewall firewall add rule name="Fareas API 8000" dir=in action=allow protocol=TCP localport=8000`
-- **Checklist de verificación:** 1) `simulate_esp32.py` verde/beep en consola; 2) grabar el
-  ESP32 y ver `hello_ack` en el monitor serie; 3) `GET /devices/status` lo muestra EN LÍNEA
-  (RF-35); 4) video/entrada con alumno enrolado → LED verde + 1 beep y marca en `/attendance`;
-  5) desconectar USB → EN LÍNEA pasa a FUERA DE LÍNEA en ≤150 s (90 latido + 60 scheduler).
-- **Tono completo (Tabla 8):** verde+beep_1 · amarillo+beep_2 · rojo+tono_denegado (600 ms)
-  · azul = animación de reposo **sin beeps** (el backend manda `buzzer:"ninguno"`; el sketch
-  hace fade simple).
-- **Red (Bloque 11):** reservar **IP fija por DHCP** para la PC del backend (la IP del ESP32
-  cambia de red; el `WS_HOST` del firmware debe seguir siendo válido) y usar WiFi de **2.4 GHz**
-  (el ESP32 no soporta 5 GHz).
+- `--host 0.0.0.0` es obligatorio: sin él el servidor solo escucha en `127.0.0.1` y el ESP32 no puede conectarse.
+- La aplicación queda en `http://<ip-de-la-pc>:8000` (misma red) con la API en `/api/v1`.
+- Acceso externo para la sustentación: `cloudflared tunnel --url http://localhost:8000` imprime una URL `https://….trycloudflare.com`. Cambia en cada ejecución. El túnel sirve la web y el SSE; el ESP32 sigue conectándose por la red local.
 
-### F8 - Producción y demo de tesis (½ día) - (par con Bloque 10 del backend)
-- [ ] `environment.prod.ts` con `apiUrl: '/api/v1'` (mismo origen, sin CORS). Sin variables
-  `R2_*` en Angular: las URLs firmadas las entrega el backend.
-- [ ] `ng build --configuration production` → `dist/fareas/browser`.
-- [ ] Backend: montar los estáticos en `main.py` (`app.frontend()` pendiente del Bloque 10:
-  StaticFiles + fallback a `index.html` para rutas Angular) + `fastapi run` con
-  `ENVIRONMENT=production` (sin /docs) y `R2_ENABLED=true` con las claves en el entorno.
-- [ ] Acceso externo: **Cloudflare Tunnel** (`cloudflared tunnel --url http://localhost:8000`)
-  → URL pública para la sustentación.
-- [ ] **Guion de demo (10 min):** login admin → parámetros → crear curso/grupo/bloque (F2) →
-  importar horario (PDF/foto) y nómina de alumnos (F6b/F6c) → matricular (F2) → enrolar rostro por webcam (F4) →
-  cámara/ESP32 en la puerta (F7) → dashboard en vivo con SSE (F5) → marca manual y
-  rectificación (F3) → reporte PDF (F6) → bitácora (F6).
+#### 7.8 Prueba con el hardware (lo único pendiente)
+
+1. **Sin equipos:** `python scripts\simulate_esp32.py esp32-lab305` y `python scripts\simulate_camera.py` con la web abierta: el dashboard muestra el veredicto y el simulador pinta el color.
+2. **Cámara:** `/devices` → *Monitoreo*: la cámara pasa a **En línea** unos segundos después de abrir el stream; si se corta, vuelve a *Fuera de línea* (≤ 1 min). El dashboard cuenta «Cámaras activas».
+3. **ESP32:** el monitor serie muestra `[WS] conectado`; `/devices` lo marca **En línea**. Al desconectar el USB pasa a *Fuera de línea* en ≤ 150 s.
+4. **Extremo a extremo:** un alumno enrolado en `/faces` y matriculado en un grupo con clase en ese momento se para frente a la cámara → LED verde y un pitido, la marca aparece en `/attendance` y el feed del dashboard la muestra. Un alumno enrolado pero no matriculado en esa clase → LED rojo. Alguien sin enrolar → azul.
+5. **Cierre de la clase:** al terminar el bloque, el sistema cierra la sesión, genera las faltas y envía las alertas DPI correspondientes.
+
+Si algo falla:
+
+| Síntoma | Causa probable |
+|---|---|
+| El ESP32 no conecta (`[WS] desconectado` en bucle) | El backend escucha solo en `127.0.0.1` (falta `--host 0.0.0.0`), firewall o red en perfil Público, IP de la PC distinta, token o `device_key` distintos |
+| WebSocket cierra con 4401 / 4404 | Token incorrecto / `device_key` no existe como ESP32 activo |
+| La cámara no pasa a *En línea* | URL RTSP mal escrita o clave sin codificar, IP fuera de la subred, la cámara aún inactiva en SADP |
+| Reconoce pero no registra asistencia | No hay clase en esa aula y hora (el bloque debe tener `room_id` y la sesión abrirse), alumno no matriculado, feriado |
+| Alumno legítimo sale «desconocido» | Enrolamiento con malas fotos: repetir con 4–5 tomas de frente, buena luz y sin lentes oscuros |
+| El ESP32 reinicia al iniciar | Buzzer en GPIO 12 (usar GPIO 26) o cable USB sin potencia suficiente |
+| El anillo parpadea o muestra colores erráticos | Falta la resistencia en DIN, el condensador, o la tierra común |
+
+#### 7.9 Guion de demo (10 min)
+
+Ingresar como admin → parámetros → crear curso/grupo/bloque → importar horario (PDF o foto) y nómina de alumnos → matricular → enrolar un rostro por webcam → cámara y ESP32 en la puerta → dashboard en vivo → marca manual y rectificación → reporte PDF → bitácora → ingresar como estudiante y como docente para mostrar sus menús.
+
+### F8 - Producción (par con el Bloque 10 del backend) - **✅ LISTO**
+- [x] `src/environments/environment.ts` (producción) usa `apiUrl: '/api/v1'`; el de desarrollo sigue en `environment.development.ts`. Sin variables `R2_*` en Angular.
+- [x] `npm run build` genera `dist/fareas/browser`; solo queda el aviso de presupuesto inicial (633 kB frente a 600 kB).
+- [x] `back-fareas/app/frontend.py` sirve los estáticos con fallback a `index.html` (`FRONTEND_DIST_DIR`, `tests/test_frontend_mount.py`).
+- [x] Arranque, túnel público y guion de demo: documentados en F7 (7.7 y 7.9).
 
 ---
 
@@ -648,7 +683,7 @@ void loop() {
 | `POST /auth/login` · `GET /auth/me` · `POST /auth/change-password` · `/auth/change-password/otp` + `/otp/verify` · `/auth/recover/*` | Login/recuperación/Mi perfil (YA) | todos |
 | `GET/POST /rooms` · `PATCH /rooms/{id}` | Aulas (F2) | A admin · L docente |
 | `GET/POST /devices` · `PATCH /devices/{id}` · `GET /devices/status` | Dispositivos + Monitoreo RF-35 (F2/F5) | A admin · status público |
-| `GET/POST /teachers` · `GET/POST /students` · `GET/PATCH /accounts/{id}` · `POST /accounts/{id}/send-temp-password` | Catálogo de personas (F2) | A admin · L docente |
+| `GET/POST /teachers` · `GET/POST /students` · `GET/PATCH /accounts/{id}` · `POST /accounts/{id}/send-temp-password` | Catálogo de personas (F2) | A admin · L docente (`/teachers` solo admin; `/students` y `/accounts/{id}` del docente se limitan a sus alumnos) |
 | `GET/POST /courses` · `GET/POST /courses/{id}/groups` · `GET/POST /groups/{id}/blocks` · `PATCH/DELETE /blocks/{id}` · `DELETE /groups/{id}` | Cursos y grupos (F2) | A admin · L docente |
 | `GET/POST/DELETE /groups/{id}/students` · `POST /groups/{id}/students/{sid}/transfer` · `GET /settings/semesters` | Matrículas con reglas R8 (F2) | A admin · L docente |
 | `GET /attendance/today` · `POST /sessions/{id}/manual-mark` · `PATCH /attendance/{id}/rectify` (plazo 7 d al docente) · `POST /sessions/{id}/close` · `GET /attendance/sessions-today` | Asistencias (F3) | A admin · D suyo |
@@ -657,31 +692,92 @@ void loop() {
 | `GET /dpi/at-risk` · `GET /students/{id}/dpi` | Riesgo DPI (F5/F6) | A admin · D sus cursos |
 | `GET/POST/DELETE /holidays` · `POST /holidays/range` · `POST /holidays/national` · `GET/POST/DELETE /justifications` · `GET/PATCH /settings` | Calendario (F3) | A admin · L docente |
 | `POST/DELETE /justifications/{id}/document` (multipart PDF/JPG/PNG ≤10 MB) | Adjunto de justificación (F4.1) | A admin · D suyo |
-| `POST/GET/DELETE /students/{id}/faces` (`consent: true` obligatorio; `photo_url` firmada) | Enrolamiento (F4) | A admin · L docente |
+| `POST/GET/DELETE /students/{id}/faces` (`consent: true` obligatorio; `photo_url` firmada) | Enrolamiento (F4) | solo admin (biometría; el docente solo ve el badge `enrolled` en `/students`) |
 | `GET /dashboard/summary` (+`en_riesgo`, `sessions_to_review`) · `/dashboard/live` (SSE) · `GET /stats/hourly` · `GET /stats/distribution` | Dashboard (F5) | A+D (ambos ya filtrados por grupo si es docente) |
 | `GET /reports/attendance.xlsx|pdf` · `GET /reports/group-matrix.xlsx` · `GET /reports/dpi-risk.xlsx` · `POST /courses/import-pdf(+/confirm)` · `POST /students/import-preview(+/confirm)` · `GET /audit-log` (+`actor_role`) | Reportes/Importación/Bitácora (F6/F6b/F6c) | A admin (reportes: D suyo) |
 | `GET /devices/{id}` | Detalle de cámara con `rtsp_url` COMPLETA (R14: el listado la enmascara; un PATCH reenviando `***` se ignora) | A admin |
 
 `A`=admin escribe, `D`=docente en sus grupos, `L`=solo lectura. El backend YA aplica todo esto;
 la UI solo oculta botones con `@if (auth.isAdmin())`.
+---
 
-## 6. Inconsistencias y avisos detectados al revisar el backend (sin acción urgente)
+## 7. Control de acceso por rol (auditoría 2026-10-23)
 
-1. **~~`GET /attendance/sessions-today` NO existe~~ → RESUELTO** (Bloque 6b del
-   PLAN-BACKEND; el frontend ya lo consume). **Bloque 11 (2026-10-11):** además el backend
-   añadió el ciclo completo de sesiones (apertura por scheduler, `needs_review`,
-   cancelación), justificaciones con efecto, DPI con aviso único por nivel y reportes por
-   grupo — todo documentado arriba en F2/F3/F4/F5/F6 y en PLAN-BACKEND §3 (Bloque 11).
-2. **`app.frontend()` no está implementado** en `main.py` (el plan del backend lo menciona
-   para el Bloque 10) → F8 lo implementa junto con la config de producción.
-3. **~~Rate limit de login SOLO en el cliente~~ → RESUELTO**: el backend ya limita
-   (Bloque 6b: 5 fallos IP/min → 429, login correcto limpia la ventana; con tests).
-4. **`GET /devices/status` es PÚBLICO** (sin token): pensado para el panel RF-35 en un solo
-   origen. Exponer estados en línea de equipos sin credencial es discutible en producción
-   real; opción futura: exigir JWT (1 línea en el endpoint).
-5. **~~El badge "Enrolado" en `/students` requeriría N llamadas~~ → RESUELTO**: el backend ya
-   soporta `GET /students?with_face=1` (UNA query extra por página, no N por alumno) y el
-   frontend ya lo usa para el badge Enrolado/Sin rostro.
-6. **Las vistas SQL (`v_today_attendance`) usan `CURRENT_DATE` del servidor**: asume la zona
-   horaria de Perú en la PC servidor (la del dev ya lo está). No tocar.
-7. **`PersonOut` no expone `photo_url`**: la foto de portada se ve solo en `/faces`; suficiente.
+> Revisión cruzada de `PLAN-BACKEND.md`, `PLAN-FRONTEND.md`, `back-fareas/db/001_schema.sql`,
+> `core/constants/nav.ts`, `layouts/admin/components/sidebar/sidebar.ts`, `app.routes.ts` y
+> `core/guards/auth-guard.ts`. Fuente de verdad del rol: `app_user.role` (enum `user_role`:
+> admin | docente | estudiante), viaja en el JWT (`role`) y en `AuthService.currentUser()`.
+
+### 7.1 Matriz vigente (`nav.ts` + `app.routes.ts`)
+
+| Ruta | Admin | Docente | Estudiante |
+|---|---|---|---|
+| `/dashboard`, `/attendance` | ✅ | ✅ (solo sus grupos, lo filtra el backend) | ❌ (`navGuard` → `/me`) |
+| `/profile` (Mi perfil) | ✅ | ✅ | ✅ (sin guard de rol; correcto) |
+| `/courses`, `/enrollments`, `/schedule` | ✅ CRUD | ✅ lectura | ❌ |
+| `/students` | ✅ CRUD + importar | ✅ lectura, solo alumnos de sus grupos | ❌ |
+| `/teachers`, `/rooms`, `/devices` | ✅ | ❌ | ❌ |
+| `/calendar/holidays` | ✅ CRUD | ✅ lectura | ❌ |
+| `/calendar/justifications` | ✅ | ✅ (curso obligatorio, solo sus grupos) | ❌ |
+| `/calendar/settings`, `/faces`, `/imports`, `/audit` | ✅ | ❌ | ❌ |
+| `/reports` | ✅ | ✅ (solo sus grupos) | ❌ |
+| `/me` (Mis asistencias + DPI) | ❌ | ❌ | ✅ (F3b) |
+
+### 7.2 Pendientes del proyecto
+
+- `photo_url` y `document_url` guardan claves R2 en columnas llamadas «url»: documentarlo en el diccionario de datos.
+
+---
+
+## 8. Estructura de menús por rol (2026-10-23) - **✅ IMPLEMENTADO**
+
+> Motivo: el estudiante veía una sola entrada y el docente heredaba menús de administración
+> (Cursos, Matrículas, Estudiantes) que no necesita. Cada rol recibe un menú pensado para
+> lo que hace a diario. La matriz vive en `core/constants/nav.ts` (una sola fuente de verdad
+> para el menú y los guards). Las pantallas de administración no cambian.
+
+### 8.1 Estudiante (antes: 1 entrada)
+
+| Menú | Ruta | Para qué sirve | Datos |
+|---|---|---|---|
+| Inicio | `/me` | Clases de hoy, próxima clase y cursos en riesgo de inhabilitación | `GET /me/schedule`, `GET /attendance/me/dpi` |
+| Mi horario | `/my-schedule` | Semana Lun–Vie con curso, grupo, aula y docente | `GET /me/schedule` |
+| Mis cursos | `/my-courses` | Cursos matriculados del periodo: grupo, docente, horario, faltas y faltas restantes | `GET /me/courses` + `GET /attendance/me/dpi` |
+| Mis asistencias | `/my-attendance` | Historial con filtro de fechas y rectificaciones (ya existía, movida desde `/me`) | `GET /attendance/me` |
+| Mis justificaciones | `/my-justifications` | Justificaciones registradas a su nombre, con motivo, cursos y documento | `GET /me/justifications` |
+
+«Mi perfil» sigue en el menú de usuario. **Ideas para después:** feriados del periodo (necesita
+abrir `GET /holidays` al estudiante) y un aviso en pantalla cuando llegue un correo de DPI.
+
+### 8.2 Docente (antes: heredaba Cursos, Horario general, Matrículas y Estudiantes de administración)
+
+| Grupo | Menú | Ruta | Para qué sirve | Datos |
+|---|---|---|---|---|
+| — | Dashboard | `/dashboard` | Resumen del día de sus grupos | existente |
+| — | Asistencias | `/attendance` | Marca manual, rectificación, cierre y revisión | existente |
+| Mi docencia | Mis grupos | `/my-groups` | Grupos que dicta en el periodo: cupo, horario y lista de alumnos con acceso al registro del grupo | `GET /groups?teacher_id=`, `GET /groups/{id}/students`, `GET /reports/group-matrix.xlsx` |
+| | Mi horario | `/my-schedule` | Su semana (misma pantalla del estudiante, con sus clases) | `GET /schedule?teacher_id=` |
+| | Alumnos en riesgo | `/at-risk` | Alumnos en alerta o sobre el límite en sus cursos, con faltas restantes | `GET /dpi/at-risk` |
+| Calendario | Feriados, Justificaciones | existentes | Lectura de feriados y registro de justificaciones | existente |
+| Herramientas | Reportes | `/reports` | Excel/PDF de sus grupos | existente |
+
+Se quitan al docente `Cursos y grupos`, `Horario general`, `Matrículas` y `Estudiantes`
+(son administración y duplican «Mis grupos»); el backend ya los rechaza para escritura.
+`Alumnos en riesgo` también queda disponible para el administrador en Herramientas.
+
+### 8.3 Administrador: sin cambios (los 15 ítems + Alumnos en riesgo en Herramientas).
+
+### 8.4 Backend añadido (`routers/me.py`, solo rol estudiante, con `tests/test_student_portal.py`)
+- `GET /me/schedule?semester=` — bloques de sus matrículas activas (misma forma que `GET /schedule`).
+- `GET /me/courses?semester=` — cursos del periodo con grupo, docente, ciclo y bloques.
+- `GET /me/justifications` — sus justificaciones con documento firmado.
+
+### 8.5 Implementado
+- `nav.ts`: menús por rol, `Mi docencia` para docente, `rolesForRoute` une los roles de las entradas que comparten ruta (`/my-schedule`, `/at-risk`).
+- Rutas y pantallas: `features/student-home`, `my-schedule` (compartida: estudiante vía `/me/schedule`, docente vía `/schedule?teacher_id=`), `my-courses`, `my-attendance` (movida de `/me`), `my-justifications`, `my-groups`, `at-risk`.
+- Tests: `auth-guard.spec.ts` (menús por rol y rutas compartidas), `student-home.spec.ts`, `tests/test_student_portal.py` (7).
+- Esto resuelve las brechas §7.3 #6 (menús del docente) y parte de #7 en el frontend; el filtro de datos sigue pendiente en backend.
+
+### 8.6 Avisos pendientes de backend
+- `GET /dpi/at-risk` filtra al docente por **curso**, no por grupo: ve alumnos de otros grupos del mismo curso. Acotar a sus grupos.
+- `GET /students` sigue devolviendo todos los alumnos al docente (ya anotado en §7.3).

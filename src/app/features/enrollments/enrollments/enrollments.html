@@ -1,4 +1,4 @@
-<app-page-header title="Matrículas" subtitle="Alumnos por grupo: cupo 40, retiro con historial y transferencia (R8)">
+<app-page-header title="Matrículas" subtitle="Administra los estudiantes inscritos en cada grupo, incluidos retiros y cambios de grupo.">
   @if (auth.isAdmin()) {
     <app-ui-button icon="material-symbols:person-add" [disabled]="!selectedGroup()" (click)="openEnroll()">
       Matricular alumno
@@ -112,9 +112,7 @@
   >
     <ng-template appCell="student" let-s>
       <div class="flex items-center gap-2.5">
-        <span class="grid size-8 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-bold text-(--fareas-primary)">
-          {{ initials(s.full_name) }}
-        </span>
+        <app-avatar [name]="s.full_name" [src]="s.avatar_url ?? null" size="sm" />
         <div class="min-w-0">
           <div class="truncate text-sm font-medium text-gray-900">{{ s.full_name }}</div>
           <div class="text-xs text-gray-500">{{ s.code ?? 'sin código' }} · {{ s.email }}</div>

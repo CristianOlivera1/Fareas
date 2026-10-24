@@ -1,0 +1,133 @@
+<div class="relative">
+  <button
+    type="button"
+    (click)="toggle()"
+    [attr.aria-expanded]="open()"
+    aria-haspopup="dialog"
+    aria-controls="notifications-panel"
+    aria-label="Ver notificaciones"
+    class="relative rounded-full p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-200"
+  >
+    <iconify-icon icon="material-symbols:notifications-outline" width="24" class="pointer-events-none" />
+
+    @if (unread() > 0) {
+      <span
+        class="pointer-events-none absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white"
+      >
+        {{ badge() }}
+      </span>
+    }
+  </button>
+
+  @if (open()) {
+    <section
+      id="notifications-panel"
+      role="dialog"
+      aria-label="Notificaciones"
+      class="notifications-panel absolute right-0 top-12 z-50 w-[min(25rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg"
+    >
+      <header class="flex items-start justify-between gap-3 border-b border-gray-100 px-4 py-3">
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-gray-900">Notificaciones</p>
+          <p class="mt-0.5 text-xs text-gray-500">
+            {{ unread() > 0 ? unread() + ' sin leer' : 'Todo al día' }}
+          </p>
+        </div>
+        <div class="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            (click)="loadList()"
+            [disabled]="loading()"
+            aria-label="Actualizar notificaciones"
+            class="grid size-8 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+          >
+            <iconify-icon icon="material-symbols:refresh" width="18" class="pointer-events-none" />
+          </button>
+          @if (unread() > 0) {
+            <button
+              type="button"
+              (click)="markAll()"
+              [disabled]="markingAll()"
+              class="rounded-lg px-2 py-1 text-xs font-medium text-(--fareas-primary) transition-colors hover:bg-blue-50 disabled:opacity-50"
+            >
+              Marcar todas
+            </button>
+          }
+        </div>
+      </header>
+
+      <div class="max-h-[min(28rem,70vh)] overflow-y-auto">
+        @if (loading()) {
+          <div class="space-y-3 p-4" aria-label="Cargando notificaciones">
+            @for (item of [1, 2, 3]; track item) {
+              <div class="flex animate-pulse gap-3">
+                <div class="size-9 shrink-0 rounded-full bg-gray-100"></div>
+                <div class="min-w-0 flex-1 space-y-2 py-1">
+                  <div class="h-3 w-2/3 rounded bg-gray-100"></div>
+                  <div class="h-3 w-full rounded bg-gray-100"></div>
+                </div>
+              </div>
+            }
+          </div>
+        } @else if (error()) {
+          <div class="px-6 py-10 text-center">
+            <iconify-icon icon="material-symbols:cloud-off-outline" width="28" class="text-gray-300" />
+            <p class="mt-2 text-sm text-gray-500">{{ error() }}</p>
+            <button
+              type="button"
+              (click)="loadList()"
+              class="mt-3 text-xs font-medium text-(--fareas-primary) hover:underline"
+            >
+              Reintentar
+            </button>
+          </div>
+        } @else if (items().length === 0) {
+          <div class="px-6 py-12 text-center">
+            <div class="mx-auto grid size-11 place-items-center rounded-full bg-gray-50 text-gray-400">
+              <iconify-icon icon="material-symbols:notifications-off-outline" width="24" />
+            </div>
+            <p class="mt-3 text-sm font-medium text-gray-700">Sin notificaciones</p>
+            <p class="mt-1 text-xs text-gray-400">
+              Aquí llegarán los avisos de tus cursos y del sistema.
+            </p>
+          </div>
+        } @else {
+          @for (notification of items(); track notification.id) {
+            <button
+              type="button"
+              (click)="openItem(notification)"
+              class="flex w-full items-start gap-3 border-b border-gray-50 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-gray-50"
+              [class.bg-blue-50]="!notification.read"
+            >
+              <span
+                [class]="'mt-0.5 grid size-9 shrink-0 place-items-center rounded-full ' + toneFor(notification.severity)"
+              >
+                <iconify-icon [icon]="iconFor(notification.kind)" width="18" class="pointer-events-none" />
+              </span>
+
+              <span class="min-w-0 flex-1">
+                <span class="flex items-start gap-2">
+                  <span class="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">
+                    {{ notification.title }}
+                  </span>
+                  @if (!notification.read) {
+                    <span
+                      class="mt-1.5 size-1.5 shrink-0 rounded-full bg-(--fareas-primary)"
+                      aria-label="Sin leer"
+                    ></span>
+                  }
+                </span>
+                <span class="mt-0.5 line-clamp-2 block text-xs leading-5 text-gray-500">
+                  {{ notification.message }}
+                </span>
+                <span class="mt-1 block text-[11px] text-gray-400">
+                  {{ relative(notification.created_at) }}
+                </span>
+              </span>
+            </button>
+          }
+        }
+      </div>
+    </section>
+  }
+</div>

@@ -1,4 +1,4 @@
-<app-page-header title="Asistencias" subtitle="Registros de hoy por curso y grupo (RF-23 · vista v_today_attendance)">
+<app-page-header title="Asistencias" subtitle="Consulta las asistencias registradas hoy, organizadas por curso y grupo.">
   <span class="mr-2 inline-flex items-center gap-1.5 text-xs text-gray-500">
     <span class="size-2 animate-pulse rounded-full bg-green-500"></span>
     Auto-actualiza cada minuto · últ. {{ lastRefresh() }}
@@ -42,10 +42,11 @@
 }
 
 @if (hayRevisiones()) {
-  <app-ui-alert variant="warning" title="Sesiones por revisar (R4)" class="mb-4">
+  <app-ui-alert variant="warning" title="Sesiones sin marcas por revisar" class="mb-4">
     <p class="mt-1 text-sm">
-      Estas sesiones se cerraron sin ninguna marca. Confirma las faltas o cancela la clase con su
-      motivo; hasta resolverlas no suman al DPI.
+      Estas sesiones terminaron sin registros de asistencia. Confirma las inasistencias o cancela la
+      clase indicando el motivo. Mientras estén pendientes, no se incluirán en el cálculo del límite
+      de inasistencias.
     </p>
     <div class="mt-3 space-y-2">
       @for (rv of reviews(); track rv.session_id) {
@@ -125,18 +126,18 @@
     <div class="flex items-center justify-center gap-1">
       <button type="button"
         class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-blue-50 hover:text-(--fareas-primary) transition-colors"
-        title="Rectificar la marca (RF-15)" (click)="openRectify(r)">
+        title="Corregir el registro de asistencia" (click)="openRectify(r)">
         <iconify-icon icon="material-symbols:edit-note" width="18"></iconify-icon>
       </button>
       @if (r.status === 'falta' && !r.is_justified) {
         <button type="button"
           class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-amber-50 hover:text-amber-700 transition-colors"
-          title="Justificar esta falta (R6)" (click)="openJustify(r)">
+          title="Registrar una justificación para esta falta" (click)="openJustify(r)">
           <iconify-icon icon="material-symbols:note-add" width="18"></iconify-icon>
         </button>
       } @else if (r.is_justified) {
         <span class="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-(--fareas-primary)"
-          title="Falta justificada: no cuenta para el 30 %">FJ</span>
+          title="Falta justificada: no cuenta para el límite de inasistencias">Justificada</span>
       }
     </div>
   </ng-template>
@@ -208,8 +209,8 @@
           class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm placeholder-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)"></textarea>
       </label>
       <app-ui-alert variant="info" [inline]="true" icon="material-symbols:history">
-        La rectificación queda en la bitácora con tu usuario y el motivo (RF-15/RF-32). Si el estado
-        cambia a "Asistió" o "Tardanza", la falta deja de estar justificada.
+        La corrección quedará registrada con tu usuario y el motivo. Si cambias el estado a
+        "Asistió" o "Tardanza", la falta dejará de figurar como justificada.
       </app-ui-alert>
     </div>
   }
@@ -236,8 +237,8 @@
           class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm placeholder-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)"></textarea>
       </label>
       <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-        La falta pasa a <strong>falta justificada (FJ)</strong> y deja de contar para el 30 % de
-        inasistencias. Para revertirla, elimina la justificación desde Calendario → Justificaciones.
+        La falta quedará justificada y dejará de contar para el límite de inasistencias. Para
+        revertirla, elimina la justificación desde Calendario → Justificaciones.
       </app-ui-alert>
     </div>
   }
@@ -259,8 +260,8 @@
       </p>
       <app-ui-alert variant="warning" [inline]="true" icon="material-symbols:warning-outline">
         Al cerrar se generan automáticamente las <strong>faltas</strong> de los matriculados sin marca
-        y se disparan las alertas DPI correspondientes. Si nadie marcó, la sesión queda "por revisar"
-        sin faltas.
+        y se enviarán los avisos por inasistencia correspondientes. Si nadie registró su asistencia,
+        la sesión quedará pendiente de revisión y no se generarán faltas todavía.
       </app-ui-alert>
     </div>
   }
@@ -288,8 +289,8 @@
           class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm placeholder-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)"></textarea>
       </label>
       <app-ui-alert variant="warning" [inline]="true" icon="material-symbols:event-busy-outline">
-        No se generan faltas y la sesión desaparece de las consultas y del cálculo de DPI. Los
-        registros ya marcados se conservan en la base de datos.
+        No se generarán faltas ni se incluirá esta sesión en el cálculo de inasistencias. Los
+        registros de asistencia ya existentes se conservarán.
       </app-ui-alert>
     </div>
   }
@@ -311,8 +312,8 @@
       </p>
       <app-ui-alert variant="warning" [inline]="true" icon="material-symbols:warning-outline">
         Se generará una <strong>falta</strong> para cada matriculado activo sin registro en esa
-        sesión (las que tengan justificación vigente nacen justificadas) y se dispararán las alertas
-        DPI correspondientes. Si la clase realmente no se dictó, cancélala en su lugar.
+        sesión. Las faltas con una justificación vigente quedarán justificadas y se enviarán los
+        avisos por inasistencia correspondientes. Si la clase no se dictó, cancélala en su lugar.
       </app-ui-alert>
     </div>
   }

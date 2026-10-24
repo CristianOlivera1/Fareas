@@ -1,3 +1,4 @@
+import asyncio
 from datetime import time
 from typing import Annotated
 
@@ -12,6 +13,7 @@ from app.routers.catalog import _client_ip, _get_or_404
 from app.schemas.common import Page
 from app.services import errors
 from app.services.audit import audit
+from app.services.avatars import avatar_url
 from app.services.enrollments import matricular, retirar, transferir
 from app.services.import_matching import (
     Coincidencia,
@@ -504,6 +506,7 @@ class EnrolledStudentOut(BaseModel):
     enrolled_at: str | None
     withdrawn_at: str | None = None
     has_face: bool | None = None
+    avatar_url: str | None = None
 
 @router.get("/groups/{group_id}/students", response_model=list[EnrolledStudentOut])
 async def list_enrolled(
@@ -533,14 +536,16 @@ async def list_enrolled(
             )
         ).all()
         con_rostro = {r[0] if isinstance(r, tuple) else r for r in filas}
+    avatar_urls = await asyncio.gather(*(avatar_url(user.avatar_key) for user, _, _ in rows))
     return [
         EnrolledStudentOut(
             id=u.id, code=u.code, full_name=u.full_name, email=u.email, semester=u.semester,
             enrolled_at=ea.isoformat(timespec="seconds") if ea else None,
             withdrawn_at=w.isoformat(timespec="seconds") if w else None,
             has_face=(u.id in con_rostro) if with_face else None,
+            avatar_url=photo_url,
         )
-        for u, ea, w in rows
+        for (u, ea, w), photo_url in zip(rows, avatar_urls, strict=True)
     ]
 
 @router.post("/groups/{group_id}/students", status_code=status.HTTP_201_CREATED)

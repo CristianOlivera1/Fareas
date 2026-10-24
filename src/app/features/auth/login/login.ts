@@ -3,6 +3,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth/auth';
+import { ROLE_HOME } from '../../../core/constants/nav';
 import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
 
@@ -65,7 +66,7 @@ export class Login implements OnInit {
         if (res.user.must_change_password) {
           void this.router.navigate(['/auth/change-password']);
         } else {
-          void this.router.navigate(['/admin/dashboard']);
+          void this.router.navigateByUrl(ROLE_HOME[res.user.role]);
         }
       },
       error: (err: HttpErrorResponse) => {

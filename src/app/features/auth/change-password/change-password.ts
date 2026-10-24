@@ -9,10 +9,11 @@ import {
 import { Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth/auth';
+import { ROLE_HOME } from '../../../core/constants/nav';
 import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
 
-const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+const PASSWORD_PATTERN = /^(?=.*[A-Za-z]).{8,}$/;
 
 function passwordsMatch(group: AbstractControl): ValidationErrors | null {
   const newPassword = group.get('new_password')?.value;
@@ -60,7 +61,7 @@ export class ChangePassword {
     if (control.errors['minlength']) {
       return field === 'current_password' ? 'Mínimo 6 caracteres.' : 'Mínimo 8 caracteres.';
     }
-    if (control.errors['pattern']) return 'Usa al menos 8 caracteres con letras y números.';
+    if (control.errors['pattern']) return 'Usa al menos 8 caracteres e incluye una letra.';
     return '';
   }
 
@@ -88,7 +89,8 @@ export class ChangePassword {
     this.auth.changePassword({ current_password, new_password }).subscribe({
       next: () => {
         this.isSubmitting.set(false);
-        void this.router.navigate(['/admin/dashboard']);
+        const role = this.auth.currentUser()?.role;
+        void this.router.navigateByUrl(role ? ROLE_HOME[role] : '/login');
       },
       error: (err: HttpErrorResponse) => {
         this.isSubmitting.set(false);

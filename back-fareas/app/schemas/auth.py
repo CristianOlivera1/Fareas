@@ -4,7 +4,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.services.formats import validar_dominio_email
 
-_PASSWORD_PATTERN = re.compile(r"^(?=.*[A-Za-z])(?=.*\d).{8,}$")
+_PASSWORD_PATTERN = re.compile(r"^(?=.*[A-Za-z]).{8,}$")
 
 
 def _institutional_email(value: str) -> str:
@@ -16,7 +16,7 @@ def _institutional_email(value: str) -> str:
 
 def _strong_password(value: str) -> str:
     if not _PASSWORD_PATTERN.fullmatch(value):
-        raise ValueError("La contraseña debe tener al menos 8 caracteres e incluir letras y números")
+        raise ValueError("La contraseña debe tener al menos 8 caracteres e incluir al menos una letra")
     return value
 
 
@@ -43,6 +43,7 @@ class UserOut(BaseModel):
     full_name: str
     email: str
     must_change_password: bool
+    avatar_url: str | None = None
 
 class TokenPairResponse(BaseModel):
     access_token: str

@@ -46,6 +46,14 @@ export class CalendarApi extends BaseApi {
   }) {
     return this.post<JustificationCreated>('/justifications', body);
   }
+  uploadJustificationDocument(id: number, file: File) {
+    const body = new FormData();
+    body.append('file', file);
+    return this.post<{ id: number; document_url: string | null }>(`/justifications/${id}/document`, body);
+  }
+  deleteJustificationDocument(id: number) {
+    return this.delete<{ message: string }>(`/justifications/${id}/document`);
+  }
   deleteJustification(id: number) {
     return this.delete<{ message: string }>(`/justifications/${id}`);
   }

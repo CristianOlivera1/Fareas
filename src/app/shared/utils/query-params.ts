@@ -1,16 +1,19 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { NavigationEnd, Router } from '@angular/router';
+import { filter } from 'rxjs';
 import { toParams } from '../../core/api/api-url';
 
 @Injectable({ providedIn: 'root' })
 export class QueryParams {
   private readonly router = inject(Router);
-  private readonly route = inject(ActivatedRoute);
 
   private readonly raw = signal<Record<string, string | string[]>>(this.readCurrent());
+  private updateQueue = Promise.resolve();
 
   constructor() {
-    this.router.events.subscribe(() => this.raw.set(this.readCurrent()));
+    this.router.events
+      .pipe(filter((event) => event instanceof NavigationEnd))
+      .subscribe(() => this.raw.set(this.readCurrent()));
   }
 
   readonly all = computed(() => this.raw());
@@ -31,6 +34,15 @@ export class QueryParams {
     });
   }
 
+  integer(name: string, fallback: number) {
+    return computed(() => {
+      const value = this.raw()[name];
+      if (typeof value !== 'string' || value === '') return fallback;
+      const parsed = Number(value);
+      return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+    });
+  }
+
   boolean(name: string) {
     return computed(() => {
       const v = this.raw()[name];
@@ -39,22 +51,24 @@ export class QueryParams {
   }
 
   async update(patch: Record<string, string | number | boolean | null | undefined>): Promise<void> {
-    const current: Record<string, string | string[]> = { ...this.raw() };
+    const operation = this.updateQueue.then(async () => {
+      const tree = this.router.parseUrl(this.router.url);
+      const current: Record<string, string | string[]> = this.readCurrent();
 
-    for (const [key, value] of Object.entries(patch)) {
-      if (value === null || value === undefined || value === '') {
-        delete current[key];
-      } else {
-        current[key] = String(value);
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === null || value === undefined || value === '') {
+          delete current[key];
+        } else {
+          current[key] = String(value);
+        }
       }
-    }
-    if (current['page'] === '1') delete current['page'];
+      if (current['page'] === '1') delete current['page'];
 
-    await this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: current,
-      queryParamsHandling: '',
+      tree.queryParams = current;
+      await this.router.navigateByUrl(tree);
     });
+    this.updateQueue = operation.catch(() => undefined);
+    await operation;
   }
 
   toHttpParams(extra?: Record<string, string | number | null | undefined>) {

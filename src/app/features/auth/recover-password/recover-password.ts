@@ -25,7 +25,7 @@ import {
 
 type RecoverStep = 'email' | 'otp' | 'reset';
 
-const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+const PASSWORD_PATTERN = /^(?=.*[A-Za-z]).{8,}$/;
 const DEFAULT_RESEND_SECONDS = 60;
 
 function passwordsMatch(group: AbstractControl): ValidationErrors | null {
@@ -53,6 +53,7 @@ export class RecoverPassword {
   readonly errorMessage = signal('');
   readonly successMessage = signal('');
   readonly resendIn = signal(0);
+  readonly codeRejected = signal(false);
 
   readonly emailForm = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email, institutionalEmail]],
@@ -115,11 +116,20 @@ export class RecoverPassword {
       return;
     }
 
-    this.isSubmitting.set(true);
-    this.errorMessage.set('');
-
     const email = this.emailForm.getRawValue().email.trim().toLowerCase();
     this.emailForm.controls.email.setValue(email);
+    if (email === this.recoveryEmail && this.resendIn() > 0) {
+      this.errorMessage.set(`Espera ${this.resendIn()} s antes de solicitar otro código.`);
+      return;
+    }
+    if (email !== this.recoveryEmail) {
+      this.resendIn.set(0);
+    }
+
+    this.isSubmitting.set(true);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    this.codeRejected.set(false);
     this.recoveryEmail = email;
 
     this.auth.recoverRequest({ email }).subscribe({
@@ -154,6 +164,7 @@ export class RecoverPassword {
 
     this.isSubmitting.set(true);
     this.errorMessage.set('');
+    this.successMessage.set('');
 
     const { code } = this.otpForm.getRawValue();
 
@@ -185,7 +196,7 @@ export class RecoverPassword {
     if (!control.errors) return '';
     if (control.errors['required']) return 'Este campo es obligatorio.';
     if (control.errors['minlength']) return 'Mínimo 8 caracteres.';
-    if (control.errors['pattern']) return 'Usa al menos 8 caracteres con letras y números.';
+    if (control.errors['pattern']) return 'Usa al menos 8 caracteres e incluye una letra.';
     return '';
   }
 
@@ -199,6 +210,8 @@ export class RecoverPassword {
 
     this.isSubmitting.set(true);
     this.errorMessage.set('');
+    this.successMessage.set('');
+    this.codeRejected.set(false);
 
     this.auth
       .resetPassword({
@@ -215,9 +228,9 @@ export class RecoverPassword {
         },
         error: (err: HttpErrorResponse) => {
           this.isSubmitting.set(false);
-          this.errorMessage.set(
-            err.error?.detail ?? 'No se pudo restablecer la contraseña.',
-          );
+          const detail = err.error?.detail ?? 'No se pudo restablecer la contraseña.';
+          this.errorMessage.set(detail);
+          this.codeRejected.set(err.status === 400 && /c[oó]digo/i.test(detail));
         },
       });
   }
@@ -227,6 +240,7 @@ export class RecoverPassword {
 
     this.errorMessage.set('');
     this.successMessage.set('');
+    this.codeRejected.set(false);
     this.isSubmitting.set(true);
 
     this.auth.recoverRequest({ email: this.recoveryEmail }).subscribe({
@@ -250,6 +264,7 @@ export class RecoverPassword {
     this.step.set('email');
     this.errorMessage.set('');
     this.successMessage.set('');
+    this.codeRejected.set(false);
   }
 
   private startResendCooldown(seconds: number): void {

@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 
 from sqlmodel import select
@@ -5,17 +6,21 @@ from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
 
 from app.services import errors
 from app.services.audit import audit
+from app.services.storage import get_storage
 from app.tables import (
     AppUser,
     AttendanceRecord,
     AttendanceSession,
     AttendanceStatus,
+    Course,
     CourseGroup,
     Enrollment,
     Justification,
     ScheduleBlock,
     UserRole,
 )
+
+logger = logging.getLogger("fareas.justifications")
 
 
 async def _grupos_del_docente(db, teacher_id: int, curso_id: int | None) -> set[int]:
@@ -116,6 +121,13 @@ async def crear(
                    "faltas_afectadas": afectadas},
         ip_address=ip,
     )
+
+    from app.services.notification_center import notificar_justificacion_creada
+
+    curso = await db.get(Course, course_id) if course_id else None
+    await notificar_justificacion_creada(
+        db, actor=actor, just=just, student=student, course=curso, afectadas=afectadas
+    )
     await db.commit()
     return just, afectadas
 
@@ -129,6 +141,7 @@ async def eliminar(
         if actor.role is not UserRole.DOCENTE or just.created_by != actor.id:
             raise errors.DomainError("Solo puedes eliminar las justificaciones que creaste")
 
+    document_key = just.document_key
     faltas = (
         await db.exec(
             select(AttendanceRecord).where(
@@ -143,6 +156,9 @@ async def eliminar(
         db.add(falta)
         revertidas += 1
 
+    from app.services.notification_center import notificar_justificacion_eliminada
+
+    await notificar_justificacion_eliminada(db, actor=actor, just=just, revertidas=revertidas)
     await db.delete(just)
     await audit(
         db, actor, action="justificacion_eliminada", entity="justification",
@@ -153,4 +169,10 @@ async def eliminar(
         ip_address=ip,
     )
     await db.commit()
+
+    if document_key:
+        try:
+            await get_storage().delete(document_key)
+        except Exception:
+            logger.warning("No se pudo borrar el adjunto %s", document_key, exc_info=True)
     return revertidas

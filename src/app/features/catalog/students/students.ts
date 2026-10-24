@@ -9,6 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
 import {
   FormBuilder,
   FormsModule,
@@ -26,6 +27,7 @@ import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { DataTable } from '../../../shared/components/data-table/data-table';
 import { DataTableCellDirective } from '../../../shared/components/data-table/data-table-cell.directive';
+import { Avatar } from '../../../shared/components/avatar/avatar';
 import { PageHeader } from '../../../shared/components/page-header/page-header';
 import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
@@ -50,7 +52,7 @@ const CICLOS = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}`, value:
   imports: [
     FormsModule, ReactiveFormsModule, PageHeader, UiButton, UiInput, UiAlert, DataTable,
     DataTableCellDirective, DialogModule, InputTextModule, SelectModule, ToggleSwitchModule,
-    StudentsImportDialog,
+    StudentsImportDialog, Avatar,
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './students.html',
@@ -61,6 +63,7 @@ export class StudentsPage {
   private readonly api = inject(CatalogApi);
   private readonly qp = inject(QueryParams);
   private readonly toast = inject(MessageService);
+  private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -98,7 +101,7 @@ export class StudentsPage {
     { id: 'email', header: 'Correo', hiddenOnMobile: true },
     { id: 'semester', header: 'Ciclo', align: 'center' },
     { id: 'is_active', header: 'Estado', align: 'center', hiddenOnMobile: true },
-    { id: 'actions', header: '', align: 'center', width: '70px' },
+    { id: 'actions', header: '', align: 'center', width: '96px' },
   ];
 
   readonly q = this.qp.filter('q');
@@ -142,13 +145,6 @@ export class StudentsPage {
           this.studentForm.controls.code.setValue(digits);
         }
       });
-  }
-
-  initials(name: string): string {
-    const parts = name.trim().split(/\s+/);
-    return parts.length >= 2
-      ? `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-      : name.slice(0, 2).toUpperCase();
   }
 
   onSearch(value: string): void { void this.qp.update({ q: value || null, page: null }); }
@@ -207,6 +203,10 @@ export class StudentsPage {
 
   openImport(): void {
     this.importVisible = true;
+  }
+
+  openFaces(s: Person): void {
+    void this.router.navigate(['/admin/faces'], { queryParams: { student: s.id } });
   }
 
   openEdit(s: Person): void {

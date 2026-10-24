@@ -15,9 +15,9 @@ CREATE TABLE app_settings (
     semester_label         VARCHAR(40)  NOT NULL,
     block_minutes          INTEGER      NOT NULL DEFAULT 120 CHECK (block_minutes > 0),
     late_tolerance_minutes INTEGER      NOT NULL DEFAULT 10 CHECK (late_tolerance_minutes >= 0),
-    face_match_threshold   NUMERIC(4,3) NOT NULL DEFAULT 0.750 CHECK (face_match_threshold BETWEEN 0 AND 1),
-    dpi_alert_percent      NUMERIC(5,2) NOT NULL DEFAULT 30.00 CHECK (dpi_alert_percent > 0),
-    dpi_limit_percent      NUMERIC(5,2) NOT NULL DEFAULT 33.33,
+    face_match_threshold   NUMERIC(4,3) NOT NULL DEFAULT 0.550 CHECK (face_match_threshold BETWEEN 0 AND 1),
+    dpi_alert_percent      NUMERIC(5,2) NOT NULL DEFAULT 20.00 CHECK (dpi_alert_percent > 0),
+    dpi_limit_percent      NUMERIC(5,2) NOT NULL DEFAULT 30.00,
     attendance_hour_start  TIME         NOT NULL DEFAULT '07:00',
     attendance_hour_end    TIME         NOT NULL DEFAULT '20:00',
     updated_at             TIMESTAMP    NOT NULL DEFAULT NOW(),
@@ -48,6 +48,7 @@ CREATE TABLE app_user (
     created_at           TIMESTAMP    NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMP    NOT NULL DEFAULT NOW(),
     face_consent_at      TIMESTAMP,
+    avatar_key           VARCHAR(500),
     token_version        INTEGER      NOT NULL DEFAULT 0
 );
 ALTER TABLE app_user ADD CONSTRAINT chk_user_dni_8
@@ -165,6 +166,7 @@ CREATE TABLE justification (
     document_url VARCHAR(500),
     created_by  BIGINT      NOT NULL REFERENCES app_user(id),
     created_at  TIMESTAMP   NOT NULL DEFAULT NOW(),
+    document_key VARCHAR(500),
     CHECK (start_date <= end_date)
 );
 CREATE INDEX idx_justification_student ON justification (student_id, start_date, end_date);
@@ -231,6 +233,29 @@ CREATE TABLE dpi_alert_sent (
     PRIMARY KEY (student_id, course_id, semester_label, level)
 );
 
+CREATE TABLE notification (
+    id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id         BIGINT       NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    kind            VARCHAR(40)  NOT NULL,
+    title           VARCHAR(160) NOT NULL,
+    message         VARCHAR(500) NOT NULL,
+    link            VARCHAR(200),
+    severity        VARCHAR(10)  NOT NULL DEFAULT 'info',
+    dedupe_key      VARCHAR(120),
+    read_at         TIMESTAMPTZ,
+    email_status    VARCHAR(10)  NOT NULL DEFAULT 'skipped',
+    email_attempts  SMALLINT     NOT NULL DEFAULT 0,
+    email_error     VARCHAR(300),
+    email_sent_at   TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_notification_severity CHECK (severity IN ('info', 'success', 'warning', 'danger')),
+    CONSTRAINT chk_notification_email CHECK (email_status IN ('pending', 'sent', 'failed', 'skipped'))
+);
+CREATE INDEX idx_notification_user_created ON notification (user_id, created_at DESC);
+CREATE INDEX idx_notification_unread ON notification (user_id, created_at DESC) WHERE read_at IS NULL;
+CREATE UNIQUE INDEX uq_notification_dedupe ON notification (user_id, dedupe_key) WHERE dedupe_key IS NOT NULL;
+CREATE INDEX idx_notification_email_pending ON notification (created_at) WHERE email_status = 'pending';
+
 CREATE TABLE refresh_token (
     id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id         BIGINT      NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
@@ -251,6 +276,21 @@ CREATE INDEX idx_refresh_user   ON refresh_token (user_id);
 CREATE INDEX idx_refresh_family ON refresh_token (family_id);
 CREATE INDEX idx_refresh_active ON refresh_token (user_id) WHERE revoked_at IS NULL;
 CREATE INDEX idx_refresh_expiry ON refresh_token (expires_at) WHERE revoked_at IS NULL;
+
+CREATE TABLE password_otp (
+    id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id     BIGINT       NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    purpose     VARCHAR(20)  NOT NULL,
+    code_hash   VARCHAR(128) NOT NULL,
+    sent_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    expires_at  TIMESTAMPTZ  NOT NULL,
+    attempts    SMALLINT     NOT NULL DEFAULT 0,
+    verified    BOOLEAN      NOT NULL DEFAULT FALSE,
+    consumed_at TIMESTAMPTZ,
+    CONSTRAINT uq_password_otp_user_purpose UNIQUE (user_id, purpose),
+    CONSTRAINT chk_password_otp_expiry CHECK (expires_at > sent_at)
+);
+CREATE INDEX idx_password_otp_user ON password_otp (user_id);
 
 CREATE OR REPLACE FUNCTION fn_set_updated_at() RETURNS trigger AS $$
 BEGIN

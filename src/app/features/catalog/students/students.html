@@ -1,4 +1,4 @@
-<app-page-header title="Estudiantes" subtitle="Directorio de matriculados (RF-03)">
+<app-page-header title="Estudiantes" subtitle="Consulta y administra los estudiantes matriculados.">
   @if (auth.isAdmin()) {
     <app-ui-button variant="outline" icon="material-symbols:upload-file-outline" (click)="openImport()">
       Importar nómina
@@ -34,9 +34,7 @@
 >
   <ng-template appCell="student" let-s>
     <div class="flex items-center gap-2.5">
-      <span class="grid size-8 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-bold text-(--fareas-primary)">
-        {{ initials(s.full_name) }}
-      </span>
+      <app-avatar [name]="s.full_name" [src]="s.avatar_url ?? null" size="sm" />
       <div class="min-w-0">
         <div class="truncate text-sm font-medium text-gray-900">{{ s.full_name }}</div>
         <div class="text-xs text-gray-500">{{ s.code ?? 'sin código' }}</div>
@@ -75,6 +73,13 @@
   </ng-template>
   <ng-template appCell="actions" let-s>
     <div class="flex items-center justify-center gap-1">
+      @if (auth.isAdmin()) {
+        <button type="button"
+          class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-blue-50 hover:text-(--fareas-primary) transition-colors"
+          title="Enrolar rostro" (click)="openFaces(s)">
+          <iconify-icon icon="material-symbols:face-retouching-natural" width="18"></iconify-icon>
+        </button>
+      }
       <button type="button"
         class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
         title="Editar" (click)="openEdit(s)">
@@ -120,8 +125,8 @@
       </label>
     } @else {
       <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-        Se genera una clave temporal y se envía al correo (RF-08). El rostro se enrola
-        después en Herramientas → Enrolamiento facial.
+        Al guardar, se enviará una clave temporal al correo institucional. Después, registra el rostro
+        del estudiante en Herramientas → Enrolamiento facial.
       </app-ui-alert>
     }
   </div>

@@ -9,6 +9,8 @@ import { UiButton } from '../../../shared/components/ui-button/ui-button';
 import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { PageHeader } from '../../../shared/components/page-header/page-header';
+import { Tabs } from '../../../shared/components/tabs/tabs';
+import type { TabOption } from '../../../shared/components/tabs/tabs';
 import { Settings } from '../../../core/models/catalog';
 
 interface Option<T> {
@@ -50,7 +52,7 @@ const EMPTY: SettingsForm = {
 
 @Component({
   selector: 'app-settings',
-  imports: [FormsModule, PageHeader, UiButton, UiInput, UiAlert, SelectModule],
+  imports: [FormsModule, PageHeader, UiButton, UiInput, UiAlert, SelectModule, Tabs],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './settings.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -66,6 +68,13 @@ export class SettingsPage {
 
   readonly form = signal<SettingsForm>({ ...EMPTY });
   private readonly original = signal<SettingsForm>({ ...EMPTY });
+  readonly activeTab = signal('period');
+  readonly settingsTabs: readonly TabOption[] = [
+    { id: 'period', label: 'Periodo académico', icon: 'material-symbols:calendar-month-outline' },
+    { id: 'attendance', label: 'Asistencia', icon: 'material-symbols:schedule' },
+    { id: 'rectification', label: 'Rectificación', icon: 'material-symbols:history' },
+    { id: 'thresholds', label: 'Umbrales', icon: 'material-symbols:tune' },
+  ];
 
   readonly blockMinutesOptions: Option<number>[] = [
     { label: '45 minutos', value: 45 },
@@ -100,9 +109,9 @@ export class SettingsPage {
     if (f.attendance_hour_start >= f.attendance_hour_end)
       out.push('La hora de inicio de la ventana de marca debe ser menor que la hora de fin');
     if (f.dpi_alert_percent >= f.dpi_limit_percent)
-      out.push('El porcentaje de alerta DPI debe ser menor que el porcentaje de límite (30 %)');
+      out.push('El porcentaje para enviar avisos debe ser menor que el límite de inasistencias');
     if (f.face_match_threshold <= 0 || f.face_match_threshold > 1)
-      out.push('El umbral facial debe estar entre 0 y 1 (recomendado 0.55)');
+      out.push('El nivel mínimo de coincidencia facial debe estar entre 0 y 1');
     if (f.block_minutes <= 0) out.push('La duración de bloque debe ser mayor que 0');
     return out;
   });
@@ -122,6 +131,10 @@ export class SettingsPage {
 
   patch(p: Partial<SettingsForm>): void {
     this.form.update((f) => ({ ...f, ...p }));
+  }
+
+  selectTab(tabId: string): void {
+    this.activeTab.set(tabId);
   }
 
   reload(): void {
@@ -159,7 +172,7 @@ export class SettingsPage {
       this.toast.add({
         severity: 'success',
         summary: 'Parámetros actualizados',
-        detail: 'Aplican a las sesiones siguientes; las ya registradas no cambian (RF-34)',
+        detail: 'Los cambios se aplican a las próximas sesiones y no modifican las asistencias ya registradas.',
         life: 5000,
       });
     } catch (err) {

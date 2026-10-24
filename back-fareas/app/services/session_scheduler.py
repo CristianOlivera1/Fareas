@@ -34,6 +34,27 @@ async def _barrido() -> None:
     with contextlib.suppress(Exception):
         await expirar_nodos()
 
+async def _despachar_correos() -> None:
+    from app.services.notification_center import despachar_correos_pendientes
+
+    try:
+        enviados = await despachar_correos_pendientes()
+        if enviados:
+            logger.info("[notificaciones] %s correos enviados", enviados)
+    except Exception:
+        logger.exception("No se pudieron despachar los correos pendientes")
+
+async def _limpiar_credenciales() -> None:
+    from app.services.maintenance import purge_expired_credentials
+
+    try:
+        async with SessionLocal() as db:
+            removed = await purge_expired_credentials(db)
+        if any(removed.values()):
+            logger.info("[mantenimiento] credenciales vencidas eliminadas: %s", removed)
+    except Exception:
+        logger.exception("No se pudo limpiar las credenciales vencidas")
+
 def iniciar_scheduler(intervalo_segundos: int = 60) -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -47,8 +68,24 @@ def iniciar_scheduler(intervalo_segundos: int = 60) -> AsyncIOScheduler:
         max_instances=1,
         coalesce=True,
     )
+    _scheduler.add_job(
+        _despachar_correos,
+        "interval",
+        seconds=intervalo_segundos,
+        id="despacho_correos",
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.add_job(
+        _limpiar_credenciales,
+        "interval",
+        hours=6,
+        id="limpieza_credenciales",
+        max_instances=1,
+        coalesce=True,
+    )
     _scheduler.start()
-    logger.info("Scheduler de asistencia iniciado (cada %s s)", intervalo_segundos)
+    logger.info("Scheduler de asistencia y notificaciones iniciado (cada %s s)", intervalo_segundos)
     return _scheduler
 
 def detener_scheduler() -> None:

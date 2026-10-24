@@ -1,0 +1,7 @@
+:host {
+  display: block;
+}
+
+.notifications-panel {
+  animation: fadeIn 120ms ease-out;
+}

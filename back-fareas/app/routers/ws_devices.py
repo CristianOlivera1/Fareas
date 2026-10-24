@@ -45,8 +45,13 @@ async def _marcar_online(db: SQLModelAsyncSession, device_id: str) -> None:
 async def _marcar_offline(db: SQLModelAsyncSession, device_id: str) -> None:
     d = await _validar_dispositivo(db, device_id)
     if d is not None:
+        estaba_online = d.is_online
         d.is_online = False
         db.add(d)
+        if estaba_online:
+            from app.services.notification_center import notificar_dispositivo_offline
+
+            await notificar_dispositivo_offline(db, device=d)
         await db.commit()
 
 async def expirar_nodos() -> int:

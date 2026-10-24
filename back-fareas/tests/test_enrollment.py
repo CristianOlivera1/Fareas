@@ -79,4 +79,4 @@ async def test_enrolamiento_estado_y_auditoria(client, admin_headers, docente_he
     data = r.json()
     assert data["student_id"] == sid and data["enrolled"] is False
     r = await client.get(f"{API}/students/{sid}/faces", headers=docente_headers)
-    assert r.status_code == 200
+    assert r.status_code == 403

@@ -3,6 +3,9 @@ import { CUSTOM_ELEMENTS_SCHEMA, DestroyRef } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { filter } from 'rxjs';
+import { ADMIN_PREFIX, ROLE_HOME } from '../../../../core/constants/nav';
+import { AuthService } from '../../../../core/services/auth/auth';
+import { NotificationsBell } from '../notifications-bell/notifications-bell';
 
 interface Crumb {
   label: string;
@@ -12,6 +15,7 @@ interface Crumb {
 
 @Component({
   selector: 'app-header',
+  imports: [NotificationsBell],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './header.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -19,15 +23,18 @@ interface Crumb {
 export class Header {
   readonly toggleSidebarEvent = output<void>();
   private readonly router = inject(Router);
+  private readonly auth = inject(AuthService);
   private readonly url = signal('');
   private readonly routeTitle = signal<string | null>(null);
 
   readonly breadcrumbs = computed<Crumb[]>(() => {
     const segments = this.url().split('?')[0].split('/').filter(Boolean);
-    if (segments[0] !== 'admin') return [{ label: 'Panel', url: '/admin/dashboard', active: true }];
+    const role = this.auth.currentUser()?.role;
+    const home = role ? ROLE_HOME[role] : ADMIN_PREFIX;
+    if (segments[0] !== 'admin') return [{ label: 'Panel', url: home, active: true }];
     const page = this.routeTitle() ?? segments[1] ?? 'dashboard';
     return [
-      { label: 'Panel', url: '/admin/dashboard', active: false },
+      { label: 'Panel', url: home, active: false },
       { label: page, url: null, active: true },
     ];
   });

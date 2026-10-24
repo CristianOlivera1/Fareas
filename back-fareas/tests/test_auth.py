@@ -1,14 +1,38 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
 
 from app.core.security import hash_password
+from app.main import create_app
 from app.services import otp
-from app.tables import AppUser
+from app.tables import AppUser, PasswordOtp
 
 pytestmark = pytest.mark.asyncio
 
 API = "/api/v1/auth"
+
+
+async def _otp_row(
+    db: SQLModelAsyncSession, user_id: int, purpose: otp.OtpPurpose
+) -> PasswordOtp | None:
+    query = select(PasswordOtp).where(
+        PasswordOtp.user_id == user_id,
+        PasswordOtp.purpose == str(purpose),
+    )
+    return (await db.exec(query)).first()
+
+async def _set_otp_code(
+    db: SQLModelAsyncSession, user_id: int, purpose: otp.OtpPurpose, code: str
+) -> PasswordOtp:
+    row = await _otp_row(db, user_id, purpose)
+    assert row is not None, "el OTP debe quedar guardado en la base de datos"
+    row.code_hash = hash_password(code)
+    db.add(row)
+    await db.commit()
+    return row
 
 
 async def _login(client: AsyncClient, email: str, password: str):
@@ -134,9 +158,7 @@ async def test_cambio_clave_voluntario_exige_otp(
     assert data["expires_in"] == otp.OTP_TTL_SECONDS
     assert data["resend_in"] == otp.OTP_RESEND_SECONDS
 
-    key = (temp_user.id, otp.OtpPurpose.CHANGE_PASSWORD)
-    assert key in otp._store
-    otp._store[key].code_hash = hash_password("654321")
+    await _set_otp_code(db_session, temp_user.id, otp.OtpPurpose.CHANGE_PASSWORD, "654321")
 
     r = await client.post(
         f"{API}/change-password/otp",
@@ -166,7 +188,8 @@ async def test_cambio_clave_voluntario_exige_otp(
     assert r.status_code == 200
     new_token = r.json()["access_token"]
     assert new_token
-    assert key not in otp._store
+    consumed = await _otp_row(db_session, temp_user.id, otp.OtpPurpose.CHANGE_PASSWORD)
+    assert consumed is not None and consumed.consumed_at is not None
 
     assert (await client.get(f"{API}/me", headers=headers)).status_code == 401
     assert (await client.get(f"{API}/me", headers=_bearer(new_token))).status_code == 200
@@ -193,8 +216,12 @@ async def test_cambio_clave_otp_expira(
     )
     assert r.status_code == 200
 
-    key = (temp_user.id, otp.OtpPurpose.CHANGE_PASSWORD)
-    otp._store[key].expires_at = 0
+    row = await _otp_row(db_session, temp_user.id, otp.OtpPurpose.CHANGE_PASSWORD)
+    assert row is not None
+    row.sent_at = datetime.now(UTC) - timedelta(minutes=11)
+    row.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    db_session.add(row)
+    await db_session.commit()
 
     r = await client.post(
         f"{API}/change-password/otp/verify",
@@ -203,7 +230,7 @@ async def test_cambio_clave_otp_expira(
     )
     assert r.status_code == 400
     assert "expir" in r.json()["detail"].lower()
-    assert key not in otp._store
+    assert await _otp_row(db_session, temp_user.id, otp.OtpPurpose.CHANGE_PASSWORD) is None
 
 async def test_cambio_clave_otp_max_intentos(
     client: AsyncClient,
@@ -223,8 +250,7 @@ async def test_cambio_clave_otp_max_intentos(
     )
     assert r.status_code == 200
 
-    key = (temp_user.id, otp.OtpPurpose.CHANGE_PASSWORD)
-    otp._store[key].code_hash = hash_password("654321")
+    await _set_otp_code(db_session, temp_user.id, otp.OtpPurpose.CHANGE_PASSWORD, "654321")
 
     for _ in range(otp.OTP_MAX_ATTEMPTS):
         r = await client.post(
@@ -240,16 +266,18 @@ async def test_cambio_clave_otp_max_intentos(
         json={"code": "654321"},
     )
     assert r.status_code == 429
-    assert key not in otp._store
+    assert await _otp_row(db_session, temp_user.id, otp.OtpPurpose.CHANGE_PASSWORD) is None
 
-async def test_recuperacion_otp_flujo_completo(client: AsyncClient, temp_user: AppUser):
+async def test_recuperacion_otp_flujo_completo(
+    client: AsyncClient,
+    temp_user: AppUser,
+    db_session: SQLModelAsyncSession,
+):
     email = temp_user.email
     r = await client.post(f"{API}/recover", json={"email": email})
     assert r.status_code == 200
 
-    key = (temp_user.id, otp.OtpPurpose.RECOVER)
-    assert key in otp._store, "el OTP se generó en memoria"
-    otp._store[key].code_hash = hash_password("123456")
+    await _set_otp_code(db_session, temp_user.id, otp.OtpPurpose.RECOVER, "123456")
 
     r = await client.post(f"{API}/recover/verify", json={"email": email, "code": "999999"})
     assert r.status_code == 400
@@ -259,15 +287,60 @@ async def test_recuperacion_otp_flujo_completo(client: AsyncClient, temp_user: A
 
     r = await client.post(
         f"{API}/recover/reset",
-        json={"email": email, "code": "123456", "new_password": "Reseteada99"},
+        json={"email": email, "code": "123456", "new_password": "Reseteada"},
     )
     assert r.status_code == 200
 
-    assert key not in otp._store
+    used = await _otp_row(db_session, temp_user.id, otp.OtpPurpose.RECOVER)
+    assert used is not None and used.consumed_at is not None
 
-    r = await _login(client, email, "Reseteada99")
+    r = await _login(client, email, "Reseteada")
     assert r.status_code == 200
     assert r.json()["user"]["must_change_password"] is False
+
+async def test_recuperacion_otp_sobrevive_reinicio(
+    client: AsyncClient,
+    temp_user: AppUser,
+    db_session: SQLModelAsyncSession,
+):
+    email = temp_user.email
+    await client.post(f"{API}/recover", json={"email": email})
+    await _set_otp_code(db_session, temp_user.id, otp.OtpPurpose.RECOVER, "123456")
+
+    assert (
+        await client.post(f"{API}/recover/verify", json={"email": email, "code": "123456"})
+    ).status_code == 200
+
+    transport = ASGITransport(app=create_app())
+    async with AsyncClient(transport=transport, base_url="http://test") as fresh:
+        r = await fresh.post(
+            f"{API}/recover/reset",
+            json={"email": email, "code": "123456", "new_password": "Reseteada99"},
+        )
+    assert r.status_code == 200
+
+async def test_recuperacion_otp_usado_no_permite_otro_reset(
+    client: AsyncClient,
+    temp_user: AppUser,
+    db_session: SQLModelAsyncSession,
+):
+    email = temp_user.email
+    await client.post(f"{API}/recover", json={"email": email})
+    await _set_otp_code(db_session, temp_user.id, otp.OtpPurpose.RECOVER, "123456")
+    await client.post(f"{API}/recover/verify", json={"email": email, "code": "123456"})
+
+    primero = await client.post(
+        f"{API}/recover/reset",
+        json={"email": email, "code": "123456", "new_password": "Reseteada99"},
+    )
+    assert primero.status_code == 200
+
+    segundo = await client.post(
+        f"{API}/recover/reset",
+        json={"email": email, "code": "123456", "new_password": "OtraClave99"},
+    )
+    assert segundo.status_code == 400
+    assert "ya se usó" in segundo.json()["detail"]
 
 async def test_reset_sin_verificar_otp_falla(client: AsyncClient, temp_user: AppUser):
     email = temp_user.email
@@ -328,8 +401,8 @@ async def test_reset_rejects_weak_password(client: AsyncClient, temp_user: AppUs
         json={
             "email": temp_user.email,
             "code": "123456",
-            "new_password": "sololetras",
+            "new_password": "12345678",
         },
     )
     assert r.status_code == 422
-    assert "letras y números" in r.text
+    assert "al menos una letra" in r.text

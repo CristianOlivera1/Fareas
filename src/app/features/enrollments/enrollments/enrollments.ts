@@ -24,6 +24,7 @@ import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { ModalDelete } from '../../../shared/components/modal-delete/modal-delete';
 import { DataTable } from '../../../shared/components/data-table/data-table';
 import { DataTableCellDirective } from '../../../shared/components/data-table/data-table-cell.directive';
+import { Avatar } from '../../../shared/components/avatar/avatar';
 import { TableColumn } from '../../../core/models/table-column';
 import { EnrolledStudent, Group } from '../../../core/models/catalog';
 import { toRoman } from '../../../shared/utils/cycles';
@@ -37,7 +38,7 @@ interface Option<T> {
   selector: 'app-enrollments-page',
   imports: [
     FormsModule, PageHeader, UiButton, UiAlert, ModalDelete, DataTable,
-    DataTableCellDirective, DialogModule, SelectModule,
+    DataTableCellDirective, DialogModule, SelectModule, Avatar,
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './enrollments.html',
@@ -405,10 +406,4 @@ export class EnrollmentsPage {
     }
   }
 
-  initials(name: string): string {
-    const parts = name.trim().split(/\s+/);
-    return parts.length >= 2
-      ? `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-      : name.slice(0, 2).toUpperCase();
-  }
 }

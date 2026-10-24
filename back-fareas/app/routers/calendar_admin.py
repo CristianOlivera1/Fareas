@@ -1,10 +1,13 @@
+import logging
 from datetime import date, time
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile, status
 from pydantic import AliasChoices, BaseModel, Field
 from sqlalchemy.orm import aliased
 from sqlmodel import select
 
+from app.core.config import get_settings
 from app.core.deps import DbSession, RequireRole
 from app.routers.catalog import _client_ip, _get_or_404
 from app.services import errors
@@ -12,9 +15,11 @@ from app.services.audit import audit
 from app.services.justifications import crear as crear_justificacion
 from app.services.justifications import eliminar as eliminar_justificacion
 from app.services.settings import semesters_con_grupos
+from app.services.storage import detect_document_type, get_storage, justification_key
 from app.tables import AppSettings, AppUser, Course, Holiday, Justification, UserRole
 
 router = APIRouter(tags=["calendar"])
+logger = logging.getLogger("fareas.justifications")
 
 
 class HolidayIn(BaseModel):
@@ -204,7 +209,12 @@ class JustificationOut(BaseModel):
     created_by: int
     created_by_name: str
 
-def _j_out(j: Justification, student: AppUser, course: Course | None, creator: AppUser) -> JustificationOut:
+async def _j_out(
+    j: Justification, student: AppUser, course: Course | None, creator: AppUser
+) -> JustificationOut:
+    document_url = j.document_url
+    if j.document_key:
+        document_url = await get_storage().url(j.document_key)
     return JustificationOut(
         id=j.id,
         student_id=j.student_id,
@@ -214,7 +224,7 @@ def _j_out(j: Justification, student: AppUser, course: Course | None, creator: A
         start_date=j.start_date,
         end_date=j.end_date,
         reason=j.reason,
-        document_url=j.document_url,
+        document_url=document_url,
         created_by=j.created_by,
         created_by_name=creator.full_name,
     )
@@ -242,7 +252,7 @@ async def list_justifications(
     if course_id is not None:
         stmt = stmt.where(Justification.course_id == course_id)
     rows = (await db.exec(stmt)).all()
-    return [_j_out(j, student, course, creator) for j, student, course, creator in rows]
+    return [await _j_out(j, student, course, creator) for j, student, course, creator in rows]
 
 @router.post("/justifications", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_justification(
@@ -275,6 +285,121 @@ async def delete_justification(
         db, user, justification_id, ip=_client_ip(request)
     )
     return {"message": f"Justificación eliminada; {revertidas} falta(s) volvieron a estado 'falta'"}
+
+
+def _require_justification_owner(just: Justification, user: AppUser) -> None:
+    if user.role is UserRole.ADMIN:
+        return
+    if user.role is not UserRole.DOCENTE or just.created_by != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo puedes adjuntar documentos a las justificaciones que creaste",
+        )
+
+
+async def _read_document(file: UploadFile) -> bytes:
+    settings = get_settings()
+    limit = settings.R2_MAX_UPLOAD_MB * 1024 * 1024
+    data = bytearray()
+    try:
+        while chunk := await file.read(1024 * 1024):
+            data.extend(chunk)
+            if len(data) > limit:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail=f"El archivo supera el límite de {settings.R2_MAX_UPLOAD_MB} MB",
+                )
+    finally:
+        await file.close()
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="El archivo está vacío",
+        )
+    return bytes(data)
+
+
+async def _delete_stored(key: str) -> None:
+    try:
+        await get_storage().delete(key)
+    except Exception:
+        logger.warning("No se pudo borrar el adjunto %s", key, exc_info=True)
+
+
+@router.post("/justifications/{justification_id}/document", response_model=dict)
+async def upload_justification_document(
+    justification_id: int,
+    request: Request,
+    db: DbSession,
+    user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
+    file: Annotated[UploadFile, File()],
+) -> dict:
+    just = await _get_or_404(db, Justification, justification_id, "Justificación")
+    _require_justification_owner(just, user)
+
+    data = await _read_document(file)
+    detected = detect_document_type(data)
+    if detected is None:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="El adjunto debe ser un PDF, JPG o PNG válido",
+        )
+    content_type, extension = detected
+
+    storage = get_storage()
+    try:
+        key = await storage.put(
+            justification_key(justification_id, extension), data, content_type
+        )
+    except Exception as exc:
+        logger.exception("No se pudo subir el adjunto de la justificación %s", justification_id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudo guardar el archivo; intenta de nuevo en unos minutos",
+        ) from exc
+
+    previous = just.document_key
+    just.document_key = key
+    db.add(just)
+    await audit(
+        db, user, action="justificacion_documento", entity="justification",
+        entity_id=justification_id,
+        new_value={"document_key": key, "bytes": len(data), "content_type": content_type},
+        ip_address=_client_ip(request),
+    )
+    await db.commit()
+
+    if previous and previous != key:
+        await _delete_stored(previous)
+    return {"id": justification_id, "document_url": await storage.url(key)}
+
+
+@router.delete("/justifications/{justification_id}/document", response_model=dict)
+async def delete_justification_document(
+    justification_id: int,
+    request: Request,
+    db: DbSession,
+    user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
+) -> dict:
+    just = await _get_or_404(db, Justification, justification_id, "Justificación")
+    _require_justification_owner(just, user)
+    if not just.document_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="La justificación no tiene documento adjunto",
+        )
+
+    key = just.document_key
+    just.document_key = None
+    db.add(just)
+    await audit(
+        db, user, action="justificacion_documento_eliminado", entity="justification",
+        entity_id=justification_id, old_value={"document_key": key},
+        ip_address=_client_ip(request),
+    )
+    await db.commit()
+    await _delete_stored(key)
+    return {"message": "Documento adjunto eliminado"}
 
 def _settings_out(s: AppSettings) -> "SettingsOut":
     return SettingsOut(

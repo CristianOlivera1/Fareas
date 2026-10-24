@@ -5,11 +5,14 @@ import {
   ElementRef,
   OnDestroy,
   computed,
+  effect,
+  inject,
   signal,
   viewChild,
 } from '@angular/core';
 import { Chart, registerables } from 'chart.js';
 import { CommonModule } from '@angular/common';
+import { AttendanceDistribution, DashboardApi } from '../../../../core/services/dashboard-api';
 
 Chart.register(...registerables);
 
@@ -27,12 +30,24 @@ interface Slice {
   host: { class: 'block' },
 })
 export class DistributionChart implements AfterViewInit, OnDestroy {
-  readonly slices = signal<Slice[]>([
-    { label: 'Asistió', count: 1248, color: '#22c55e' },
-    { label: 'Tardanza', count: 142, color: '#f59e0b' },
-    { label: 'Sin registro', count: 87, color: '#9ca3af' },
-    { label: 'Falta', count: 23, color: '#ef4444' },
-  ]);
+  private readonly api = inject(DashboardApi);
+
+  readonly distribution = signal<AttendanceDistribution>({
+    asistio: 0,
+    tardanza: 0,
+    falta: 0,
+    sin_registro: 0,
+  });
+
+  readonly slices = computed<Slice[]>(() => {
+    const data = this.distribution();
+    return [
+      { label: 'Asistió', count: data.asistio, color: '#22c55e' },
+      { label: 'Tardanza', count: data.tardanza, color: '#f59e0b' },
+      { label: 'Sin registro', count: data.sin_registro, color: '#9ca3af' },
+      { label: 'Falta', count: data.falta, color: '#ef4444' },
+    ];
+  });
 
   readonly total = computed(() => this.slices().reduce((acc, slice) => acc + slice.count, 0));
   readonly attendanceRate = computed(() => {
@@ -50,6 +65,17 @@ export class DistributionChart implements AfterViewInit, OnDestroy {
 
   private readonly canvas = viewChild.required<ElementRef<HTMLCanvasElement>>('chart');
   private chart?: Chart<'doughnut'>;
+
+  constructor() {
+    this.api.distribution().subscribe({ next: (data) => this.distribution.set(data) });
+
+    effect(() => {
+      const slices = this.slices();
+      if (!this.chart) return;
+      this.chart.data.datasets[0].data = slices.map((slice) => slice.count);
+      this.chart.update();
+    });
+  }
 
   ngAfterViewInit(): void {
     const slices = this.slices();

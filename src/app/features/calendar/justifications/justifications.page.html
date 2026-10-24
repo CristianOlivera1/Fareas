@@ -1,5 +1,5 @@
 <app-page-header title="Justificaciones"
-  subtitle="Faltas respaldadas por un documento: el alta marca las faltas del rango y la baja las revierte (RF-10 · R6)">
+  subtitle="Registra el sustento de una ausencia para justificar las faltas del estudiante durante las fechas indicadas.">
   <app-ui-button icon="material-symbols:note-add" (click)="openCreate()">
     Nueva justificación
   </app-ui-button>
@@ -34,10 +34,12 @@
   </app-ui-alert>
 }
 
+<input #picker type="file" class="hidden" accept=".pdf,.jpg,.jpeg,.png" (change)="onRowFile($event)" />
+
 <app-data-table
   [columns]="columns" [data]="justifications()" [loading]="loading()"
   emptyTitle="Sin justificaciones"
-  emptyMessage="Registra una justificación para que las faltas del alumno en ese rango queden como justificadas y no cuenten para el 30 %."
+  emptyMessage="Registra una justificación para que las faltas del estudiante en las fechas indicadas queden justificadas y no cuenten para el límite de inasistencias."
   emptyIcon="material-symbols:medical-information-outline"
 >
   <ng-template appCell="student" let-j>
@@ -76,11 +78,25 @@
     <span class="text-sm text-gray-600">{{ j.created_by_name }}</span>
   </ng-template>
   <ng-template appCell="actions" let-j>
-    <button type="button"
-      class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
-      title="Eliminar la justificación (revierte las faltas)" (click)="askDelete(j)">
-      <iconify-icon icon="material-symbols:delete-outline" width="18"></iconify-icon>
-    </button>
+    <div class="flex items-center justify-end gap-1">
+      <button type="button" [disabled]="attachingId() === j.id"
+        class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-blue-50 hover:text-(--fareas-primary) transition-colors disabled:opacity-40"
+        [title]="j.document_url ? 'Reemplazar el documento' : 'Adjuntar documento (PDF, JPG o PNG)'" (click)="pickDocument(j)">
+        <iconify-icon icon="material-symbols:upload-file-outline" width="18"></iconify-icon>
+      </button>
+      @if (j.document_url) {
+        <button type="button" [disabled]="attachingId() === j.id"
+          class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-amber-50 hover:text-amber-700 transition-colors disabled:opacity-40"
+          title="Quitar el documento adjunto" (click)="removeDocument(j)">
+          <iconify-icon icon="material-symbols:file-present-outline" width="18"></iconify-icon>
+        </button>
+      }
+      <button type="button"
+        class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+        title="Eliminar la justificación (revierte las faltas)" (click)="askDelete(j)">
+        <iconify-icon icon="material-symbols:delete-outline" width="18"></iconify-icon>
+      </button>
+    </div>
   </ng-template>
 </app-data-table>
 
@@ -133,13 +149,20 @@
         class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm placeholder-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary)"></textarea>
     </label>
 
-    <app-ui-input label="Documento (URL)" icon="material-symbols:attach-file"
+    <div class="space-y-1">
+      <span class="text-sm font-medium text-gray-700">Documento de sustento (opcional)</span>
+      <app-file-drop [file]="formFile()" accept=".pdf,.jpg,.jpeg,.png" [maxSizeMb]="10"
+        hint="PDF, JPG o PNG · máximo 10 MB" (fileChange)="onFormFile($event)" (fileError)="onFileError($event)" />
+    </div>
+
+    <app-ui-input label="O un enlace al documento (opcional)" icon="material-symbols:attach-file"
       placeholder="https://…/certificado.pdf"
+      hint="Úsalo solo si el documento ya está en otro sitio."
       [ngModel]="form().document_url" (ngModelChange)="patch({ document_url: $event })" />
 
     <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-      Al guardar, las faltas del alumno dentro del rango quedan como <strong>falta justificada (FJ)</strong>
-      y dejan de contar para el 30 % de inasistencias.
+      Al guardar, las faltas del estudiante en las fechas indicadas quedarán justificadas y dejarán
+      de contar para el límite de inasistencias.
     </app-ui-alert>
   </div>
   <ng-template pTemplate="footer">
@@ -156,7 +179,7 @@
   entityName="justificación"
   [softDelete]="false"
   [loading]="deleting()"
-  warning="Al eliminarla, las faltas que había justificado vuelven a estado 'falta' y suman al 30 % de inasistencias."
+  warning="Al eliminarla, las faltas justificadas volverán a contar como inasistencias para el límite permitido."
   (confirmed)="confirmDelete()"
   (canceled)="cancelDelete()"
 />

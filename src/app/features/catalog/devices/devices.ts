@@ -29,6 +29,8 @@ import { DataTableCellDirective } from '../../../shared/components/data-table/da
 import { TableColumn } from '../../../core/models/table-column';
 import { Device, DeviceType, Room } from '../../../core/models/catalog';
 import { extractDetail } from '../../../shared/utils/api-error';
+import { Tabs } from '../../../shared/components/tabs/tabs';
+import type { TabOption } from '../../../shared/components/tabs/tabs';
 
 const REFRESH_MONITOREO_MS = 30_000;
 
@@ -45,7 +47,7 @@ interface DeviceForm {
 @Component({
   selector: 'app-devices-page',
   imports: [
-    FormsModule, PageHeader, UiButton, UiInput, UiAlert, DataTable, DataTableCellDirective,
+    FormsModule, PageHeader, UiButton, UiInput, UiAlert, DataTable, DataTableCellDirective, Tabs,
     DialogModule, InputTextModule, SelectModule, ToggleSwitchModule,
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
@@ -87,6 +89,20 @@ export class DevicesPage {
     { id: 'is_online', header: 'Estado', align: 'center' },
     { id: 'actions', header: '', align: 'center', width: '70px' },
   ];
+
+  readonly viewTabs = computed<TabOption[]>(() => {
+    const onlineCount = this.onlineCount();
+    return [
+      { id: 'catalogo', label: 'Catálogo', icon: 'material-symbols:devices-other' },
+      {
+        id: 'monitoreo',
+        label: 'Monitoreo',
+        icon: 'material-symbols:monitor-heart-outline',
+        badge: `${onlineCount}/${this.statusList().length}`,
+        badgeTone: onlineCount > 0 ? 'success' : 'neutral',
+      },
+    ];
+  });
 
   readonly form = signal<DeviceForm>({
     id: null, room_id: null, device_type: 'camara', device_key: '', name: '', rtsp_url: '', is_active: true,
@@ -131,7 +147,7 @@ export class DevicesPage {
     return this.tab() === 'monitoreo';
   }
 
-  setTab(tab: 'catalogo' | 'monitoreo'): void {
+  setTab(tab: string): void {
     void this.qp.update({ tab: tab === 'monitoreo' ? 'monitoreo' : null });
   }
 

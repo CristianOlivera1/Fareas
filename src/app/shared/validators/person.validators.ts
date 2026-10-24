@@ -18,7 +18,7 @@ export const institutionalEmail: ValidatorFn = (
 
 export function normalizeWhatsapp(value: string): string {
   const digits = value.replace(/\D/g, '');
-  return digits.startsWith('51') && digits.length === 12 ? digits.slice(2) : digits;
+  return digits.startsWith('51') && digits.length === 11 ? digits.slice(2) : digits;
 }
 
 export const peruWhatsapp: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {

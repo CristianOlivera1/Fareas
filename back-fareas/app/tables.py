@@ -79,6 +79,7 @@ class AppUser(SQLModel, table=True):
     is_active: bool = True
     token_version: int = 0
     face_consent_at: datetime | None = None
+    avatar_key: str | None = Field(default=None, max_length=500)
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
     updated_at: datetime | None = Field(default=None, **server_now_kwargs())
 
@@ -101,6 +102,22 @@ class RefreshToken(SQLModel, table=True):
     replaced_by_id: int | None = Field(default=None, foreign_key="refresh_token.id")
     user_agent: str | None = Field(default=None, max_length=300)
     ip_address: str | None = Field(default=None, max_length=45)
+
+class PasswordOtp(SQLModel, table=True):
+    __tablename__ = "password_otp"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="app_user.id", index=True)
+    purpose: str = Field(max_length=20)
+    code_hash: str = Field(max_length=128)
+    sent_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    )
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    attempts: int = 0
+    verified: bool = False
+    consumed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
 
 class Room(SQLModel, table=True):
     __tablename__ = "room"
@@ -220,6 +237,7 @@ class Justification(SQLModel, table=True):
     document_url: str | None = Field(default=None, max_length=500)
     created_by: int = Field(foreign_key="app_user.id")
     created_at: datetime | None = Field(default=None, **server_now_kwargs())
+    document_key: str | None = Field(default=None, max_length=500)
 
 class AttendanceSession(SQLModel, table=True):
     __tablename__ = "attendance_session"
@@ -273,3 +291,24 @@ class DpiAlertSent(SQLModel, table=True):
     semester_label: str = Field(max_length=40, primary_key=True)
     level: str = Field(max_length=10, primary_key=True)
     sent_at: datetime | None = Field(default=None, **server_now_kwargs())
+
+class Notification(SQLModel, table=True):
+    __tablename__ = "notification"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="app_user.id", index=True)
+    kind: str = Field(max_length=40)
+    title: str = Field(max_length=160)
+    message: str = Field(max_length=500)
+    link: str | None = Field(default=None, max_length=200)
+    severity: str = Field(default="info", max_length=10)
+    dedupe_key: str | None = Field(default=None, max_length=120)
+    read_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    email_status: str = Field(default="skipped", max_length=10)
+    email_attempts: int = 0
+    email_error: str | None = Field(default=None, max_length=300)
+    email_sent_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    )

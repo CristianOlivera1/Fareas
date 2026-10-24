@@ -9,9 +9,10 @@ from sqlalchemy import text as sql_text
 from sqlmodel import select
 from sse_starlette.sse import EventSourceResponse
 
-from app.core.deps import CurrentUser, DbSession
+from app.core.deps import DbSession, RequireRole
 from app.core.security import decode_access_token
 from app.database import SessionLocal
+from app.routers.dpi import TEACHER_SCOPE
 from app.services.camera_loop import todos_los_veredictos
 from app.tables import AppSettings, AppUser, UserRole
 
@@ -64,9 +65,12 @@ async def _contar_marcas_hoy(db, teacher_id: int | None = None) -> dict:
     }
 
 async def _contar_camaras(db) -> dict:
-    sql = "SELECT COUNT(*) FROM device WHERE is_active AND device_type = 'camara'"
-    total = (await db.exec(sql_text(sql))).scalar_one()
-    return {"total": total, "activas": total}
+    sql = (
+        "SELECT COUNT(*), COUNT(*) FILTER (WHERE is_online) "
+        "FROM device WHERE is_active AND device_type = 'camara'"
+    )
+    total, activas = (await db.exec(sql_text(sql))).one()
+    return {"total": total, "activas": activas}
 
 async def _contar_alertas_dpi(db, docente_id: int | None = None) -> dict:
     cfg = await db.get(AppSettings, 1)
@@ -76,10 +80,7 @@ async def _contar_alertas_dpi(db, docente_id: int | None = None) -> dict:
     sql = "SELECT COUNT(*) FROM v_student_dpi v WHERE v.absence_percent > :limite"
     params: dict = {"limite": limite}
     if docente_id is not None:
-        sql += (
-            " AND v.course_id IN (SELECT cg.course_id FROM course_group cg "
-            "WHERE cg.teacher_id = :docente)"
-        )
+        sql += TEACHER_SCOPE
         params["docente"] = docente_id
     limite_n = (await db.exec(sql_text(sql).bindparams(**params))).scalar_one()
     sql_riesgo = sql.replace("v.absence_percent > :limite", "v.absence_percent >= :alerta")
@@ -101,7 +102,7 @@ async def _contar_por_revisar(db, teacher_id: int | None = None) -> int:
     return (await db.exec(sql_text(sql))).scalar_one()
 
 @router.get("/dashboard/summary", response_model=Summary)
-async def summary(db: DbSession, user: CurrentUser) -> Summary:
+async def summary(db: DbSession, user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE)) -> Summary:
     docente_id = user.id if user.role is UserRole.DOCENTE else None
     marcas = await _contar_marcas_hoy(db, docente_id)
     camaras = await _contar_camaras(db)
@@ -181,7 +182,7 @@ HORA_INICIO, HORA_FIN = 7, 20
 @router.get("/stats/hourly")
 async def stats_hourly(
     db: DbSession,
-    user: CurrentUser,
+    user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
     day: date | None = Query(None, description="Día a consultar (default: hoy)"),
 ) -> list[dict]:
     dia = day or date.today()
@@ -218,7 +219,7 @@ async def stats_hourly(
 @router.get("/stats/distribution")
 async def stats_distribution(
     db: DbSession,
-    user: CurrentUser,
+    user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
     desde: date | None = Query(None),
     hasta: date | None = Query(None),
 ) -> dict:

@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     API_V1_PREFIX: str = "/api/v1"
     CORS_ORIGINS: str = "http://localhost:4200"
+    FRONTEND_DIST_DIR: str = ""
+    FRONTEND_BASE_URL: str = "http://localhost:4200"
 
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/fareas"
     FAREAS_TEST_DB: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/fareas_test"
@@ -44,6 +46,8 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str = ""
     R2_PRESIGN_EXPIRE_SECONDS: int = 900
     R2_MAX_UPLOAD_MB: int = 10
+    AVATAR_URL_EXPIRE_SECONDS: int = 43200
+    AVATAR_MAX_UPLOAD_MB: int = 5
 
     @property
     def cors_origins(self) -> list[str]:

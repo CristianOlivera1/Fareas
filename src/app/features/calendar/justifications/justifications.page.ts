@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   CUSTOM_ELEMENTS_SCHEMA,
+  ElementRef,
   computed,
   inject,
   signal,
@@ -21,11 +22,15 @@ import { PageHeader } from '../../../shared/components/page-header/page-header';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
 import { UiInput } from '../../../shared/components/ui-input/ui-input';
 import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
+import { FileDrop } from '../../../shared/components/file-drop/file-drop';
 import { ModalDelete } from '../../../shared/components/modal-delete/modal-delete';
 import { DataTable } from '../../../shared/components/data-table/data-table';
 import { DataTableCellDirective } from '../../../shared/components/data-table/data-table-cell.directive';
 import { TableColumn } from '../../../core/models/table-column';
 import { Justification } from '../../../core/models/catalog';
+
+const DOCUMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
+const MAX_DOCUMENT_MB = 10;
 
 interface Option<T> {
   label: string;
@@ -45,7 +50,7 @@ interface JustificationForm {
   selector: 'app-justifications',
   imports: [
     FormsModule, PageHeader, UiButton, UiInput, UiAlert, ModalDelete, DataTable,
-    DataTableCellDirective, DialogModule, SelectModule,
+    DataTableCellDirective, DialogModule, SelectModule, FileDrop,
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './justifications.page.html',
@@ -58,6 +63,7 @@ export class JustificationsPage {
   private readonly courses = inject(CoursesApi);
   private readonly toast = inject(MessageService);
   private readonly deleteModal = viewChild(ModalDelete);
+  private readonly picker = viewChild<ElementRef<HTMLInputElement>>('picker');
 
   readonly columns: TableColumn[] = [
     { id: 'index', header: 'N°', width: '60px', align: 'center' },
@@ -67,7 +73,7 @@ export class JustificationsPage {
     { id: 'reason', header: 'Motivo', hiddenOnMobile: true },
     { id: 'document', header: 'Documento', align: 'center', hiddenOnMobile: true },
     { id: 'created_by_name', header: 'Registró', hiddenOnMobile: true },
-    { id: 'actions', header: 'Acciones', align: 'right', width: '90px' },
+    { id: 'actions', header: 'Acciones', align: 'right', width: '130px' },
   ];
 
   readonly justifications = signal<Justification[]>([]);
@@ -75,6 +81,9 @@ export class JustificationsPage {
   readonly error = signal<string | null>(null);
   readonly saving = signal(false);
   readonly deleting = signal(false);
+  readonly formFile = signal<File | null>(null);
+  readonly attachingId = signal<number | null>(null);
+  private attachTarget: Justification | null = null;
 
   readonly filterStudentId = signal<number | null>(null);
   readonly filterCourseId = signal<number | null>(null);
@@ -179,6 +188,7 @@ export class JustificationsPage {
       reason: '',
       document_url: '',
     });
+    this.formFile.set(null);
     this.createVisible = true;
     if (this.studentOptions().length === 0) void this.searchStudents('');
   }
@@ -215,6 +225,8 @@ export class JustificationsPage {
         life: 5000,
       });
       this.createVisible = false;
+      const file = this.formFile();
+      if (res && file) await this.uploadAfterCreate(res.id, file);
       void this.load();
     } catch (err) {
       this.toast.add({
@@ -225,6 +237,63 @@ export class JustificationsPage {
       });
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  onFormFile(file: File | null): void {
+    if (file && !this.isValidDocument(file)) return;
+    this.formFile.set(file);
+  }
+
+  onFileError(message: string): void {
+    this.toast.add({ severity: 'warn', summary: 'Archivo no válido', detail: message, life: 4000 });
+  }
+
+  pickDocument(justification: Justification): void {
+    this.attachTarget = justification;
+    this.picker()?.nativeElement.click();
+  }
+
+  async onRowFile(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    const target = this.attachTarget;
+    this.attachTarget = null;
+    if (!file || !target || !this.isValidDocument(file)) return;
+
+    this.attachingId.set(target.id);
+    try {
+      await this.api.uploadJustificationDocument(target.id, file).toPromise();
+      this.toast.add({ severity: 'success', summary: 'Documento adjuntado', life: 3000 });
+      void this.load();
+    } catch (err) {
+      this.toast.add({
+        severity: 'error',
+        summary: 'No se pudo adjuntar el documento',
+        detail: extractDetail(err),
+        life: 5000,
+      });
+    } finally {
+      this.attachingId.set(null);
+    }
+  }
+
+  async removeDocument(justification: Justification): Promise<void> {
+    this.attachingId.set(justification.id);
+    try {
+      await this.api.deleteJustificationDocument(justification.id).toPromise();
+      this.toast.add({ severity: 'success', summary: 'Documento eliminado', life: 3000 });
+      void this.load();
+    } catch (err) {
+      this.toast.add({
+        severity: 'error',
+        summary: 'No se pudo eliminar el documento',
+        detail: extractDetail(err),
+        life: 5000,
+      });
+    } finally {
+      this.attachingId.set(null);
     }
   }
 
@@ -268,6 +337,31 @@ export class JustificationsPage {
       this.deleting.set(false);
       this.deleteTarget.set(null);
       this.deleteVisible = false;
+    }
+  }
+
+  private isValidDocument(file: File): boolean {
+    if (!DOCUMENT_TYPES.includes(file.type)) {
+      this.onFileError('El documento debe ser un PDF, JPG o PNG.');
+      return false;
+    }
+    if (file.size > MAX_DOCUMENT_MB * 1024 * 1024) {
+      this.onFileError(`El documento no puede superar ${MAX_DOCUMENT_MB} MB.`);
+      return false;
+    }
+    return true;
+  }
+
+  private async uploadAfterCreate(id: number, file: File): Promise<void> {
+    try {
+      await this.api.uploadJustificationDocument(id, file).toPromise();
+    } catch (err) {
+      this.toast.add({
+        severity: 'warn',
+        summary: 'Justificación registrada sin documento',
+        detail: `${extractDetail(err)}. Puedes adjuntarlo desde la tabla.`,
+        life: 6000,
+      });
     }
   }
 

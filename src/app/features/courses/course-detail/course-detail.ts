@@ -157,8 +157,8 @@ export class CourseDetailPage {
   readonly subtitle = computed(() => {
     const cycle = this.courseCycle();
     return cycle
-      ? `${cycleLabel(cycle)} · grupos, cupo y horario semanal (RF-06)`
-      : 'Grupos, cupo y horario semanal (RF-06)';
+      ? `${cycleLabel(cycle)} · grupos, capacidad y horarios semanales`
+      : 'Grupos, capacidad y horarios semanales';
   });
 
   readonly isCurrentPeriod = computed(() => {

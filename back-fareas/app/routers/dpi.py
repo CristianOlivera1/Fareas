@@ -8,6 +8,13 @@ from app.tables import AppUser, CourseGroup, Enrollment, UserRole
 
 router = APIRouter(tags=["dpi"])
 
+TEACHER_SCOPE = (
+    " AND EXISTS (SELECT 1 FROM enrollment e JOIN course_group cg ON cg.id = e.group_id "
+    "WHERE e.student_id = v.student_id AND cg.course_id = v.course_id "
+    "AND cg.semester_label = v.semester_label AND cg.teacher_id = :docente "
+    "AND e.withdrawn_at IS NULL)"
+)
+
 
 @router.get("/dpi/at-risk")
 async def dpi_at_risk(
@@ -36,10 +43,7 @@ async def dpi_at_risk(
         params["alerta"] = float(cfg.dpi_alert_percent)
         params["limite"] = float(cfg.dpi_limit_percent)
     if user.role is UserRole.DOCENTE:
-        sql += (
-            " AND v.course_id IN (SELECT cg.course_id FROM course_group cg "
-            "WHERE cg.teacher_id = :docente)"
-        )
+        sql += TEACHER_SCOPE
         params["docente"] = user.id
     if course_id is not None:
         sql += " AND v.course_id = :curso"

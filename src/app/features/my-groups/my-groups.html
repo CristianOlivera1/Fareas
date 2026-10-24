@@ -1,0 +1,90 @@
+<app-page-header title="Mis grupos" subtitle="Los grupos que dictas en el periodo vigente.">
+  <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="load()">Actualizar</app-ui-button>
+</app-page-header>
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudieron cargar tus grupos" class="mb-4 block">{{ msg }}</app-ui-alert>
+}
+
+@if (loading()) {
+  <div class="grid gap-4 md:grid-cols-2" aria-busy="true">
+    @for (i of [1, 2]; track i) {
+      <div class="h-56 animate-pulse rounded-2xl border border-gray-100 bg-white"></div>
+    }
+  </div>
+} @else if (cards().length === 0 && !error()) {
+  <div class="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center">
+    <iconify-icon icon="material-symbols:groups-outline" width="36" class="text-gray-300"></iconify-icon>
+    <p class="mt-3 text-sm font-medium text-gray-700">No tienes grupos asignados</p>
+    <p class="mt-1 text-sm text-gray-500">Cuando el administrador te asigne un grupo en el periodo vigente aparecerá aquí.</p>
+  </div>
+} @else {
+  <p class="mb-3 text-sm text-gray-500">
+    Periodo {{ semester() }} · {{ cards().length }} {{ cards().length === 1 ? 'grupo' : 'grupos' }} · {{ totalStudents() }} alumnos matriculados
+  </p>
+  <div class="grid gap-4 md:grid-cols-2">
+    @for (card of cards(); track card.group.id) {
+      <article class="flex flex-col rounded-2xl border border-gray-100 bg-white p-5">
+        <div class="min-w-0">
+          <span class="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">{{ card.group.course_code }}</span>
+          <h2 class="mt-2 truncate text-base font-semibold tracking-tight text-gray-900" [title]="card.group.course_name">{{ card.group.course_name }}</h2>
+          <p class="mt-0.5 text-sm text-gray-500">{{ cycle(card.group) }} · Grupo {{ card.group.group_code }}</p>
+        </div>
+
+        <div class="mt-4">
+          <div class="flex items-end justify-between text-sm">
+            <span class="text-gray-500">Matriculados</span>
+            <span class="font-semibold tabular-nums text-gray-900">{{ card.group.enrolled_count }} / {{ card.group.capacity }}</span>
+          </div>
+          <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">
+            <div class="h-full rounded-full bg-(--fareas-primary)" [style.width.%]="occupancy(card.group)"></div>
+          </div>
+        </div>
+
+        <ul class="mt-4 space-y-1.5 text-sm text-gray-600">
+          @for (block of card.blocks; track block.id) {
+            <li class="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1.5">
+              <span>{{ day(block.weekday) }} · {{ hours(block) }}</span>
+              <span class="text-xs text-gray-500">{{ block.room_code ?? 'Aula por definir' }}</span>
+            </li>
+          } @empty {
+            <li class="text-gray-500">Sin horario registrado todavía.</li>
+          }
+        </ul>
+
+        <div class="mt-5 flex flex-wrap gap-2">
+          <app-ui-button size="sm" variant="outline" icon="material-symbols:groups-outline" (click)="openStudents(card.group)">
+            Ver alumnos
+          </app-ui-button>
+          <app-ui-button size="sm" variant="outline" icon="material-symbols:download" [loading]="downloading() === card.group.id"
+            (click)="downloadMatrix(card.group)">
+            Registro de asistencia
+          </app-ui-button>
+        </div>
+      </article>
+    }
+  </div>
+}
+
+<p-dialog [header]="selected() ? 'Alumnos · ' + selected()!.course_code + ' · Grupo ' + selected()!.group_code : 'Alumnos'"
+  [(visible)]="studentsVisible" [modal]="true" [style]="{ width: '36rem' }" [breakpoints]="{ '640px': '95vw' }" appendTo="body">
+  @if (loadingStudents()) {
+    <div class="space-y-2" aria-busy="true">
+      @for (i of [1, 2, 3]; track i) {
+        <div class="h-10 animate-pulse rounded-lg bg-gray-50"></div>
+      }
+    </div>
+  } @else if (students().length === 0) {
+    <p class="py-6 text-center text-sm text-gray-500">Este grupo todavía no tiene alumnos matriculados.</p>
+  } @else {
+    <ol class="divide-y divide-gray-100">
+      @for (student of students(); track student.id; let index = $index) {
+        <li class="flex items-center gap-3 py-2.5">
+          <span class="w-6 text-right text-xs tabular-nums text-gray-400">{{ index + 1 }}</span>
+          <span class="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-700">{{ student.code ?? '—' }}</span>
+          <span class="min-w-0 flex-1 truncate text-sm text-gray-900">{{ student.full_name }}</span>
+        </li>
+      }
+    </ol>
+  }
+</p-dialog>

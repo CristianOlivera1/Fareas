@@ -1,4 +1,4 @@
-<app-page-header title="Docentes" subtitle="Alta de docentes con envío de clave temporal (RF-02, RF-08)">
+<app-page-header title="Docentes" subtitle="Registra docentes y administra sus cuentas de acceso.">
   @if (auth.isAdmin()) {
     <app-ui-button icon="material-symbols:person-add" (click)="openCreate()">
       Nuevo docente
@@ -50,7 +50,7 @@
       <button type="button"
         class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-blue-50 hover:text-(--fareas-primary) transition-colors disabled:opacity-40"
         [disabled]="resendingId() === p.id"
-        title="Reenviar clave temporal por correo (RF-08)" (click)="resend(p)">
+        title="Enviar nuevamente la clave temporal al correo" (click)="resend(p)">
         @if (resendingId() === p.id) {
           <iconify-icon icon="svg-spinners:180-ring-with-bg" width="16"></iconify-icon>
         } @else {
@@ -84,7 +84,7 @@
       </label>
     } @else {
       <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-        Al guardar se genera una clave temporal y se envía al correo (RF-08).
+        Al guardar, se enviará una clave temporal al correo institucional del docente.
       </app-ui-alert>
     }
   </div>

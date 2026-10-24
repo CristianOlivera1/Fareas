@@ -1,0 +1,43 @@
+<app-page-header title="Mis justificaciones" subtitle="Justificaciones de inasistencia registradas a tu nombre por tu docente o la administración.">
+  <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="load()">Actualizar</app-ui-button>
+</app-page-header>
+
+@if (error(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudieron cargar tus justificaciones" class="mb-4 block">{{ msg }}</app-ui-alert>
+}
+
+<app-ui-alert variant="info" title="¿Necesitas justificar una falta?" class="mb-4 block">
+  Presenta tu sustento a tu docente o a la administración; ellos registran la justificación y las faltas del rango dejan de contar para el límite de inasistencias.
+</app-ui-alert>
+
+<app-data-table
+  [columns]="columns" [data]="items()" [trackBy]="trackById"
+  [loading]="loading()" [errorMessage]="error()" (retry)="load()"
+  emptyTitle="Sin justificaciones"
+  emptyMessage="No tienes justificaciones registradas."
+  emptyIcon="material-symbols:medical-information-outline"
+>
+  <ng-template appCell="range" let-row>
+    <span class="text-sm tabular-nums text-gray-700">{{ range(row) }}</span>
+  </ng-template>
+  <ng-template appCell="course_code" let-row>
+    @if (row.course_code) {
+      <span class="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">{{ row.course_code }}</span>
+    } @else {
+      <span class="text-sm text-gray-500">Todos tus cursos</span>
+    }
+  </ng-template>
+  <ng-template appCell="reason" let-row>
+    <span class="text-sm text-gray-700">{{ row.reason }}</span>
+  </ng-template>
+  <ng-template appCell="document" let-row>
+    @if (row.document_url) {
+      <a [href]="row.document_url" target="_blank" rel="noopener noreferrer"
+        class="inline-flex items-center gap-1 text-sm font-medium text-(--fareas-primary) hover:underline">
+        <iconify-icon icon="material-symbols:attach-file" width="16"></iconify-icon> Ver
+      </a>
+    } @else {
+      <span class="text-sm text-gray-400">—</span>
+    }
+  </ng-template>
+</app-data-table>

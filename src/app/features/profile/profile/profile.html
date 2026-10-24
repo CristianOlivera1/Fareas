@@ -14,17 +14,39 @@
 
     @if (user(); as u) {
       <div class="mt-4 flex items-center gap-3">
-        <div class="w-12 h-12 rounded-full bg-(--fareas-primary) text-white text-base font-bold flex items-center justify-center shrink-0">
-          {{ auth.userInitials() }}
-        </div>
+        <app-avatar [name]="u.full_name" [src]="auth.avatarUrl()" size="xl" />
         <div class="min-w-0">
           <p class="truncate text-base font-semibold text-gray-900">{{ u.full_name }}</p>
           <p class="truncate text-sm text-gray-500">{{ u.email }}</p>
+          <span
+            class="mt-1 inline-flex items-center gap-1 rounded-full bg-(--fareas-canvas) px-2.5 py-0.5 text-xs font-medium text-(--fareas-primary)">
+            {{ roleLabel() }}
+          </span>
         </div>
-        <span
-          class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-(--fareas-canvas) px-2.5 py-1 text-xs font-medium text-(--fareas-primary)">
-          {{ roleLabel() }}
-        </span>
+      </div>
+
+      <div class="mt-4 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <input #avatarPicker type="file" class="hidden" accept="image/jpeg,image/png,image/webp"
+            (change)="onAvatarSelected($event)" />
+          <app-ui-button size="sm" variant="outline" icon="material-symbols:photo-camera-outline"
+            [loading]="avatarBusy()" (click)="avatarPicker.click()">
+            {{ auth.avatarUrl() ? 'Cambiar foto' : 'Subir foto' }}
+          </app-ui-button>
+          @if (auth.avatarUrl()) {
+            <app-ui-button size="sm" variant="ghost" icon="material-symbols:delete-outline" [disabled]="avatarBusy()"
+              (click)="removeAvatar()">
+              Quitar
+            </app-ui-button>
+          }
+        </div>
+        <p class="mt-2 text-xs text-gray-500">
+          JPG, PNG o WEBP de hasta 5 MB; se recorta en cuadrado. Es solo tu foto de perfil: no se usa para el
+          reconocimiento facial ni reemplaza el enrolamiento.
+        </p>
+        @if (avatarError(); as message) {
+          <p class="mt-2 text-xs text-red-600" role="alert">{{ message }}</p>
+        }
       </div>
 
       @if (u.must_change_password) {
@@ -46,10 +68,6 @@
           <dt class="text-sm text-gray-500">Rol</dt>
           <dd class="truncate text-sm font-medium text-gray-900">{{ roleLabel() }}</dd>
         </div>
-        <div class="flex items-center justify-between gap-4 py-3">
-          <dt class="text-sm text-gray-500">ID de cuenta</dt>
-          <dd class="text-sm font-medium text-gray-900 tabular-nums">{{ u.id }}</dd>
-        </div>
       </dl>
     }
   </section>
@@ -67,7 +85,30 @@
       </div>
     </div>
 
-    <div class="mt-5">
+    <div class="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gray-50 p-4">
+      <p class="text-xs text-gray-600">El proceso te pedirá tu contraseña actual y un código de verificación.</p>
+      <app-ui-button icon="material-symbols:lock-reset" (click)="openSecurityDialog()">
+        Cambiar contraseña
+      </app-ui-button>
+    </div>
+  </section>
+</div>
+
+<p-dialog
+  header="Cambiar contraseña"
+  [visible]="securityDialogVisible()"
+  (visibleChange)="onSecurityDialogVisibilityChange($event)"
+  (onShow)="onSecurityDialogShow()"
+  (onHide)="onSecurityDialogHide()"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [closable]="!isPasswordFlowBusy()"
+  [closeOnEscape]="!isPasswordFlowBusy()"
+  [style]="{ width: '32rem', maxWidth: 'calc(100vw - 2rem)' }"
+>
+  @if (!successMessage()) {
+    <div class="mb-5">
       <div class="flex gap-1.5" aria-hidden="true">
         @for (s of steps; track s.id) {
           <span class="h-1 flex-1 rounded-full transition-colors motion-reduce:transition-none"
@@ -93,128 +134,124 @@
       </ol>
     </div>
 
-    <div class="mt-4 space-y-3" aria-live="polite">
-      @if (errorMessage()) {
-        <app-ui-alert variant="danger" title="No se pudo completar" class="block">
-          {{ errorMessage() }}
-        </app-ui-alert>
-      }
-      @if (successMessage()) {
-        <app-ui-alert variant="success" title="Contraseña actualizada" class="block">
-          {{ successMessage() }}
-        </app-ui-alert>
-      }
-    </div>
+    @if (errorMessage()) {
+      <app-ui-alert variant="danger" title="No se pudo completar" class="mb-4 block" aria-live="polite">
+        {{ errorMessage() }}
+      </app-ui-alert>
+    }
 
-    <form [formGroup]="form" (ngSubmit)="onSubmit()" class="mt-5">
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" class="space-y-4">
       @switch (step()) {
         @case (1) {
-          <div class="space-y-4">
-            <app-ui-input formControlName="current_password" label="Contraseña actual" type="password"
-              icon="material-symbols:lock-outline" placeholder="••••••••" autocomplete="current-password"
-              [customId]="'profile-current-password'" [showPasswordToggle]="true"
-              [error]="fieldError('current_password')" />
+          <app-ui-input formControlName="current_password" label="Contraseña actual" type="password"
+            icon="material-symbols:lock-outline" placeholder="••••••••" autocomplete="current-password"
+            [customId]="'profile-current-password'" [showPasswordToggle]="true"
+            [error]="fieldError('current_password')" />
 
-            <div class="flex items-start gap-2 rounded-xl bg-(--fareas-canvas) p-3 text-xs leading-relaxed text-gray-600">
-              <iconify-icon icon="material-symbols:mark-email-unread-outline" width="18"
-                class="mt-0.5 shrink-0 text-(--fareas-primary)" />
-              <p>
-                Primero confirmamos tu contraseña actual. Luego enviaremos un código de 6 dígitos a tu
-                correo institucional para autorizar el cambio.
-              </p>
-            </div>
-
-            <app-ui-button type="button" variant="primary" icon="material-symbols:send-outline" [fullWidth]="true"
-              [loading]="isSendingOtp()" [disabled]="isSendingOtp()" (click)="sendOtp()">
-              @if (isSendingOtp()) {
-                Enviando código...
-              } @else {
-                Enviar código
-              }
-            </app-ui-button>
+          <div class="flex items-start gap-2 rounded-xl bg-(--fareas-canvas) p-3 text-xs leading-relaxed text-gray-600">
+            <iconify-icon icon="material-symbols:mark-email-unread-outline" width="18"
+              class="mt-0.5 shrink-0 text-(--fareas-primary)" />
+            <p>
+              Confirmaremos tu contraseña actual y enviaremos un código de 6 dígitos a tu correo institucional.
+            </p>
           </div>
+
+          <app-ui-button type="button" variant="primary" icon="material-symbols:send-outline" [fullWidth]="true"
+            [loading]="isSendingOtp()" [disabled]="isSendingOtp()" (click)="sendOtp()">
+            @if (isSendingOtp()) {
+              Enviando código...
+            } @else {
+              Enviar código
+            }
+          </app-ui-button>
         }
 
         @case (2) {
-          <div class="space-y-4">
-            <div class="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
-              <div class="flex items-start gap-2">
-                <iconify-icon icon="material-symbols:mark-email-unread-outline" width="18"
-                  class="mt-0.5 shrink-0 text-blue-600" />
-                <div class="min-w-0">
-                  <p class="text-xs text-gray-600">Enviamos un código de 6 dígitos a</p>
-                  <p class="mt-0.5 truncate text-sm font-semibold text-gray-900">{{ maskedEmail() }}</p>
-                  <p class="mt-1 text-[11px] text-gray-500">
-                    Caduca en {{ otpExpiresMinutes() }} minutos. Revisa también la carpeta de spam.
-                  </p>
-                </div>
+          <div class="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+            <div class="flex items-start gap-2">
+              <iconify-icon icon="material-symbols:mark-email-unread-outline" width="18"
+                class="mt-0.5 shrink-0 text-blue-600" />
+              <div class="min-w-0">
+                <p class="text-xs text-gray-600">Enviamos un código de 6 dígitos a</p>
+                <p class="mt-0.5 truncate text-sm font-semibold text-gray-900">{{ maskedEmail() }}</p>
+                <p class="mt-1 text-[11px] text-gray-500">
+                  Caduca en {{ otpExpiresMinutes() }} minutos. Revisa también la carpeta de spam.
+                </p>
               </div>
             </div>
+          </div>
 
-            <app-ui-input formControlName="otp_code" label="Código de verificación" type="text"
-              icon="material-symbols:pin-outline" placeholder="000000" autocomplete="one-time-code"
-              inputmode="numeric" [customId]="'profile-otp-code'" [maxlength]="6" [mono]="true"
-              [ariaLabel]="'Código de verificación de 6 dígitos'" [error]="fieldError('otp_code')" />
+          <app-ui-input formControlName="otp_code" label="Código de verificación" type="text"
+            icon="material-symbols:pin-outline" placeholder="000000" autocomplete="one-time-code"
+            inputmode="numeric" [customId]="'profile-otp-code'" [maxlength]="6" [mono]="true"
+            [ariaLabel]="'Código de verificación de 6 dígitos'" [error]="fieldError('otp_code')" />
 
-            <app-ui-button type="button" variant="primary" icon="material-symbols:verified-user-outline"
-              [fullWidth]="true" [loading]="isVerifyingOtp()" [disabled]="isVerifyingOtp()" (click)="verifyOtp()">
-              @if (isVerifyingOtp()) {
-                Verificando...
-              } @else {
-                Verificar código
-              }
-            </app-ui-button>
+          <app-ui-button type="button" variant="primary" icon="material-symbols:verified-user-outline"
+            [fullWidth]="true" [loading]="isVerifyingOtp()" [disabled]="isVerifyingOtp()" (click)="verifyOtp()">
+            @if (isVerifyingOtp()) {
+              Verificando...
+            } @else {
+              Verificar código
+            }
+          </app-ui-button>
 
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <button type="button" (click)="restart()"
-                [disabled]="isVerifyingOtp() || isSendingOtp()"
-                class="rounded-lg text-xs font-medium text-gray-500 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:text-gray-300 motion-reduce:transition-none">
-                Usar otra contraseña actual
-              </button>
-              <button type="button" (click)="resendOtp()"
-                [disabled]="resendSeconds() > 0 || isSendingOtp() || isVerifyingOtp()"
-                class="rounded-lg text-xs font-medium text-blue-600 transition-colors hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:text-gray-400 motion-reduce:transition-none">
-                {{ resendLabel() }}
-              </button>
-            </div>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <button type="button" (click)="restart()" [disabled]="isVerifyingOtp() || isSendingOtp()"
+              class="rounded-lg text-xs font-medium text-gray-500 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:text-gray-300 motion-reduce:transition-none">
+              Usar otra contraseña actual
+            </button>
+            <button type="button" (click)="resendOtp()"
+              [disabled]="resendSeconds() > 0 || isSendingOtp() || isVerifyingOtp()"
+              class="rounded-lg text-xs font-medium text-blue-600 transition-colors hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:text-gray-400 motion-reduce:transition-none">
+              {{ resendLabel() }}
+            </button>
           </div>
         }
 
         @case (3) {
-          <div class="space-y-4">
-            <div class="flex items-center gap-2 rounded-xl border border-green-100 bg-green-50/60 p-3 text-xs text-green-800">
-              <iconify-icon icon="material-symbols:verified-user-outline" width="18"
-                class="shrink-0 text-green-600" />
-              <p>Identidad verificada. Define tu nueva contraseña.</p>
-            </div>
-
-            <app-ui-input formControlName="new_password" label="Nueva contraseña" type="password"
-              icon="material-symbols:lock-reset" placeholder="Mínimo 8 caracteres" autocomplete="new-password"
-              [customId]="'profile-new-password'" [showPasswordToggle]="true"
-              hint="Usa al menos 8 caracteres con letras y números."
-              [error]="fieldError('new_password')" />
-
-            <app-ui-input formControlName="confirm_password" label="Confirmar nueva contraseña" type="password"
-              icon="material-symbols:lock-reset" placeholder="Repite la nueva contraseña"
-              autocomplete="new-password" [customId]="'profile-confirm-password'" [showPasswordToggle]="true"
-              [error]="fieldError('confirm_password')" />
-
-            <app-ui-button type="submit" variant="primary" icon="material-symbols:lock-reset" [fullWidth]="true"
-              [loading]="isSubmitting()" [disabled]="isSubmitting()">
-              @if (isSubmitting()) {
-                Actualizando...
-              } @else {
-                Actualizar contraseña
-              }
-            </app-ui-button>
-
-            <button type="button" (click)="restart()" [disabled]="isSubmitting()"
-              class="mx-auto block rounded-lg text-xs font-medium text-gray-500 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:text-gray-300 motion-reduce:transition-none">
-              Cancelar y empezar de nuevo
-            </button>
+          <div class="flex items-center gap-2 rounded-xl border border-green-100 bg-green-50/60 p-3 text-xs text-green-800">
+            <iconify-icon icon="material-symbols:verified-user-outline" width="18"
+              class="shrink-0 text-green-600" />
+            <p>Identidad verificada. Define tu nueva contraseña.</p>
           </div>
+
+          <app-ui-input formControlName="new_password" label="Nueva contraseña" type="password"
+            icon="material-symbols:lock-reset" placeholder="8 a 128 caracteres" autocomplete="new-password"
+            [customId]="'profile-new-password'" [showPasswordToggle]="true" [maxlength]="128"
+            hint="Usa entre 8 y 128 caracteres e incluye al menos una letra."
+            [error]="fieldError('new_password')" />
+
+          <app-ui-input formControlName="confirm_password" label="Confirmar nueva contraseña" type="password"
+            icon="material-symbols:lock-reset" placeholder="Repite la nueva contraseña"
+            autocomplete="new-password" [customId]="'profile-confirm-password'" [showPasswordToggle]="true"
+            [maxlength]="128"
+            [error]="fieldError('confirm_password')" />
+
+          <app-ui-button type="submit" variant="primary" icon="material-symbols:lock-reset" [fullWidth]="true"
+            [loading]="isSubmitting()" [disabled]="isSubmitting()">
+            @if (isSubmitting()) {
+              Actualizando...
+            } @else {
+              Actualizar contraseña
+            }
+          </app-ui-button>
+
+          <button type="button" (click)="restart()" [disabled]="isSubmitting()"
+            class="mx-auto block rounded-lg text-xs font-medium text-gray-500 transition-colors hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:text-gray-300 motion-reduce:transition-none">
+            Cancelar y empezar de nuevo
+          </button>
         }
       }
     </form>
-  </section>
-</div>
+  } @else {
+    <app-ui-alert variant="success" title="Contraseña actualizada" class="block" aria-live="polite">
+      {{ successMessage() }}
+    </app-ui-alert>
+  }
+
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" (click)="closeSecurityDialog()" [disabled]="isPasswordFlowBusy()">
+      Cerrar
+    </app-ui-button>
+  </ng-template>
+</p-dialog>
