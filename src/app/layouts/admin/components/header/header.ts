@@ -5,6 +5,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { filter } from 'rxjs';
 import { ADMIN_PREFIX, ROLE_HOME } from '../../../../core/constants/nav';
 import { AuthService } from '../../../../core/services/auth/auth';
+import { NotificationsBell } from '../notifications-bell/notifications-bell';
 
 interface Crumb {
   label: string;
@@ -14,6 +15,7 @@ interface Crumb {
 
 @Component({
   selector: 'app-header',
+  imports: [NotificationsBell],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './header.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
