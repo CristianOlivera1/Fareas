@@ -29,6 +29,7 @@ import { DataTableCellDirective } from '../../../shared/components/data-table/da
 import { TableColumn } from '../../../core/models/table-column';
 import { Course } from '../../../core/models/catalog';
 import { CYCLES, toRoman } from '../../../shared/utils/cycles';
+import { CoursesImportDialog } from './courses-import.dialog';
 
 interface CourseForm {
   id: number | null;
@@ -41,7 +42,7 @@ interface CourseForm {
   selector: 'app-courses-page',
   imports: [
     FormsModule, PageHeader, UiButton, UiInput, UiAlert, ModalDelete, DataTable,
-    DataTableCellDirective, DialogModule, InputTextModule, SelectModule,
+    DataTableCellDirective, DialogModule, InputTextModule, SelectModule, CoursesImportDialog,
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './courses.html',
@@ -90,6 +91,7 @@ export class CoursesPage {
   readonly deleting = signal(false);
 
   dialogVisible = false;
+  importVisible = false;
   deleteVisible = false;
 
   constructor() {

@@ -411,7 +411,7 @@ Protocolo en `ws://localhost:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET>`
 - `GET /reports/attendance.xlsx|pdf?desde=&hasta=&course_id=` — RF-16 con
   encabezado institucional; el docente solo descarga SUS grupos (RF-21).
 
-### Bloques 9, 14 y 15 — Importación OCR de horarios y nóminas (RF-07)
+### Bloques 9, 14, 15 y 17 — Importación OCR de horarios, nóminas y malla curricular (RF-07)
 
 - `POST /courses/import-pdf` — sube un **PDF digital, PDF escaneado o foto**
   (JPG/PNG/WEBP, ≤10 MB y 10 páginas; multipart, solo admin). Devuelve `tipo`
@@ -420,6 +420,11 @@ Protocolo en `ws://localhost:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET>`
   ya rellenadas de `teacher_id`, `room_id` y `curso_sugerido` (parecido por
   código/nombre cuando el curso aún no existe con ese código exacto).
   **No persiste nada**: es la pantalla de revisión del RF-07.
+- `POST /courses/import-curriculum` (+ `/confirm`) — importa la **malla curricular**
+  (PDF, foto o captura con un ciclo por columna o por sección): devuelve cada curso
+  (`code`, `name`, `cycle`) con `confiable`, `nota`, `ya_existe`; `default_cycle`
+  opcional para listas sin títulos. El `confirm` crea los nuevos y omite los que ya
+  existen sin modificarlos. Solo admin.
 - `POST /courses/import-pdf/confirm` — recibe la propuesta corregida,
   `semester_label` (periodo; por defecto el vigente), `cycle` (1–10),
   `teacher_id`/`room_id` por defecto y, opcionalmente, `teacher_id`/`room_id`

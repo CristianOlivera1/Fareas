@@ -2,6 +2,9 @@ import { Injectable } from '@angular/core';
 import { apiUrl, BaseApi, Page, ListParams } from '../api/api-url';
 import { Block, Course, EnrolledStudent, Group, ScheduleRow } from '../models/catalog';
 import {
+  CurriculumConfirmIn,
+  CurriculumPreview,
+  CurriculumResult,
   ScheduleImportConfirmIn,
   ScheduleImportPreview,
   ScheduleImportResult,
@@ -120,5 +123,15 @@ export class CoursesApi extends BaseApi {
   }
   confirmScheduleImport(body: ScheduleImportConfirmIn) {
     return this.post<ScheduleImportResult>('/courses/import-pdf/confirm', body);
+  }
+
+  importCurriculum(file: File, defaultCycle: number | null) {
+    const body = new FormData();
+    body.append('file', file);
+    if (defaultCycle !== null) body.append('default_cycle', String(defaultCycle));
+    return this.http.post<CurriculumPreview>(apiUrl('/courses/import-curriculum'), body);
+  }
+  confirmCurriculum(body: CurriculumConfirmIn) {
+    return this.post<CurriculumResult>('/courses/import-curriculum/confirm', body);
   }
 }

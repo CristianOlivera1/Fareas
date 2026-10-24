@@ -151,6 +151,8 @@ export interface Settings {
   readonly semester_label: string;
   readonly semester_start: string | null;
   readonly semester_end: string | null;
+  readonly enrollment_start?: string | null;
+  readonly enrollment_end?: string | null;
   readonly block_minutes: number;
   readonly late_tolerance_minutes: number;
   readonly early_open_minutes: number;

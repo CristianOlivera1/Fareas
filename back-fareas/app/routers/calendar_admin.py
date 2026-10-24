@@ -406,6 +406,8 @@ def _settings_out(s: AppSettings) -> "SettingsOut":
         semester_label=s.semester_label,
         semester_start=str(s.semester_start) if s.semester_start else None,
         semester_end=str(s.semester_end) if s.semester_end else None,
+        enrollment_start=str(s.enrollment_start) if s.enrollment_start else None,
+        enrollment_end=str(s.enrollment_end) if s.enrollment_end else None,
         block_minutes=s.block_minutes,
         late_tolerance_minutes=s.late_tolerance_minutes,
         early_open_minutes=s.early_open_minutes,
@@ -423,6 +425,8 @@ class SettingsOut(BaseModel):
     semester_label: str
     semester_start: str | None = None
     semester_end: str | None = None
+    enrollment_start: str | None = None
+    enrollment_end: str | None = None
     block_minutes: int
     late_tolerance_minutes: int
     early_open_minutes: int
@@ -457,6 +461,8 @@ class SettingsUpdate(BaseModel):
     semester_label: str | None = Field(default=None, max_length=40)
     semester_start: date | None = None
     semester_end: date | None = None
+    enrollment_start: date | None = None
+    enrollment_end: date | None = None
     block_minutes: int | None = Field(default=None, gt=0)
     late_tolerance_minutes: int | None = Field(default=None, ge=0)
     early_open_minutes: int | None = Field(default=None, ge=0, le=60)
@@ -487,10 +493,16 @@ async def update_settings(
     fin = data.get("semester_end", s.semester_end)
     if inicio is not None and fin is not None and inicio >= fin:
         raise errors.DomainError("semester_start debe ser anterior a semester_end")
+    enrollment_start = data.get("enrollment_start", s.enrollment_start)
+    enrollment_end = data.get("enrollment_end", s.enrollment_end)
+    if enrollment_start is not None and enrollment_end is not None and enrollment_start > enrollment_end:
+        raise errors.DomainError("La matrícula debe empezar antes de terminar")
     old = {
         "semester_label": s.semester_label,
         "semester_start": str(s.semester_start) if s.semester_start else None,
         "semester_end": str(s.semester_end) if s.semester_end else None,
+        "enrollment_start": str(s.enrollment_start) if s.enrollment_start else None,
+        "enrollment_end": str(s.enrollment_end) if s.enrollment_end else None,
         "late_tolerance_minutes": s.late_tolerance_minutes,
         "early_open_minutes": s.early_open_minutes,
         "dpi_alert_percent": float(s.dpi_alert_percent),

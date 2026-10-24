@@ -14,14 +14,17 @@ from app.routers import (
     calendar_admin,
     catalog,
     courses,
+    curriculum,
     dashboard,
     dpi,
+    enrollment_center,
     enrollment_faces,
     health,
     me,
     notifications,
     profile,
     reports,
+    self_enrollment,
     ws_devices,
 )
 from app.services import errors
@@ -85,6 +88,7 @@ def create_app() -> FastAPI:
     app.include_router(ws_devices.router, prefix=settings.API_V1_PREFIX)
     app.include_router(catalog.router, prefix=settings.API_V1_PREFIX)
     app.include_router(courses.router, prefix=settings.API_V1_PREFIX)
+    app.include_router(curriculum.router, prefix=settings.API_V1_PREFIX)
     app.include_router(calendar_admin.router, prefix=settings.API_V1_PREFIX)
     app.include_router(audit.router, prefix=settings.API_V1_PREFIX)
     app.include_router(dpi.router, prefix=settings.API_V1_PREFIX)
@@ -93,6 +97,8 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router, prefix=settings.API_V1_PREFIX)
     app.include_router(reports.router, prefix=settings.API_V1_PREFIX)
     app.include_router(me.router, prefix=settings.API_V1_PREFIX)
+    app.include_router(enrollment_center.router, prefix=settings.API_V1_PREFIX)
+    app.include_router(self_enrollment.router, prefix=settings.API_V1_PREFIX)
     app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
     app.include_router(profile.router, prefix=settings.API_V1_PREFIX)
 

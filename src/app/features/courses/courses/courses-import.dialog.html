@@ -1,0 +1,242 @@
+<p-dialog header="Importar malla curricular" [visible]="visible()" (visibleChange)="visible.set($event)"
+  (onShow)="onShow()" (onHide)="onHide()" [modal]="true" [draggable]="false" [resizable]="false"
+  [style]="{ width: '96vw', maxWidth: '1040px' }"
+  [contentStyle]="{ 'max-height': '72vh', 'overflow-y': 'auto' }">
+  <ol class="mb-4 grid gap-2 sm:grid-cols-3" aria-label="Pasos de la importación">
+    @for (item of steps; track item.number) {
+      <li [class]="
+        'flex items-center gap-2 rounded-lg border px-2.5 py-2 ' +
+        (step() === item.number
+          ? 'border-(--fareas-primary) bg-blue-50'
+          : step() > item.number
+            ? 'border-green-200 bg-green-50'
+            : 'border-gray-200 bg-white')
+      ">
+        <span [class]="
+          'grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold ' +
+          (step() === item.number
+            ? 'bg-(--fareas-primary) text-white'
+            : step() > item.number
+              ? 'bg-green-100 text-green-700'
+              : 'bg-gray-100 text-gray-500')
+        ">
+          @if (step() > item.number) {
+            <iconify-icon icon="material-symbols:check" width="14"></iconify-icon>
+          } @else {
+            {{ item.number }}
+          }
+        </span>
+        <span class="truncate text-xs font-medium text-gray-700">{{ item.label }}</span>
+      </li>
+    }
+  </ol>
+
+  @if (step() === 1) {
+    <div class="space-y-4">
+      <app-file-drop [file]="file()" (fileChange)="onFile($event)" (fileError)="onFileError($event)" />
+
+      <label class="block max-w-sm space-y-1">
+        <span class="text-sm font-medium text-gray-700">Ciclo de los cursos (opcional)</span>
+        <p-select class="w-full" appendTo="body" [options]="defaultCycleOptions" optionLabel="label"
+          optionValue="value" [ngModel]="defaultCycle()" (ngModelChange)="defaultCycle.set($event)" />
+        <span class="text-xs text-gray-400">
+          Solo si el archivo es una lista sin títulos de ciclo. Si trae «PRIMER CICLO», «SEGUNDO CICLO»… se detectan solos.
+        </span>
+      </label>
+
+      <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
+        Sube la malla como PDF, foto o captura: cada ciclo en una columna o como secciones con sus cursos
+        y códigos. Los títulos, cursos y códigos deben verse nítidos. La previsualización no registra nada:
+        primero revisas y corriges por ciclo, y recién después confirmas. Los cursos que ya existen no se modifican.
+      </app-ui-alert>
+
+      @if (error(); as message) {
+        <app-ui-alert variant="danger" title="No se pudo leer la malla">{{ message }}</app-ui-alert>
+      }
+    </div>
+  }
+
+  @if (step() === 2) {
+    @if (preview(); as p) {
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-semibold text-gray-900">Revisa la malla antes de registrarla</h3>
+            <p class="text-xs text-gray-500">
+              {{ typeLabel() }} · {{ p.paginas }} página(s) · {{ rows().length }} curso(s)
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2 text-xs">
+            <span class="rounded-full bg-green-50 px-2.5 py-1 font-medium text-green-700">
+              {{ toCreate().length - invalidCount() - reviewCount() }} listos
+            </span>
+            <span class="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
+              {{ reviewCount() }} por revisar
+            </span>
+            <span class="rounded-full bg-red-50 px-2.5 py-1 font-medium text-red-700">
+              {{ invalidCount() }} por corregir
+            </span>
+            <span class="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600">
+              {{ existingCount() }} ya existen
+            </span>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Filtrar por ciclo">
+          @for (tab of tabs(); track tab.value) {
+            <button type="button" role="tab" [attr.aria-selected]="filter() === tab.value"
+              (click)="setFilter(tab.value)" [class]="
+                'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ' +
+                (filter() === tab.value
+                  ? 'border-(--fareas-primary) bg-blue-50 text-(--fareas-primary)'
+                  : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50')
+              ">
+              {{ tab.value === 'all' || tab.value === 0 ? tab.label : 'Ciclo ' + tab.label }}
+              <span class="rounded-full bg-white/80 px-1.5 text-[10px] tabular-nums">{{ tab.count }}</span>
+            </button>
+          }
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-gray-50/60 p-2.5">
+          <app-ui-button variant="ghost" size="sm" icon="material-symbols:add" (click)="addRow()">Añadir curso</app-ui-button>
+          <app-ui-button variant="ghost" size="sm" icon="material-symbols:filter-list-off"
+            [disabled]="invalidCount() === 0" (click)="removeInvalid()">Quitar filas con error</app-ui-button>
+          <app-ui-button variant="ghost" size="sm" icon="material-symbols:playlist-remove"
+            [disabled]="existingCount() === 0" (click)="removeExisting()">Quitar los que ya existen</app-ui-button>
+        </div>
+
+        <div class="overflow-hidden rounded-xl border border-gray-200">
+          <div class="max-h-[46vh] overflow-auto">
+            <table class="w-full min-w-[760px] border-collapse text-left text-sm">
+              <thead class="sticky top-0 z-10 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500 shadow-xs">
+                <tr>
+                  <th class="px-2 py-2.5">Código</th>
+                  <th class="px-2 py-2.5">Nombre del curso</th>
+                  <th class="px-2 py-2.5">Ciclo</th>
+                  <th class="px-2 py-2.5">Estado</th>
+                  <th class="px-2 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                @for (row of visibleRows(); track row.key) {
+                  <tr [class]="
+                    'align-top transition-colors hover:bg-gray-50/50 ' +
+                    (statusOf(row) === 'fix' ? 'bg-red-50/40' : statusOf(row) === 'exists' ? 'opacity-60' : '')
+                  ">
+                    <td class="px-2 py-2">
+                      <input [value]="row.code" (input)="onCode(row.key, $event)" maxlength="20"
+                        [disabled]="row.ya_existe" aria-label="Código del curso"
+                        class="w-24 rounded-md border border-gray-300 px-2 py-1.5 font-mono text-xs uppercase focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary) disabled:bg-gray-50" />
+                    </td>
+                    <td class="px-2 py-2">
+                      <input [value]="row.name" (input)="onName(row.key, $event)" maxlength="160"
+                        [title]="row.linea" [disabled]="row.ya_existe" aria-label="Nombre del curso"
+                        class="w-full min-w-64 rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-transparent focus:outline-none focus:ring-2 focus:ring-(--fareas-primary) disabled:bg-gray-50" />
+                      @if (issues(row).length > 0) {
+                        <p class="mt-1 text-[11px] text-red-600">{{ issuesText(row) }}</p>
+                      } @else if (row.ya_existe && row.existente) {
+                        <p class="mt-1 text-[11px] text-gray-500">
+                          En el sistema: «{{ row.existente.name }}» · Ciclo {{ roman(row.existente.cycle) }}
+                        </p>
+                      }
+                    </td>
+                    <td class="px-2 py-2">
+                      <p-select class="w-28" appendTo="body" [options]="cycleOptions" optionLabel="label"
+                        optionValue="value" [ngModel]="row.cycle" [disabled]="row.ya_existe"
+                        placeholder="Ciclo" (ngModelChange)="onCycle(row.key, $event)" />
+                    </td>
+                    <td class="px-2 py-2">
+                      @switch (statusOf(row)) {
+                        @case ('exists') {
+                          <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600"
+                            title="Ya está registrado; no se modificará">
+                            <iconify-icon icon="material-symbols:inventory-2-outline" width="13"></iconify-icon>
+                            Ya existe
+                          </span>
+                        }
+                        @case ('fix') {
+                          <span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700"
+                            [title]="issuesText(row)">
+                            <iconify-icon icon="material-symbols:error-outline" width="13"></iconify-icon>
+                            Corregir
+                          </span>
+                        }
+                        @case ('review') {
+                          <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800"
+                            [title]="row.nota ?? ''">
+                            <iconify-icon icon="material-symbols:warning-outline" width="13"></iconify-icon>
+                            Revisar
+                          </span>
+                        }
+                        @default {
+                          <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700">
+                            <iconify-icon icon="material-symbols:check-circle-outline" width="13"></iconify-icon>
+                            Listo
+                          </span>
+                        }
+                      }
+                    </td>
+                    <td class="px-2 py-2 text-right">
+                      <button type="button" (click)="removeRow(row.key)"
+                        class="grid size-7 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                        [attr.aria-label]="'Quitar ' + row.code" title="Quitar de la lista">
+                        <iconify-icon icon="material-symbols:delete-outline" width="16"></iconify-icon>
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        @if (visibleRows().length === 0) {
+          <p class="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+            No hay cursos en esta vista. Añade uno a mano o cambia de ciclo.
+          </p>
+        }
+      </div>
+    }
+  }
+
+  @if (step() === 3) {
+    @if (result(); as r) {
+      <div class="space-y-4">
+        <div class="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4">
+          <span class="grid size-10 shrink-0 place-items-center rounded-full bg-white text-green-600">
+            <iconify-icon icon="material-symbols:check-circle-outline" width="24"></iconify-icon>
+          </span>
+          <div>
+            <h3 class="font-semibold text-green-900">Malla registrada</h3>
+            <p class="mt-0.5 text-sm text-green-800">
+              {{ r.creados }} curso(s) creados y {{ r.omitidos }} ya existían y se dejaron igual.
+            </p>
+          </div>
+        </div>
+        @if (r.codigos_omitidos.length > 0) {
+          <div class="rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <p class="text-sm font-medium text-gray-800">Omitidos por existir</p>
+            <p class="mt-1 text-xs text-gray-600">{{ r.codigos_omitidos.join(', ') }}</p>
+          </div>
+        }
+      </div>
+    }
+  }
+
+  <ng-template pTemplate="footer">
+    @if (step() === 1) {
+      <app-ui-button variant="ghost" (click)="close()">Cancelar</app-ui-button>
+      <app-ui-button icon="material-symbols:document-scanner-outline" [loading]="loading()"
+        [disabled]="!canRead()" (click)="readCurriculum()">Leer malla</app-ui-button>
+    } @else if (step() === 2) {
+      <app-ui-button variant="ghost" (click)="step.set(1)">Atrás</app-ui-button>
+      <app-ui-button icon="material-symbols:library-add-outline" [loading]="confirming()"
+        [disabled]="!canConfirm()" (click)="confirm()">
+        Registrar {{ toCreate().length }} curso(s)
+      </app-ui-button>
+    } @else {
+      <app-ui-button variant="outline" icon="material-symbols:upload-file-outline" (click)="restart()">Importar otra</app-ui-button>
+      <app-ui-button (click)="close()">Cerrar</app-ui-button>
+    }
+  </ng-template>
+</p-dialog>

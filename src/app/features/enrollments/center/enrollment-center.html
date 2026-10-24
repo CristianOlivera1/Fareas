@@ -1,0 +1,48 @@
+<app-page-header title="Matrícula" [subtitle]="period() ? 'Periodo vigente ' + period() + '. Matricula a varios alumnos a la vez, por ciclo o por grupo.' : 'Matricula a varios alumnos a la vez, por ciclo o por grupo.'">
+  <button type="button" (click)="openWindow()" [class]="
+    'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ' +
+    (windowOpen() ? 'border-green-200 bg-green-50 text-green-800 hover:bg-green-100' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50')
+  ">
+    <span class="size-2 rounded-full" [class]="windowOpen() ? 'bg-green-500' : 'bg-gray-400'"></span>
+    {{ windowLabel() }}
+    <iconify-icon icon="material-symbols:edit-calendar-outline" width="16"></iconify-icon>
+  </button>
+</app-page-header>
+
+<app-tabs class="mb-4" [tabs]="tabs" [activeTab]="panel()" (activeTabChange)="setPanel($event)" idPrefix="enrollment" ariaLabel="Modo de matrícula" />
+
+@if (panel() === 'cycle') {
+  <app-cycle-enrollment />
+} @else {
+  <app-enrollments-page />
+}
+
+<p-dialog header="Matrícula de estudiantes" [(visible)]="windowVisible" [modal]="true" [style]="{ width: '440px' }" appendTo="body">
+  <div class="space-y-4 pt-1">
+    <p class="text-sm text-gray-600">
+      Dentro de estas fechas los estudiantes pueden agregar, cambiar o retirar sus cursos desde «Mi matrícula». Fuera de ellas solo el administrador puede matricular.
+    </p>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <label class="block space-y-1">
+        <span class="text-xs font-medium text-gray-600">Desde</span>
+        <input type="date" [ngModel]="start()" (ngModelChange)="start.set($event)" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" />
+      </label>
+      <label class="block space-y-1">
+        <span class="text-xs font-medium text-gray-600">Hasta</span>
+        <input type="date" [ngModel]="end()" [min]="start()" (ngModelChange)="end.set($event)" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" />
+      </label>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <app-ui-button size="sm" variant="outline" (click)="quickRange(3)">Hoy + 3 días</app-ui-button>
+      <app-ui-button size="sm" variant="outline" (click)="quickRange(7)">Hoy + 1 semana</app-ui-button>
+      <app-ui-button size="sm" variant="outline" (click)="quickRange(14)">Hoy + 2 semanas</app-ui-button>
+    </div>
+    @if (invalidWindow()) {
+      <p class="text-xs text-red-600" role="alert">La fecha inicial no puede ser posterior a la final.</p>
+    }
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" [disabled]="saving()" (click)="closeWindow()">Cerrar matrícula</app-ui-button>
+    <app-ui-button [loading]="saving()" [disabled]="!start() || !end() || invalidWindow()" (click)="saveWindow()">Guardar</app-ui-button>
+  </ng-template>
+</p-dialog>

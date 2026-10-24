@@ -10,6 +10,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { MessageService } from 'primeng/api';
 import { DialogModule } from 'primeng/dialog';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { SelectModule } from 'primeng/select';
 
 import { QueryParams } from '../../../shared/utils/query-params';
@@ -17,8 +18,9 @@ import { extractDetail } from '../../../shared/utils/api-error';
 import { CoursesApi } from '../../../core/services/courses-api';
 import { CatalogApi } from '../../../core/services/catalog-api';
 import { CalendarApi } from '../../../core/services/calendar-api';
+import { EnrollmentApi } from '../../../core/services/enrollment-api';
+import { BulkResult } from '../../../core/models/enrollment';
 import { AuthService } from '../../../core/services/auth/auth';
-import { PageHeader } from '../../../shared/components/page-header/page-header';
 import { UiButton } from '../../../shared/components/ui-button/ui-button';
 import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { ModalDelete } from '../../../shared/components/modal-delete/modal-delete';
@@ -37,7 +39,7 @@ interface Option<T> {
 @Component({
   selector: 'app-enrollments-page',
   imports: [
-    FormsModule, PageHeader, UiButton, UiAlert, ModalDelete, DataTable,
+    FormsModule, MultiSelectModule, UiButton, UiAlert, ModalDelete, DataTable,
     DataTableCellDirective, DialogModule, SelectModule, Avatar,
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
@@ -49,6 +51,7 @@ export class EnrollmentsPage {
   private readonly api = inject(CoursesApi);
   private readonly catalog = inject(CatalogApi);
   private readonly calendar = inject(CalendarApi);
+  private readonly enrollmentApi = inject(EnrollmentApi);
   private readonly qp = inject(QueryParams);
   private readonly toast = inject(MessageService);
   private readonly deleteModal = viewChild(ModalDelete);
@@ -75,6 +78,11 @@ export class EnrollmentsPage {
     { id: 'status', header: 'Matrícula', align: 'center' },
     { id: 'actions', header: 'Acciones', align: 'center', width: '150px' },
   ];
+  readonly studentPageSizeOptions = [
+    { label: '10', value: 10 },
+    { label: '25', value: 25 },
+    { label: '50', value: 50 },
+  ];
 
   readonly semesters = signal<string[]>([]);
   readonly courseOptions = signal<Option<number>[]>([]);
@@ -88,7 +96,12 @@ export class EnrollmentsPage {
   readonly deleting = signal(false);
 
   readonly studentOptions = signal<Option<number>[]>([]);
-  readonly selectedStudentId = signal<number | null>(null);
+  readonly selectedStudentIds = signal<number[]>([]);
+  readonly searchedStudents = signal<Option<number>[]>([]);
+  readonly pastedCodes = signal('');
+  readonly bulkResult = signal<BulkResult | null>(null);
+  readonly resolvingCodes = signal(false);
+  private readonly knownLabels = new Map<number, string>();
   readonly searchingStudents = signal(false);
   enrollDialogVisible = false;
 
@@ -242,7 +255,9 @@ export class EnrollmentsPage {
   }
 
   openEnroll(): void {
-    this.selectedStudentId.set(null);
+    this.selectedStudentIds.set([]);
+    this.pastedCodes.set('');
+    this.bulkResult.set(null);
     this.enrollDialogVisible = true;
     void this.searchStudents('');
   }
@@ -259,12 +274,13 @@ export class EnrollmentsPage {
       const studentPage = await this.catalog
         .students({ q: term || null, page_size: 20, with_face: 'true' })
         .toPromise();
-      this.studentOptions.set(
-        (studentPage?.items ?? []).map((student) => ({
-          label: `${student.code ?? 'sin código'} · ${student.full_name}`,
-          value: student.id,
-        })),
-      );
+      const found = (studentPage?.items ?? []).map((student) => ({
+        label: `${student.code ?? 'sin código'} · ${student.full_name}`,
+        value: student.id,
+      }));
+      found.forEach((option) => this.knownLabels.set(option.value, option.label));
+      this.searchedStudents.set(found);
+      this.refreshStudentOptions();
     } catch (err) {
       this.toast.add({
         severity: 'error',
@@ -277,23 +293,70 @@ export class EnrollmentsPage {
     }
   }
 
+  private refreshStudentOptions(): void {
+    const merged = new Map<number, Option<number>>();
+    for (const id of this.selectedStudentIds()) {
+      merged.set(id, { label: this.knownLabels.get(id) ?? `Alumno #${id}`, value: id });
+    }
+    for (const option of this.searchedStudents()) merged.set(option.value, option);
+    this.studentOptions.set([...merged.values()]);
+  }
+
+  onStudentsSelected(ids: number[]): void {
+    this.selectedStudentIds.set(ids ?? []);
+    this.bulkResult.set(null);
+    this.refreshStudentOptions();
+  }
+
+  async addPastedCodes(): Promise<void> {
+    const codes = [...new Set(this.pastedCodes().match(/\d{4,}/g) ?? [])];
+    if (codes.length === 0) return;
+    this.resolvingCodes.set(true);
+    try {
+      const result = await this.enrollmentApi.resolveStudents(codes).toPromise();
+      for (const student of result?.found ?? []) {
+        this.knownLabels.set(student.id, `${student.code ?? 'sin código'} · ${student.full_name}`);
+      }
+      this.onStudentsSelected([
+        ...new Set([...this.selectedStudentIds(), ...(result?.found ?? []).map((student) => student.id)]),
+      ]);
+      this.pastedCodes.set('');
+      if (result?.unknown.length) {
+        this.toast.add({
+          severity: 'warn',
+          summary: 'Códigos no encontrados',
+          detail: result.unknown.join(', '),
+          life: 5000,
+        });
+      }
+    } catch (err) {
+      this.toast.add({ severity: 'error', summary: 'No se pudieron leer los códigos', detail: extractDetail(err), life: 5000 });
+    } finally {
+      this.resolvingCodes.set(false);
+    }
+  }
+
   async confirmEnroll(): Promise<void> {
     const groupId = this.groupIdNumber();
-    const studentId = this.selectedStudentId();
-    if (!groupId || !studentId) {
-      this.toast.add({ severity: 'warn', summary: 'Selecciona un estudiante', life: 3000 });
+    const ids = this.selectedStudentIds();
+    if (!groupId || ids.length === 0) {
+      this.toast.add({ severity: 'warn', summary: 'Selecciona al menos un estudiante', life: 3000 });
       return;
     }
     this.saving.set(true);
     try {
-      const enrollment = await this.api.enroll(groupId, studentId).toPromise();
+      const result = await this.enrollmentApi.enrollBulk({ student_ids: ids }, [groupId]).toPromise();
+      if (!result) return;
       this.toast.add({
-        severity: 'success',
-        summary: 'Matrícula registrada',
-        detail: enrollment?.message ?? 'Alumno matriculado',
-        life: 3500,
+        severity: result.failed > 0 ? 'warn' : 'success',
+        summary: 'Matrícula procesada',
+        detail: `${result.ok} matriculado(s), ${result.skipped} ya estaban, ${result.failed} con problemas.`,
+        life: 4500,
       });
-      this.enrollDialogVisible = false;
+      const failedIds = new Set(result.results.filter((row) => row.status === 'failed').map((row) => row.student_id));
+      this.onStudentsSelected(ids.filter((id) => failedIds.has(id)));
+      this.bulkResult.set(result);
+      if (failedIds.size === 0) this.enrollDialogVisible = false;
       await Promise.all([this.loadStudents(), this.loadGroups()]);
     } catch (err) {
       this.toast.add({

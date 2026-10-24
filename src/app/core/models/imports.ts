@@ -153,3 +153,57 @@ export interface StudentImportResult {
   readonly total: number;
   readonly errores: StudentImportError[];
 }
+
+export interface CurriculumExistingCourse {
+  readonly id: number;
+  readonly name: string;
+  readonly cycle: number;
+}
+
+export interface CurriculumPreviewRow {
+  readonly fila: number;
+  readonly code: string;
+  readonly name: string;
+  readonly cycle: number | null;
+  readonly confiable: boolean;
+  readonly nota: string | null;
+  readonly linea: string;
+  readonly pagina: number;
+  readonly ya_existe: boolean;
+  readonly existente: CurriculumExistingCourse | null;
+}
+
+export interface CurriculumPreview {
+  readonly tipo: string;
+  readonly paginas: number;
+  readonly total: number;
+  readonly listos: number;
+  readonly por_revisar: number;
+  readonly ya_existentes: number;
+  readonly ciclos: number[];
+  readonly cursos: CurriculumPreviewRow[];
+}
+
+export interface CurriculumEditableRow {
+  readonly key: string;
+  code: string;
+  name: string;
+  cycle: number | null;
+  confiable: boolean;
+  nota: string | null;
+  linea: string;
+  ya_existe: boolean;
+  existente: CurriculumExistingCourse | null;
+}
+
+export interface CurriculumConfirmIn {
+  readonly cursos: Array<{ code: string; name: string; cycle: number }>;
+}
+
+export interface CurriculumResult {
+  readonly creados: number;
+  readonly omitidos: number;
+  readonly codigos_creados: string[];
+  readonly codigos_omitidos: string[];
+  readonly total: number;
+}
