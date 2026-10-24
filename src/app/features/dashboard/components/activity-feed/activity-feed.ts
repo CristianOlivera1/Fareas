@@ -9,7 +9,9 @@ import {
   signal,
   untracked,
 } from '@angular/core';
+import { forkJoin } from 'rxjs';
 
+import { CalendarApi } from '../../../../core/services/calendar-api';
 import { CatalogApi } from '../../../../core/services/catalog-api';
 import { LiveFeed, LiveStatus, LiveVerdict, VerdictKind } from '../../../../core/services/live-feed';
 import { Avatar } from '../../../../shared/components/avatar/avatar';
@@ -81,6 +83,7 @@ const STATUS_TEXT: Record<LiveStatus, { label: string; dot: string }> = {
 export class ActivityFeed {
   private readonly live = inject(LiveFeed);
   private readonly catalog = inject(CatalogApi);
+  private readonly calendar = inject(CalendarApi);
 
   private readonly lastVerdict = signal<LiveVerdict | null>(null);
   private readonly names = signal<
@@ -88,6 +91,15 @@ export class ActivityFeed {
   >({});
   private readonly roomCodes = signal<Record<number, string>>({});
   private readonly requested = new Set<number>();
+
+  readonly cameraRooms = signal<Record<number, string>>({});
+  readonly camerasLoaded = signal(false);
+  readonly roomId = signal<number | null>(null);
+  readonly hasCameras = computed(() => Object.keys(this.cameraRooms()).length > 0);
+  readonly roomLabel = computed(() => {
+    const room = this.roomId();
+    return room === null ? null : (this.cameraRooms()[room] ?? null);
+  });
 
   readonly connection = computed(() => STATUS_TEXT[this.live.status()]);
 
@@ -112,13 +124,41 @@ export class ActivityFeed {
 
   constructor() {
     const destroyRef = inject(DestroyRef);
-    this.live.connect();
     destroyRef.onDestroy(() => this.live.close());
+
+    forkJoin({
+      settings: this.calendar.settings(),
+      devices: this.catalog.devices({ device_type: 'camara', page_size: 100 }),
+    }).subscribe({
+      next: ({ settings, devices }) => {
+        const rooms: Record<number, string> = {};
+        for (const device of devices.items) {
+          if (device.is_active) rooms[device.room_id] = device.room_code ?? `Aula #${device.room_id}`;
+        }
+        this.cameraRooms.set(rooms);
+        const configured = settings.live_room_id ?? null;
+        const fallback = Number(Object.keys(rooms)[0] ?? NaN);
+        this.roomId.set(
+          configured !== null && configured in rooms ? configured : Number.isNaN(fallback) ? null : fallback,
+        );
+        this.camerasLoaded.set(true);
+      },
+      error: () => this.camerasLoaded.set(true),
+    });
 
     this.catalog.rooms({ page_size: 100 }).subscribe({
       next: (page) =>
         this.roomCodes.set(Object.fromEntries(page.items.map((room) => [room.id, room.code]))),
       error: () => undefined,
+    });
+
+    effect(() => {
+      const room = this.roomId();
+      untracked(() => {
+        this.lastVerdict.set(null);
+        if (room === null) this.live.close();
+        else this.live.connect(room);
+      });
     });
 
     effect(() => {

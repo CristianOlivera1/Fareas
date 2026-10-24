@@ -11,6 +11,7 @@ import { UiAlert } from '../../../shared/components/ui-alert/ui-alert';
 import { PageHeader } from '../../../shared/components/page-header/page-header';
 import { Tabs } from '../../../shared/components/tabs/tabs';
 import type { TabOption } from '../../../shared/components/tabs/tabs';
+import { CatalogApi } from '../../../core/services/catalog-api';
 import { Settings } from '../../../core/models/catalog';
 
 interface Option<T> {
@@ -32,6 +33,7 @@ interface SettingsForm {
   dpi_limit_percent: number;
   attendance_hour_start: string;
   attendance_hour_end: string;
+  live_room_id: number | null;
 }
 
 const EMPTY: SettingsForm = {
@@ -48,6 +50,7 @@ const EMPTY: SettingsForm = {
   dpi_limit_percent: 30,
   attendance_hour_start: '06:00',
   attendance_hour_end: '22:00',
+  live_room_id: null,
 };
 
 @Component({
@@ -59,12 +62,15 @@ const EMPTY: SettingsForm = {
 })
 export class SettingsPage {
   private readonly api = inject(CalendarApi);
+  private readonly catalog = inject(CatalogApi);
   private readonly toast = inject(MessageService);
 
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
   readonly updatedAt = signal<string | null>(null);
+
+  readonly cameraRooms = signal<Option<number>[]>([]);
 
   readonly form = signal<SettingsForm>({ ...EMPTY });
   private readonly original = signal<SettingsForm>({ ...EMPTY });
@@ -127,6 +133,7 @@ export class SettingsPage {
 
   constructor() {
     void this.load();
+    void this.loadCameraRooms();
   }
 
   patch(p: Partial<SettingsForm>): void {
@@ -160,7 +167,7 @@ export class SettingsPage {
       this.toast.add({ severity: 'info', summary: 'No hay cambios por guardar', life: 2500 });
       return;
     }
-    const patch: Record<string, string | number> = {};
+    const patch: Record<string, string | number | null> = {};
     for (const key of this.changed()) {
       const value = this.form()[key];
       patch[key] = typeof value === 'string' ? value.trim() : value;
@@ -202,10 +209,24 @@ export class SettingsPage {
       dpi_limit_percent: s.dpi_limit_percent,
       attendance_hour_start: s.attendance_hour_start.slice(0, 5),
       attendance_hour_end: s.attendance_hour_end.slice(0, 5),
+      live_room_id: s.live_room_id ?? null,
     };
     this.form.set({ ...next });
     this.original.set({ ...next });
     this.updatedAt.set(s.updated_at);
+  }
+
+  private async loadCameraRooms(): Promise<void> {
+    try {
+      const page = await this.catalog.devices({ device_type: 'camara', page_size: 100 }).toPromise();
+      const rooms = new Map<number, string>();
+      for (const device of page?.items ?? []) {
+        if (device.is_active) rooms.set(device.room_id, device.room_code ?? `Aula #${device.room_id}`);
+      }
+      this.cameraRooms.set([...rooms].map(([value, label]) => ({ value, label })));
+    } catch {
+      this.cameraRooms.set([]);
+    }
   }
 
   private async load(): Promise<void> {

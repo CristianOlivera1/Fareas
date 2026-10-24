@@ -449,19 +449,15 @@ class ScheduleRowOut(BaseModel):
     start_time: time
     end_time: time
 
-@router.get("/schedule", response_model=list[ScheduleRowOut])
-async def general_schedule(
-    db: DbSession,
-    _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
-    semester: str | None = Query(None, max_length=40, description="Default: semestre vigente (R1)"),
-    cycle: int | None = Query(None, ge=1, le=10, description="Filtra por ciclo (1-10)"),
+async def consultar_horario(
+    db,
+    semester: str,
+    cycle: int | None = None,
     course_id: int | None = None,
     teacher_id: int | None = None,
     room_id: int | None = None,
-    include_inactive: bool = Query(False, description="Incluye grupos desactivados"),
+    include_inactive: bool = False,
 ) -> list[ScheduleRowOut]:
-    if semester is None:
-        semester = await semestre_vigente(db)
     stmt = (
         select(ScheduleBlock, CourseGroup, Course, AppUser, Room)
         .join(CourseGroup, CourseGroup.id == ScheduleBlock.group_id)
@@ -502,6 +498,24 @@ async def general_schedule(
         )
         for b, g, c, t, r in rows
     ]
+
+
+@router.get("/schedule", response_model=list[ScheduleRowOut])
+async def general_schedule(
+    db: DbSession,
+    _user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
+    semester: str | None = Query(None, max_length=40, description="Default: semestre vigente (R1)"),
+    cycle: int | None = Query(None, ge=1, le=10, description="Filtra por ciclo (1-10)"),
+    course_id: int | None = None,
+    teacher_id: int | None = None,
+    room_id: int | None = None,
+    include_inactive: bool = Query(False, description="Incluye grupos desactivados"),
+) -> list[ScheduleRowOut]:
+    if semester is None:
+        semester = await semestre_vigente(db)
+    return await consultar_horario(
+        db, semester, cycle, course_id, teacher_id, room_id, include_inactive
+    )
 
 class EnrollIn(BaseModel):
     student_id: int
