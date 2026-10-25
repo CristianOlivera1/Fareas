@@ -43,11 +43,17 @@ class ScrfdDetector:
             (g, s) for g, s in zip(groups, STRIDES[:n_levels], strict=True)
         ]
 
-    def _preprocess(self, frame: np.ndarray) -> np.ndarray:
-        img = cv2.resize(frame, self.input_size, interpolation=cv2.INTER_LINEAR)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32)
+    def _preprocess(self, frame: np.ndarray) -> tuple[np.ndarray, float]:
+        in_w, in_h = self.input_size
+        h0, w0 = frame.shape[:2]
+        scale = min(in_w / w0, in_h / h0)
+        new_w, new_h = max(1, int(round(w0 * scale))), max(1, int(round(h0 * scale)))
+        resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        canvas = np.zeros((in_h, in_w, 3), dtype=np.uint8)
+        canvas[:new_h, :new_w] = resized
+        img = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB).astype(np.float32)
         img = (img - DET_MEAN) / DET_STD
-        return np.transpose(img, (2, 0, 1))[None]
+        return np.transpose(img, (2, 0, 1))[None], scale
 
     def _sigmoid(self, x: np.ndarray) -> np.ndarray:
         return 1.0 / (1.0 + np.exp(-x))
@@ -88,8 +94,7 @@ class ScrfdDetector:
 
     def detect(self, frame: np.ndarray, det_thresh: float | None = None, max_faces: int = 0) -> list[Face]:
         thresh = self.det_thresh if det_thresh is None else det_thresh
-        h0, w0 = frame.shape[:2]
-        inp = self._preprocess(frame)
+        inp, scale = self._preprocess(frame)
         out = self.session.run(self.output_names, {self.input_name: inp})
         raw = dict(zip(self.output_names, out, strict=True))
 
@@ -110,11 +115,8 @@ class ScrfdDetector:
         boxes = np.concatenate(all_boxes)
         kps = np.concatenate(all_kps)
 
-        sx, sy = w0 / self.input_size[0], h0 / self.input_size[1]
-        boxes[:, [0, 2]] *= sx
-        boxes[:, [1, 3]] *= sy
-        kps[:, 0::2] *= sx
-        kps[:, 1::2] *= sy
+        boxes /= scale
+        kps /= scale
 
         keep_idx = np.where(scores >= thresh)[0]
         if len(keep_idx) == 0:

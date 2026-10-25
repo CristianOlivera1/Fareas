@@ -22,6 +22,7 @@ MESSAGES: dict[str, str] = {
     "denegado": "No estas matriculado en esta clase",
     "desconocido": "Rostro no reconocido",
     "sin_registro": "Sin clase activa para este aula",
+    "verificando": "Verificando rostro",
 }
 
 VERDICTS: dict[str, tuple[str, str, int]] = {
@@ -59,6 +60,9 @@ class VisionPipeline:
         threshold: float = 0.75,
         cooldown_seconds: float = 30.0,
         classifier: Callable[[int, float], str] | None = None,
+        margin: float = 0.0,
+        confirm_frames: int = 1,
+        min_face_px: int = 0,
     ) -> None:
         self.detector = detector
         self.embedder = embedder
@@ -66,26 +70,58 @@ class VisionPipeline:
         self.threshold = threshold
         self.cooldown_seconds = cooldown_seconds
         self.classifier = classifier
+        self.margin = margin
+        self.confirm_frames = max(1, confirm_frames)
+        self.min_face_px = min_face_px
         self._last_mark: dict[int, float] = {}
+        self._streaks: dict[object, tuple[int, int]] = {}
         self._clock: Callable[[], float] = time.monotonic
+
+    @staticmethod
+    def _area(face: Face) -> float:
+        return float(max(0.0, face.box[2] - face.box[0]) * max(0.0, face.box[3] - face.box[1]))
+
+    def _big_enough(self, face: Face) -> bool:
+        width = float(face.box[2] - face.box[0])
+        height = float(face.box[3] - face.box[1])
+        return min(width, height) >= self.min_face_px
+
+    def _confirmed(self, track_key: object, sid: int) -> bool:
+        last_sid, count = self._streaks.get(track_key, (-1, 0))
+        count = count + 1 if last_sid == sid else 1
+        self._streaks[track_key] = (sid, count)
+        return count >= self.confirm_frames
 
     def process_frame(
         self,
         frame: np.ndarray,
         candidates: set[int] | None = None,
         now: float | None = None,
+        track_key: object = None,
     ) -> FrameResult:
-        faces = self.detector.detect(frame, max_faces=5)
+        faces = [f for f in self.detector.detect(frame, max_faces=5) if self._big_enough(f)]
         if not faces:
+            self._streaks.pop(track_key, None)
             return FrameResult(verdict="sin_rostro", color="", buzzer="ninguno", seconds=0, message="")
 
+        faces.sort(key=lambda f: self._area(f), reverse=True)
         face = faces[0]
         embedding = self.embedder.get(frame, face.kps)
-        sid, sim = self.gallery.identify(embedding, candidates=candidates, threshold=self.threshold)
+        sid, sim = self.gallery.identify(
+            embedding, candidates=candidates, threshold=self.threshold, margin=self.margin
+        )
 
+        if sid is not None and not self._confirmed(track_key, sid):
+            return FrameResult(
+                faces=faces, verdict="verificando", color="azul", buzzer="ninguno",
+                seconds=1, student_id=sid, similarity=sim, message=MESSAGES["verificando"], box=face.box,
+            )
         if sid is None:
+            self._streaks.pop(track_key, None)
             if candidates is not None:
-                other, other_sim = self.gallery.identify(embedding, candidates=None, threshold=self.threshold)
+                other, other_sim = self.gallery.identify(
+                    embedding, candidates=None, threshold=self.threshold, margin=self.margin
+                )
                 if other is not None:
                     return FrameResult(
                         faces=faces, verdict="denegado", color="rojo", buzzer="tono_denegado",

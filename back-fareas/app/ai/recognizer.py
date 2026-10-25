@@ -44,22 +44,27 @@ class FaceGallery:
                 bucket.setdefault(r.student_id, []).append(vec)
         self._embs = {sid: np.stack(v) for sid, v in bucket.items()}
 
+    def best_similarities(self, embedding: np.ndarray) -> dict[int, float]:
+        return {sid: float((mat @ embedding).max()) for sid, mat in self._embs.items()}
+
     def identify(
         self,
         embedding: np.ndarray,
         candidates: set[int] | None = None,
         threshold: float = 0.75,
+        margin: float = 0.0,
     ) -> tuple[int | None, float]:
         if not self._embs:
             return None, 0.0
-        pool = self._embs if candidates is None else {sid: m for sid, m in self._embs.items() if sid in candidates}
+        scores = self.best_similarities(embedding)
+        pool = scores if candidates is None else {sid: sim for sid, sim in scores.items() if sid in candidates}
         if not pool:
             return None, 0.0
-        best_sid, best_sim = None, 0.0
-        for sid, mat in pool.items():
-            sim = float((mat @ embedding).max())
-            if sim > best_sim:
-                best_sid, best_sim = sid, sim
-        if best_sid is not None and best_sim >= threshold:
-            return best_sid, best_sim
-        return None, best_sim
+        best_sid = max(pool, key=pool.__getitem__)
+        best_sim = pool[best_sid]
+        if best_sim < threshold:
+            return None, best_sim
+        rival = max((sim for sid, sim in scores.items() if sid != best_sid), default=0.0)
+        if best_sim - rival < margin:
+            return None, best_sim
+        return best_sid, best_sim
