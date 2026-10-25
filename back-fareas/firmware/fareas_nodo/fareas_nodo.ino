@@ -3,13 +3,13 @@
 #include <ArduinoJson.h>
 #include <Adafruit_NeoPixel.h>
 
-const char* WIFI_SSID = "TU_RED_2_4GHZ";
-const char* WIFI_PASS = "TU_CLAVE_WIFI";
+const char* WIFI_SSID = "OLIVERA";
+const char* WIFI_PASS = "olivera#123";
 
-const char* SERVER_HOST = "192.168.1.50";
+const char* SERVER_HOST = "192.168.1.6";
 const uint16_t SERVER_PORT = 8000;
-const char* DEVICE_TOKEN = "IGUAL_A_DEVICE_TOKEN_SECRET_DEL_ENV";
-const char* DEVICE_ID = "esp32-lab305";
+const char* DEVICE_TOKEN = "63aab9309d64c79c340e90632c3ef1999cde1dbd89aecebcbbc3fb55d2826885";
+const char* DEVICE_ID = "esp32-lab104";
 
 const uint8_t RING_PIN = 13;
 const uint8_t BUZZER_PIN = 26;

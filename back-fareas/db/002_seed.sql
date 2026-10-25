@@ -143,8 +143,8 @@ INSERT INTO room (code, name, building) VALUES
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO device (room_id, device_type, device_key, name, ip_address, mac_address, rtsp_url)
-SELECT r.id, 'camara', 'cam-'   || lower(replace(r.code, ' ', '')), 'Cámara Hikvision ' || r.code, '10.14.5.' || (10 + r.id)::text, NULL,
-       'rtsp://admin:Admin123@10.14.5.' || (10 + r.id)::text || ':554/Streaming/Channels/101'
+SELECT r.id, 'camara', 'cam-'   || lower(replace(r.code, ' ', '')), 'Cámara Hikvision ' || r.code, '192.168.56.' || (10 + r.id)::text, NULL,
+       'rtsp://admin:Admin123@10.14.5.' || (10 + r.id)::text || ':554/Streaming/Channels/102'
 FROM room r
 WHERE NOT EXISTS (SELECT 1 FROM device d WHERE d.device_key = 'cam-' || lower(replace(r.code, ' ', '')))
 ORDER BY r.id ASC

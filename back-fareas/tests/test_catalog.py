@@ -22,7 +22,9 @@ _EMAILS_TMP = [
 
 async def _purge(db_session) -> None:
     await db_session.exec(delete(AppUser).where(AppUser.email.in_(_EMAILS_TMP)))
-    await db_session.exec(delete(Device).where(Device.device_key == "esp32-lab998"))
+    await db_session.exec(
+        delete(Device).where(Device.device_key.in_(["esp32-lab998", "cam-rtsp-edit-test"]))
+    )
     await db_session.exec(delete(Room).where(Room.code.in_(["LAB 999", "LAB 998", "LAB 997"])))
     await db_session.commit()
 
@@ -108,6 +110,40 @@ async def test_dispositivos_flujo_basico(client: AsyncClient, admin_headers: dic
 
     r = await client.patch(f"{API}/devices/{device['id']}", headers=admin_headers, json={"name": "Nodo renombrado"})
     assert r.status_code == 200 and r.json()["name"] == "Nodo renombrado"
+
+async def test_actualizar_rtsp_enmascarada_conserva_clave_y_aplica_la_nueva_direccion(
+    client: AsyncClient, admin_headers: dict, db_session
+):
+    room = (
+        await client.post(f"{API}/rooms", headers=admin_headers, json={"code": "LAB 997"})
+    ).json()
+    device = (
+        await client.post(
+            f"{API}/devices",
+            headers=admin_headers,
+            json={
+                "room_id": room["id"],
+                "device_type": "camara",
+                "device_key": "cam-rtsp-edit-test",
+                "rtsp_url": "rtsp://admin:sample-password@192.0.2.10:554/Streaming/Channels/101",
+            },
+        )
+    ).json()
+
+    response = await client.patch(
+        f"{API}/devices/{device['id']}",
+        headers=admin_headers,
+        json={
+            "rtsp_url": "rtsp://admin:***@192.0.2.11:554/Streaming/Channels/102",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    await db_session.refresh(await db_session.get(Device, device["id"]))
+    updated = await db_session.get(Device, device["id"])
+    assert updated.rtsp_url == (
+        "rtsp://admin:sample-password@192.0.2.11:554/Streaming/Channels/102"
+    )
 
 async def test_crear_docente_validaciones(client: AsyncClient, admin_headers: dict):
     r = await client.post(f"{API}/teachers", headers=admin_headers,
@@ -235,3 +271,62 @@ async def test_students_with_face_flag(client, admin_headers, db_session):
     r = await client.get(f"{API}/students", headers=admin_headers, params={"page_size": 5})
     assert r.status_code == 200
     assert all(i["enrolled"] is None for i in r.json()["items"])
+
+
+async def test_camara_valida_la_direccion_y_toma_la_ip_del_rtsp(
+    client: AsyncClient, admin_headers: dict, db_session
+):
+    from sqlmodel import delete
+
+    await db_session.exec(delete(Device).where(Device.device_key.in_(["cam-ip-test", "esp32-ip-test"])))
+    await db_session.exec(delete(Room).where(Room.code == "LAB 995"))
+    await db_session.commit()
+    room = (await client.post(f"{API}/rooms", headers=admin_headers, json={"code": "LAB 995"})).json()
+    try:
+        malo = await client.post(
+            f"{API}/devices", headers=admin_headers,
+            json={"room_id": room["id"], "device_type": "camara", "device_key": "cam-ip-test",
+                  "rtsp_url": "rtsp://admin:clave@10.14.5.2474:554/Streaming/Channels/102"},
+        )
+        assert malo.status_code == 422 and "no es válida" in malo.json()["detail"]
+        sin_esquema = await client.post(
+            f"{API}/devices", headers=admin_headers,
+            json={"room_id": room["id"], "device_type": "camara", "device_key": "cam-ip-test",
+                  "rtsp_url": "http://admin:clave@10.14.5.20/x"},
+        )
+        assert sin_esquema.status_code == 422
+
+        camara = (await client.post(
+            f"{API}/devices", headers=admin_headers,
+            json={"room_id": room["id"], "device_type": "camara", "device_key": "cam-ip-test",
+                  "rtsp_url": "rtsp://admin:clave@192.168.1.64:554/Streaming/Channels/102"},
+        )).json()
+        assert camara["ip_address"] == "192.168.1.64"
+
+        editada = await client.patch(
+            f"{API}/devices/{camara['id']}", headers=admin_headers,
+            json={"rtsp_url": "rtsp://admin:***@192.168.1.70:554/Streaming/Channels/101"},
+        )
+        assert editada.status_code == 200 and editada.json()["ip_address"] == "192.168.1.70"
+
+        nodo = (await client.post(
+            f"{API}/devices", headers=admin_headers,
+            json={"room_id": room["id"], "device_type": "esp32", "device_key": "esp32-ip-test"},
+        )).json()
+        con_ip = await client.patch(
+            f"{API}/devices/{nodo['id']}", headers=admin_headers, json={"ip_address": "192.168.1.90"}
+        )
+        assert con_ip.json()["ip_address"] == "192.168.1.90"
+        ip_mala = await client.patch(
+            f"{API}/devices/{nodo['id']}", headers=admin_headers, json={"ip_address": "300.1.1.1"}
+        )
+        assert ip_mala.status_code == 422
+        rtsp_en_nodo = await client.patch(
+            f"{API}/devices/{nodo['id']}", headers=admin_headers,
+            json={"rtsp_url": "rtsp://a:b@192.168.1.5/x"},
+        )
+        assert rtsp_en_nodo.status_code == 422
+    finally:
+        await db_session.exec(delete(Device).where(Device.device_key.in_(["cam-ip-test", "esp32-ip-test"])))
+        await db_session.exec(delete(Room).where(Room.code == "LAB 995"))
+        await db_session.commit()

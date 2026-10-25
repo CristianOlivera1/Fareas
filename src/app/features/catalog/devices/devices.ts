@@ -41,6 +41,7 @@ interface DeviceForm {
   device_key: string;
   name: string;
   rtsp_url: string;
+  ip_address: string;
   is_active: boolean;
 }
 
@@ -105,7 +106,7 @@ export class DevicesPage {
   });
 
   readonly form = signal<DeviceForm>({
-    id: null, room_id: null, device_type: 'camara', device_key: '', name: '', rtsp_url: '', is_active: true,
+    id: null, room_id: null, device_type: 'camara', device_key: '', name: '', rtsp_url: '', ip_address: '', is_active: true,
   });
 
   dialogVisible = false;
@@ -168,14 +169,14 @@ export class DevicesPage {
   }
 
   openCreate(): void {
-    this.form.set({ id: null, room_id: null, device_type: 'camara', device_key: '', name: '', rtsp_url: '', is_active: true });
+    this.form.set({ id: null, room_id: null, device_type: 'camara', device_key: '', name: '', rtsp_url: '', ip_address: '', is_active: true });
     this.dialogVisible = true;
   }
 
   openEdit(d: Device): void {
     this.form.set({
       id: d.id, room_id: d.room_id, device_type: d.device_type, device_key: d.device_key,
-      name: d.name ?? '', rtsp_url: d.rtsp_url ?? '', is_active: d.is_active,
+      name: d.name ?? '', rtsp_url: d.rtsp_url ?? '', ip_address: d.ip_address ?? '', is_active: d.is_active,
     });
     this.dialogVisible = true;
   }
@@ -199,8 +200,16 @@ export class DevicesPage {
         }).toPromise();
         this.toast.add({ severity: 'success', summary: 'Dispositivo registrado', life: 2500 });
       } else {
+        if (f.device_type === 'camara' && !f.rtsp_url.trim()) {
+          this.toast.add({ severity: 'warn', summary: 'La cámara requiere su URL RTSP', life: 3000 });
+          return;
+        }
         await this.api.updateDevice(f.id, {
-          name: f.name || null, rtsp_url: f.rtsp_url || null, is_active: f.is_active,
+          name: f.name || null,
+          is_active: f.is_active,
+          ...(f.device_type === 'camara'
+            ? { rtsp_url: f.rtsp_url.trim() }
+            : { ip_address: f.ip_address.trim() || null }),
         }).toPromise();
         this.toast.add({ severity: 'success', summary: 'Dispositivo actualizado', life: 2500 });
       }

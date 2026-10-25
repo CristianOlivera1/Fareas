@@ -11,6 +11,8 @@ import {
 } from '@angular/core';
 import { forkJoin } from 'rxjs';
 
+import { environment } from '../../../../../environments/environment';
+import { AuthService } from '../../../../core/services/auth/auth';
 import { CalendarApi } from '../../../../core/services/calendar-api';
 import { CatalogApi } from '../../../../core/services/catalog-api';
 import { LiveFeed, LiveStatus, LiveVerdict, VerdictKind } from '../../../../core/services/live-feed';
@@ -84,6 +86,7 @@ export class ActivityFeed {
   private readonly live = inject(LiveFeed);
   private readonly catalog = inject(CatalogApi);
   private readonly calendar = inject(CalendarApi);
+  private readonly auth = inject(AuthService);
 
   private readonly lastVerdict = signal<LiveVerdict | null>(null);
   private readonly names = signal<
@@ -99,6 +102,14 @@ export class ActivityFeed {
   readonly roomLabel = computed(() => {
     const room = this.roomId();
     return room === null ? null : (this.cameraRooms()[room] ?? null);
+  });
+
+  readonly streamFailed = signal(false);
+  readonly streamUrl = computed(() => {
+    const room = this.roomId();
+    const token = this.auth.accessToken();
+    if (room === null || !token) return null;
+    return `${environment.apiUrl}/dashboard/camera/${room}/mjpeg?access_token=${encodeURIComponent(token)}`;
   });
 
   readonly connection = computed(() => STATUS_TEXT[this.live.status()]);
@@ -156,6 +167,7 @@ export class ActivityFeed {
       const room = this.roomId();
       untracked(() => {
         this.lastVerdict.set(null);
+        this.streamFailed.set(false);
         if (room === null) this.live.close();
         else this.live.connect(room);
       });

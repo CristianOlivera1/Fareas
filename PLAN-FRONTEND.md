@@ -798,6 +798,11 @@ la UI solo oculta botones con `@if (auth.isAdmin())`.
   **Parámetros → Asistencia → Cámara del dashboard** (`app_settings.live_room_id`,
   `db/013_camara_dashboard.sql`). Sin configurar usa la primera cámara activa; si
   no hay cámaras activas lo indica. El stream SSE se abre filtrado por `room_id`.
+- **Video en vivo (2026-10-24):** la tarjeta muestra la imagen real de la cámara del aula con
+  `<img>` apuntando a `GET /dashboard/camera/{room_id}/mjpeg?access_token=` (MJPEG a ~5 fps y
+  640 px de ancho, generado desde el RTSP de la cámara; máx. 2 vistas por aula). Los veredictos
+  siguen llegando por SSE y se superponen como etiqueta. Se recomienda registrar el canal
+  `102` (substream) en Dispositivos.
 
 ### F6h - Reportes profesionales (2026-10-24) - **✅ LISTO**
 - `features/reports`: catálogo a la izquierda (asistencia detallada, resumen por

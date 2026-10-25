@@ -34,7 +34,10 @@ export class CatalogApi extends BaseApi {
   }) {
     return this.post<Device>('/devices', body);
   }
-  updateDevice(id: number, body: { name?: string | null; rtsp_url?: string | null; is_active?: boolean }) {
+  updateDevice(
+    id: number,
+    body: { name?: string | null; rtsp_url?: string | null; ip_address?: string | null; is_active?: boolean },
+  ) {
     return this.patch<Device>(`/devices/${id}`, body);
   }
 

@@ -134,6 +134,7 @@ class DeviceIn(BaseModel):
 class DeviceUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=80)
     rtsp_url: str | None = Field(default=None, max_length=255)
+    ip_address: str | None = Field(default=None, max_length=45)
     is_active: bool | None = None
 
 class DeviceOut(BaseModel):
@@ -150,6 +151,58 @@ class DeviceOut(BaseModel):
     rtsp_url: str | None = None
 
 _RTSP_MASK = "***"
+
+
+def _validar_host(host: str | None) -> None:
+    import ipaddress as _ip
+    import re as _re
+
+    if not host:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Falta la dirección IP o el host")
+    if _re.fullmatch(r"[0-9.]+", host):
+        try:
+            _ip.IPv4Address(host)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"La dirección IP «{host}» no es válida (cada número va de 0 a 255)",
+            ) from exc
+    elif not _re.fullmatch(r"[A-Za-z0-9]([A-Za-z0-9.-]{0,61}[A-Za-z0-9])?", host):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"El host «{host}» no es válido")
+
+
+def _host_de_rtsp(rtsp_url: str) -> str | None:
+    from urllib.parse import urlsplit
+
+    try:
+        return urlsplit(rtsp_url).hostname
+    except ValueError:
+        return None
+
+
+def _clave_de_rtsp(rtsp_url: str | None) -> str | None:
+    import re as _re
+
+    encontrado = _re.match(r"^rtsp://[^:/@]+:([^@]*)@", rtsp_url or "")
+    return encontrado.group(1) if encontrado else None
+
+
+def _resolver_rtsp(nueva: str, actual: str | None) -> str:
+    nueva = nueva.strip()
+    if not nueva.lower().startswith("rtsp://"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="La dirección debe empezar con rtsp://"
+        )
+    if f":{_RTSP_MASK}@" in nueva:
+        clave = _clave_de_rtsp(actual)
+        if clave is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Escribe la clave de la cámara: no hay una guardada para conservar",
+            )
+        nueva = nueva.replace(f":{_RTSP_MASK}@", f":{clave}@", 1)
+    _validar_host(_host_de_rtsp(nueva))
+    return nueva
 
 
 def _rtsp_enmascarada(rtsp_url: str | None) -> str | None:
@@ -235,8 +288,9 @@ async def create_device(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Una cámara requiere su rtsp_url (Streaming/Channels/102 recomendado)",
         )
+    rtsp = _resolver_rtsp(body.rtsp_url, None) if body.rtsp_url else None
     device = Device(room_id=body.room_id, device_type=body.device_type, device_key=key,
-                    name=body.name, rtsp_url=body.rtsp_url)
+                    name=body.name, rtsp_url=rtsp, ip_address=_host_de_rtsp(rtsp) if rtsp else None)
     db.add(device)
     await db.flush()
     await audit(db, admin, action="dispositivo_creado", entity="device", entity_id=device.id,
@@ -252,11 +306,25 @@ async def update_device(
     device_id: int, body: DeviceUpdate, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> DeviceOut:
     device = await _get_or_404(db, Device, device_id, "Dispositivo")
-    old = {"name": device.name, "rtsp_url": _rtsp_enmascarada(device.rtsp_url), "is_active": device.is_active}
+    old = {
+        "name": device.name, "rtsp_url": _rtsp_enmascarada(device.rtsp_url),
+        "ip_address": device.ip_address, "is_active": device.is_active,
+    }
     data = body.model_dump(exclude_unset=True)
 
-    if "rtsp_url" in data and data["rtsp_url"] and _RTSP_MASK in data["rtsp_url"]:
+    if data.get("rtsp_url"):
+        if device.device_type is not DeviceType.CAMARA:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Solo las cámaras llevan RTSP")
+        data["rtsp_url"] = _resolver_rtsp(data["rtsp_url"], device.rtsp_url)
+        if "ip_address" not in data:
+            data["ip_address"] = _host_de_rtsp(data["rtsp_url"])
+    elif "rtsp_url" in data:
         data.pop("rtsp_url")
+    if data.get("ip_address"):
+        data["ip_address"] = data["ip_address"].strip()
+        _validar_host(data["ip_address"])
+    elif "ip_address" in data:
+        data["ip_address"] = None
     for field, value in data.items():
         setattr(device, field, value)
     db.add(device)

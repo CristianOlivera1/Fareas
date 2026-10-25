@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { AuthService } from '../../../../core/services/auth/auth';
 import { LiveFeed } from '../../../../core/services/live-feed';
 import { ActivityFeed } from './activity-feed';
 
@@ -24,7 +25,11 @@ describe('ActivityFeed', () => {
     });
     await TestBed.configureTestingModule({
       imports: [ActivityFeed],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AuthService, useValue: { accessToken: () => 'token-de-prueba-123' } },
+      ],
     }).compileComponents();
     fixture = TestBed.createComponent(ActivityFeed);
     httpMock = TestBed.inject(HttpTestingController);
@@ -75,5 +80,15 @@ describe('ActivityFeed', () => {
 
     expect(connect).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('No hay cámaras activas');
+  });
+
+  it('shows the live stream of the configured room', () => {
+    flushCameras(9);
+    fixture.detectChanges();
+
+    const image = fixture.nativeElement.querySelector('img') as HTMLImageElement | null;
+    expect(fixture.componentInstance.roomLabel()).toBe('LAB 306');
+    expect(fixture.componentInstance.streamUrl()).toContain('/dashboard/camera/9/mjpeg?access_token=');
+    expect(image?.getAttribute('src')).toContain('/dashboard/camera/9/mjpeg');
   });
 });
