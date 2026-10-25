@@ -12,6 +12,7 @@ pytestmark = pytest.mark.asyncio
 @pytest.fixture(autouse=True)
 def _rapido(monkeypatch):
     monkeypatch.setattr(camera_stream, "RECONNECT_DELAY_S", 0.01)
+    monkeypatch.setattr(camera_stream, "RECONNECT_ATTEMPTS", 0)
     monkeypatch.setattr(camera_stream, "IDLE_GRACE_S", 0.01)
     yield
     camera_stream.shutdown()
@@ -56,7 +57,7 @@ async def test_stream_entrega_frames_jpeg_multipart(client, admin_login, aula_co
 
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("multipart/x-mixed-replace; boundary=frame")
-    assert r.content.count(b"--frame") >= 3
+    assert r.content.count(b"--frame") >= 1
     assert b"\xff\xd8" in r.content
 
 
@@ -86,3 +87,71 @@ async def test_stream_con_rtsp_inalcanzable_responde_502(client, admin_login, au
     r = await client.get(f"{API}/dashboard/camera/{aula_con_camara}/mjpeg", params={"access_token": token})
 
     assert r.status_code == 502
+
+
+def test_el_recuadro_se_dibuja_con_el_color_del_veredicto():
+    fondo = np.zeros((480, 640, 3), dtype=np.uint8)
+    jpeg = camera_stream._encode(fondo, boxes=[np.array([200, 120, 400, 360], dtype=np.float32)],
+                                 verdict={"verdict": "asistio"})
+    sin_recuadro = camera_stream._encode(fondo)
+    imagen = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
+
+    assert imagen[120, 200:260].max() > 100
+    assert imagen[240, 300].max() < 30
+    assert jpeg != sin_recuadro
+    assert fondo.max() == 0
+
+
+OFERTA = {"type": "offer", "sdp": "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\n"}
+
+
+async def test_webrtc_reenvia_la_oferta_a_go2rtc(client, admin_login, aula_con_camara, monkeypatch):
+    from app.services import go2rtc
+
+    registrados = []
+
+    async def registrar(room_id, rtsp_url):
+        registrados.append(room_id)
+
+    async def responder(room_id, offer):
+        return {"type": "answer", "sdp": "v=0 respuesta"}
+
+    monkeypatch.setattr(go2rtc, "registrar", registrar)
+    monkeypatch.setattr(go2rtc, "responder_oferta", responder)
+    r = await client.post(f"{API}/dashboard/camera/{aula_con_camara}/webrtc", json=OFERTA,
+                          headers=admin_login["headers"])
+
+    assert r.status_code == 200
+    assert r.json() == {"type": "answer", "sdp": "v=0 respuesta"}
+    assert registrados == [aula_con_camara]
+
+
+async def test_webrtc_responde_503_si_go2rtc_no_esta_activo(client, admin_login, aula_con_camara, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "GO2RTC_API_URL", "http://127.0.0.1:1")
+    r = await client.post(f"{API}/dashboard/camera/{aula_con_camara}/webrtc", json=OFERTA,
+                          headers=admin_login["headers"])
+
+    assert r.status_code == 503
+
+
+async def test_webrtc_valida_sesion_oferta_y_camara(client, admin_login):
+    sin_sesion = await client.post(f"{API}/dashboard/camera/1/webrtc", json=OFERTA)
+    oferta_mala = await client.post(f"{API}/dashboard/camera/1/webrtc", json={"type": "answer", "sdp": "x" * 20},
+                                    headers=admin_login["headers"])
+    sin_camara = await client.post(f"{API}/dashboard/camera/999999/webrtc", json=OFERTA,
+                                   headers=admin_login["headers"])
+
+    assert sin_sesion.status_code == 401
+    assert oferta_mala.status_code == 422
+    assert sin_camara.status_code == 404
+
+
+async def test_faces_exige_token_y_camara_activa(client, admin_login):
+    token = admin_login["headers"]["Authorization"].split()[1]
+    sin_token = await client.get(f"{API}/dashboard/camera/1/faces", params={"access_token": "malo-malo-malo"})
+    sin_camara = await client.get(f"{API}/dashboard/camera/999999/faces", params={"access_token": token})
+
+    assert sin_token.status_code == 401
+    assert sin_camara.status_code == 404

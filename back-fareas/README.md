@@ -97,7 +97,10 @@ copy .env.example .env
 psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/001_schema.sql
 psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/002_seed.sql
 
+powershell -File ..\tools\go2rtc\start.ps1
+
 fastapi dev          # entrypoint de pyproject.toml (app.main:app)
+
 # alternativas: uvicorn app.main:app --reload  |  python main.py
 ```
 
