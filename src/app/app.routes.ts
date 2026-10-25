@@ -236,6 +236,12 @@ export const routes: Routes = [
         loadComponent: () => import('./features/audit/audit').then((m) => m.AuditPage),
         data: { title: 'Bitácora' },
       },
+      {
+        path: 'pilot',
+        canActivate: [navGuard('/pilot')],
+        loadComponent: () => import('./features/pilot/pilot').then((m) => m.PilotPage),
+        data: { title: 'Prueba piloto' },
+      },
     ],
   },
   {

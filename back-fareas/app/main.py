@@ -23,6 +23,7 @@ from app.routers import (
     health,
     me,
     notifications,
+    pilot,
     profile,
     reports,
     self_enrollment,
@@ -103,6 +104,7 @@ def create_app() -> FastAPI:
     app.include_router(self_enrollment.router, prefix=settings.API_V1_PREFIX)
     app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
     app.include_router(profile.router, prefix=settings.API_V1_PREFIX)
+    app.include_router(pilot.router, prefix=settings.API_V1_PREFIX)
 
     dist_dir = resolve_dist_dir(settings.FRONTEND_DIST_DIR)
     if dist_dir is not None:
