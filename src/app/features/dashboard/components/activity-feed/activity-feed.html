@@ -7,33 +7,47 @@
     </span>
   </div>
 
-  @if (entry(); as e) {
-    <div class="flex flex-col gap-4">
-      <div class="relative aspect-video max-w-2xl w-full mx-auto overflow-hidden rounded-lg bg-slate-900"
-        style="background-image: repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,0.04) 3px 4px)">
-        <div class="absolute inset-0 grid place-items-center">
-          <iconify-icon icon="material-symbols:person" width="120" class="text-slate-700" />
+  @if (roomLabel(); as label) {
+    <div class="relative mx-auto mb-4 aspect-video w-full max-w-2xl overflow-hidden rounded-lg bg-slate-900">
+      <video #video muted autoplay playsinline class="absolute inset-0 size-full object-contain"
+        [class.invisible]="mode() !== 'webrtc'" [attr.aria-label]="'Transmisión en vivo de la cámara de ' + label"></video>
+      @if (mode() === 'webrtc' && roomId() !== null && token(); as accessToken) {
+        <app-face-overlay [roomId]="roomId()!" [token]="accessToken" [video]="videoRef()?.nativeElement ?? null" />
+      }
+      @if (mode() === 'mjpeg' && streamUrl(); as url) {
+        @if (!streamFailed()) {
+          <img [src]="url" (error)="streamFailed.set(true)" alt="Transmisión en vivo de la cámara de {{ label }}"
+            class="absolute inset-0 size-full object-contain" />
+        }
+      }
+      @if (mode() === 'connecting') {
+        <div class="absolute inset-0 grid place-items-center text-xs text-slate-400">Conectando con la cámara…</div>
+      } @else if (mode() === 'mjpeg' && (streamFailed() || !streamUrl())) {
+        <div class="absolute inset-0 grid place-items-center text-center">
+          <div>
+            <iconify-icon icon="material-symbols:videocam-off-outline" width="40" class="text-slate-500" />
+            <p class="mt-1 text-xs text-slate-400">Sin señal de la cámara</p>
+          </div>
         </div>
+      }
 
-        <div class="absolute left-[32%] top-[12%] h-[62%] w-[28%] rounded-sm border-2" [class]="e.style.border">
-          <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-0.5 text-[10px] font-bold tracking-wide text-white"
-            [class]="e.style.badge">
-            {{ e.style.message }}
-          </span>
-        </div>
-
-        <div class="absolute left-3 top-3 rounded-md bg-black/60 px-2 py-1 text-[11px] leading-tight text-white">
-          <p class="flex items-center gap-1.5">
-            <span class="size-1.5 rounded-full bg-green-400"></span>
-            Aula: {{ e.room }}
-          </p>
-        </div>
-
-        <span class="absolute bottom-3 right-3 rounded bg-black/60 px-2 py-0.5 font-mono text-[11px] text-white/80">
-          {{ e.time }}
-        </span>
+      <div class="absolute left-3 top-3 rounded-md bg-black/60 px-2 py-1 text-[11px] leading-tight text-white">
+        <p class="flex items-center gap-1.5 text-[10px]">
+          Aula: {{ label }}
+        </p>
       </div>
 
+      @if (entry(); as e) {
+        <span class="absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-0.5 text-[10px] font-bold tracking-wide text-white"
+          [class]="e.style.badge">
+          {{ e.style.message }}
+        </span>
+      }
+    </div>
+  }
+
+  @if (entry(); as e) {
+    <div class="flex flex-col gap-4">
       <div class="rounded-lg bg-(--fareas-canvas) p-4 flex flex-col gap-3">
         <div class="flex items-center gap-3">
         @if (e.studentId !== null) {
@@ -75,7 +89,7 @@
       </div>
     </div>
   } @else {
-    <div class="grid min-h-64 place-items-center rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center">
+    <div class="grid min-h-24 place-items-center rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-center">
       <div>
         <iconify-icon icon="material-symbols:videocam-outline" width="36" class="text-gray-300" />
         @if (camerasLoaded() && !hasCameras()) {

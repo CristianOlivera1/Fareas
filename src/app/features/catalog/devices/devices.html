@@ -12,6 +12,7 @@
   }
 </app-page-header>
 
+
 <app-tabs
   class="mb-4"
   idPrefix="devices"
@@ -159,8 +160,14 @@
     @if (form().device_type === 'camara') {
       <app-ui-input label="Dirección de transmisión de la cámara (RTSP)" [required]="true" [mono]="true"
         placeholder="rtsp://admin:clave@10.14.5.11:554/Streaming/Channels/102"
-        hint="Usa la dirección RTSP proporcionada por la cámara."
+        [hint]="form().id !== null
+          ? 'Puedes cambiar la IP, el puerto o el canal y dejar *** para conservar la clave guardada. La IP del equipo se toma de esta dirección.'
+          : 'Usa la dirección RTSP proporcionada por la cámara.'"
         [ngModel]="form().rtsp_url" (ngModelChange)="patch({ rtsp_url: $event })" />
+    } @else if (form().id !== null) {
+      <app-ui-input label="Dirección IP del nodo" [mono]="true" placeholder="192.168.1.90"
+        hint="Opcional. Es la IP que se muestra en Monitoreo."
+        [ngModel]="form().ip_address" (ngModelChange)="patch({ ip_address: $event })" />
     }
     @if (form().id !== null) {
       <label class="flex items-center gap-2 pt-1">

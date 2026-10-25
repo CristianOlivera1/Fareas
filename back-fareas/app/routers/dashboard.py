@@ -4,7 +4,8 @@ import logging
 from datetime import date, datetime
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import text as sql_text
 from sqlmodel import select
 from sse_starlette.sse import EventSourceResponse
@@ -15,7 +16,15 @@ from app.database import SessionLocal
 from app.routers.dpi import TEACHER_SCOPE
 from app.services.course_groups import full_courses
 from app.services.camera_loop import todos_los_veredictos
-from app.tables import AppSettings, AppUser, UserRole
+from app.services import go2rtc
+from app.services.camera_stream import (
+    BOUNDARY,
+    StreamBusy,
+    StreamUnavailable,
+    face_events,
+    mjpeg_frames,
+)
+from app.tables import AppSettings, AppUser, Device, DeviceType, UserRole
 
 logger = logging.getLogger("fareas.dashboard")
 router = APIRouter(tags=["dashboard"])
@@ -178,6 +187,92 @@ async def dashboard_live_room(
     access_token: str = Query(..., min_length=10),
 ) -> EventSourceResponse:
     return await dashboard_live(access_token=access_token, room_id=room_id)
+
+async def _camara_activa(room_id: int) -> Device:
+    async with SessionLocal() as db:
+        camara = (
+            await db.exec(
+                select(Device).where(
+                    Device.room_id == room_id,
+                    Device.device_type == DeviceType.CAMARA,
+                    Device.is_active,
+                    Device.rtsp_url.is_not(None),
+                )
+            )
+        ).first()
+    if camara is None or not camara.rtsp_url:
+        raise HTTPException(status_code=404, detail="El aula no tiene una cámara activa con RTSP")
+    return camara
+
+
+class SdpIn(BaseModel):
+    type: str = Field(pattern="^offer$")
+    sdp: str = Field(min_length=10, max_length=20000)
+
+
+@router.post("/dashboard/camera/{room_id}/webrtc")
+async def dashboard_camera_webrtc(
+    room_id: int,
+    oferta: SdpIn,
+    user: RequireRole(UserRole.ADMIN, UserRole.DOCENTE),
+) -> dict:
+    camara = await _camara_activa(room_id)
+    try:
+        await go2rtc.registrar(room_id, camara.rtsp_url)
+        return await go2rtc.responder_oferta(room_id, oferta.model_dump())
+    except go2rtc.Go2rtcUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/dashboard/camera/{room_id}/faces")
+async def dashboard_camera_faces(
+    room_id: int,
+    access_token: str = Query(..., min_length=10),
+) -> EventSourceResponse:
+    await _usuario_de_token(access_token)
+    camara = await _camara_activa(room_id)
+    fuente = await go2rtc.fuente_para_deteccion(room_id, camara.rtsp_url)
+
+    async def generador():
+        try:
+            async for evento in face_events(room_id, fuente):
+                yield {"event": "faces", "data": json.dumps(evento)}
+        except (StreamBusy, StreamUnavailable):
+            return
+
+    return EventSourceResponse(generador(), ping=15)
+
+
+@router.get("/dashboard/camera/{room_id}/mjpeg")
+async def dashboard_camera(
+    room_id: int,
+    access_token: str = Query(..., min_length=10),
+) -> StreamingResponse:
+    await _usuario_de_token(access_token)
+    camara = await _camara_activa(room_id)
+    fuente = await go2rtc.fuente_para_deteccion(room_id, camara.rtsp_url)
+    frames = mjpeg_frames(room_id, fuente)
+    try:
+        primero = await anext(frames)
+    except StreamBusy as exc:
+        raise HTTPException(status_code=429, detail="Ya hay demasiadas vistas abiertas de esta cámara") from exc
+    except StreamUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except StopAsyncIteration as exc:
+        raise HTTPException(status_code=502, detail="La cámara no entregó imagen") from exc
+
+    async def cuerpo():
+        try:
+            yield primero
+            async for parte in frames:
+                yield parte
+        finally:
+            await frames.aclose()
+
+    return StreamingResponse(
+        cuerpo(), media_type=f"multipart/x-mixed-replace; boundary={BOUNDARY}",
+        headers={"Cache-Control": "no-store"},
+    )
 
 HORA_INICIO, HORA_FIN = 7, 20
 

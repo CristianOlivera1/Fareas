@@ -185,3 +185,57 @@ def test_smoke_galeria_desde_bd():
 
     n = asyncio.run(_cargar())
     assert n >= 0
+
+
+def test_galeria_rechaza_identidad_ambigua_por_margen():
+    g = FaceGallery()
+    base = _vec(1)
+    parecido = base.copy()
+    parecido[0] += 0.05
+    parecido /= np.linalg.norm(parecido)
+    g.set_student(1, [base])
+    g.set_student(2, [parecido])
+    sid, _ = g.identify(base, threshold=0.5, margin=0.0)
+    assert sid == 1
+    sid, sim = g.identify(base, threshold=0.5, margin=0.2)
+    assert sid is None and sim > 0.9
+
+
+def test_pipeline_exige_frames_consecutivos_antes_de_marcar():
+    g = FaceGallery()
+    g.set_student(7, [_vec(7)])
+    p = VisionPipeline(_DetFake(), _EmbFake(), g, threshold=0.75, confirm_frames=3,
+                       classifier=lambda sid, t: "asistio")
+    veredictos = [p.process_frame(_frame(7), now=float(i), track_key=1).verdict for i in range(3)]
+    assert veredictos == ["verificando", "verificando", "asistio"]
+
+
+def test_pipeline_reinicia_la_confirmacion_si_cambia_la_persona():
+    g = FaceGallery()
+    g.set_student(7, [_vec(7)])
+    g.set_student(8, [_vec(8)])
+    p = VisionPipeline(_DetFake(), _EmbFake(), g, threshold=0.75, confirm_frames=2,
+                       classifier=lambda sid, t: "asistio")
+    assert p.process_frame(_frame(7), now=0.0, track_key=1).verdict == "verificando"
+    assert p.process_frame(_frame(8), now=1.0, track_key=1).verdict == "verificando"
+    assert p.process_frame(_frame(8), now=2.0, track_key=1).verdict == "asistio"
+
+
+@pytest.mark.skipif(not all(m.exists() for m in MODELOS) or not VIDEO.exists(),
+                    reason="requiere models/*.onnx y resources/ con el video demo")
+def test_landmarks_caen_dentro_del_rostro_en_orden_anatomico():
+    from app.ai.detector import ScrfdDetector
+
+    det = ScrfdDetector(str(MODELOS[0]))
+    cara = None
+    for frame in _video_frames(VIDEO):
+        encontradas = det.detect(frame, max_faces=1)
+        if encontradas:
+            cara = encontradas[0]
+            break
+    assert cara is not None
+    x1, y1, x2, y2 = cara.box
+    ojo_izq, ojo_der, nariz, boca_izq, boca_der = cara.kps
+    assert ojo_izq[0] < ojo_der[0] and boca_izq[0] < boca_der[0]
+    assert ojo_izq[1] < nariz[1] < boca_izq[1]
+    assert all(x1 <= p[0] <= x2 and y1 <= p[1] <= y2 for p in cara.kps)

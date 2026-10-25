@@ -24,6 +24,12 @@ class Settings(BaseSettings):
 
     MODELS_DIR: str = "models"
     FACE_MATCH_THRESHOLD: float = 0.75
+    GO2RTC_ENABLED: bool = True
+    GO2RTC_API_URL: str = "http://127.0.0.1:1984"
+    GO2RTC_RTSP_URL: str = "rtsp://127.0.0.1:8554"
+    FACE_MATCH_MARGIN: float = 0.06
+    FACE_CONFIRM_FRAMES: int = 3
+    FACE_MIN_SIZE_PX: int = 60
 
     MAIL_ENABLED: bool = True
     MAIL_HOST: str = "smtp.gmail.com"

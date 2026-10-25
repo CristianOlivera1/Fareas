@@ -30,6 +30,7 @@ _task: asyncio.Task | None = None
 _stop = asyncio.Event()
 
 _ultimo: dict[int, dict] = {}
+_ultimo_mono: dict[int, float] = {}
 _reintentar_desde: dict[int, float] = {}
 _BACKOFF_CAIDA = 60.0
 _fuentes: dict[int, object] = {}
@@ -73,6 +74,12 @@ async def _reset_cameras_offline() -> None:
 
 
 def ultimo_veredicto(room_id: int) -> dict | None:
+    return _ultimo.get(room_id)
+
+def veredicto_reciente(room_id: int, max_age: float = 3.0) -> dict | None:
+    marca = _ultimo_mono.get(room_id)
+    if marca is None or time.monotonic() - marca > max_age:
+        return None
     return _ultimo.get(room_id)
 
 def todos_los_veredictos() -> list[dict]:
@@ -184,7 +191,8 @@ async def _procesar_aula(pipe, room_id: int) -> None:
         await db.commit()
 
         pipe.classifier = clasificador
-        resultado = pipe.process_frame(frame, candidates=candidates)
+        pipe.threshold = float(cfg.face_match_threshold)
+        resultado = pipe.process_frame(frame, candidates=candidates, track_key=room_id)
         _ultimo[room_id] = {
             "room_id": room_id,
             "verdict": resultado.verdict,
@@ -192,6 +200,7 @@ async def _procesar_aula(pipe, room_id: int) -> None:
             "similarity": round(resultado.similarity, 4),
             "ts": ahora_peru().isoformat(timespec="seconds"),
         }
+        _ultimo_mono[room_id] = time.monotonic()
 
         if resultado.verdict == "denegado" and resultado.student_id is not None and pares:
             from app.tables import CourseGroup as _CG

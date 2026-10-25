@@ -22,6 +22,12 @@ MIN_PHOTOS = 3
 MAX_PHOTOS = 5
 INTRA_MIN_SIMILARITY = 0.40
 DETECT_THRESHOLD = 0.5
+DUPLICATE_SIMILARITY = 0.60
+MIN_FACE_PX = 90
+MIN_DETECT_SCORE = 0.6
+MAX_YAW_RATIO = 0.35
+MAX_ROLL_DEG = 20.0
+MIN_SHARPNESS = 25.0
 
 
 def _decode_photo(b64: str) -> np.ndarray:
@@ -37,12 +43,48 @@ def _decode_photo(b64: str) -> np.ndarray:
         raise errors.DomainError("La foto es demasiado pequeña (mínimo 80x80)")
     return img
 
+def _nitidez(img: np.ndarray, box: np.ndarray) -> float:
+    height, width = img.shape[:2]
+    x1, y1 = max(0, int(box[0])), max(0, int(box[1]))
+    x2, y2 = min(width, int(box[2])), min(height, int(box[3]))
+    if x2 - x1 < 8 or y2 - y1 < 8:
+        return 0.0
+    gris = cv2.cvtColor(img[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
+    gris = cv2.resize(gris, (112, 112), interpolation=cv2.INTER_AREA)
+    return float(cv2.Laplacian(gris, cv2.CV_64F).var())
+
+
+def validar_calidad(img: np.ndarray, face, idx: int) -> None:
+    ancho = float(face.box[2] - face.box[0])
+    alto = float(face.box[3] - face.box[1])
+    if min(ancho, alto) < MIN_FACE_PX:
+        raise errors.DomainError(
+            f"Foto {idx}: el rostro es muy pequeño ({int(min(ancho, alto))} px, mínimo {MIN_FACE_PX}); "
+            "acércate a la cámara"
+        )
+    if face.score < MIN_DETECT_SCORE:
+        raise errors.DomainError(f"Foto {idx}: el rostro no se ve con claridad; mejora la iluminación")
+    ojo_izq, ojo_der, nariz = face.kps[0], face.kps[1], face.kps[2]
+    distancia = float(np.linalg.norm(ojo_der - ojo_izq))
+    if distancia < 1.0:
+        raise errors.DomainError(f"Foto {idx}: no se distinguen los ojos; mira de frente a la cámara")
+    desvio = abs(float(nariz[0] - (ojo_izq[0] + ojo_der[0]) / 2)) / distancia
+    if desvio > MAX_YAW_RATIO:
+        raise errors.DomainError(f"Foto {idx}: mira de frente a la cámara, sin girar la cabeza")
+    inclinacion = abs(float(np.degrees(np.arctan2(ojo_der[1] - ojo_izq[1], ojo_der[0] - ojo_izq[0]))))
+    if inclinacion > MAX_ROLL_DEG:
+        raise errors.DomainError(f"Foto {idx}: mantén la cabeza derecha")
+    if _nitidez(img, face.box) < MIN_SHARPNESS:
+        raise errors.DomainError(f"Foto {idx}: la foto está borrosa; mantén firme la cámara y mejora la luz")
+
+
 def _embedding_de_foto(det: ScrfdDetector, emb: ArcFaceEmbedder, img: np.ndarray, idx: int) -> np.ndarray:
     faces = det.detect(img, det_thresh=DETECT_THRESHOLD, max_faces=2)
     if not faces:
         raise errors.DomainError(f"Foto {idx}: no se detectó ningún rostro")
     if len(faces) > 1:
         raise errors.DomainError(f"Foto {idx}: se detectaron {len(faces)} rostros; debe ser solo el alumno")
+    validar_calidad(img, faces[0], idx)
     return emb.get(img, faces[0].kps)
 
 def group_consistency(embeddings: list[np.ndarray]) -> tuple[float, int, float]:
@@ -58,6 +100,31 @@ def group_consistency(embeddings: list[np.ndarray]) -> tuple[float, int, float]:
         for b in range(a + 1, len(embeddings))
     )
     return worst_similarity, worst_index, min_pair
+
+
+async def _rechazar_rostro_duplicado(db: SQLModelAsyncSession, student_id: int, vector: np.ndarray) -> None:
+    from app.ai.recognizer import parse_pg_array
+
+    filas = (
+        await db.exec(
+            select(FaceEmbedding.vector, AppUser.code, AppUser.full_name)
+            .join(AppUser, AppUser.id == FaceEmbedding.student_id)
+            .where(FaceEmbedding.student_id != student_id, FaceEmbedding.is_current, AppUser.is_active)
+        )
+    ).all()
+    mejor: tuple[float, str, str] | None = None
+    for crudo, codigo, nombre in filas:
+        otro = parse_pg_array(crudo)
+        if otro is None or otro.size != vector.size:
+            continue
+        similitud = float(vector @ otro)
+        if similitud >= DUPLICATE_SIMILARITY and (mejor is None or similitud > mejor[0]):
+            mejor = (similitud, codigo or "sin código", nombre)
+    if mejor is not None:
+        raise errors.ConflictError(
+            f"Este rostro ya está enrolado en la cuenta de {mejor[2]} ({mejor[1]}), similitud {mejor[0]:.2f}. "
+            "Si es la misma persona, elimina primero el rostro de esa cuenta; si no, repite las fotos con mejor luz y de frente"
+        )
 
 
 async def enrolar(
@@ -91,6 +158,8 @@ async def enrolar(
 
     promedio = np.mean(embeddings, axis=0)
     promedio /= np.linalg.norm(promedio)
+
+    await _rechazar_rostro_duplicado(db, student_id, promedio)
 
     storage = get_storage()
     photo_key = None

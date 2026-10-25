@@ -48,3 +48,8 @@ src/environments/environment.production.ts
 src/environments/environment.development.ts
 
 .freebuff
+
+# go2rtc
+tools/go2rtc/go2rtc.exe
+tools/go2rtc/go2rtc.zip
+tools/go2rtc/go2rtc.yaml

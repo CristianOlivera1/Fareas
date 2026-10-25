@@ -66,4 +66,7 @@ def vision_pipeline(cooldown_seconds: float = 30.0, threshold: float | None = No
         _gallery,
         threshold=threshold if threshold is not None else get_settings().FACE_MATCH_THRESHOLD,
         cooldown_seconds=cooldown_seconds,
+        margin=get_settings().FACE_MATCH_MARGIN,
+        confirm_frames=get_settings().FACE_CONFIRM_FRAMES,
+        min_face_px=get_settings().FACE_MIN_SIZE_PX,
     )
