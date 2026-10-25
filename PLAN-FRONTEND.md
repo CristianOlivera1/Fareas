@@ -798,10 +798,11 @@ la UI solo oculta botones con `@if (auth.isAdmin())`.
   **Parámetros → Asistencia → Cámara del dashboard** (`app_settings.live_room_id`,
   `db/013_camara_dashboard.sql`). Sin configurar usa la primera cámara activa; si
   no hay cámaras activas lo indica. El stream SSE se abre filtrado por `room_id`.
-- **Video en vivo (2026-10-24):** la tarjeta muestra la imagen real de la cámara del aula con
-  `<img>` apuntando a `GET /dashboard/camera/{room_id}/mjpeg?access_token=` (MJPEG a ~5 fps y
-  640 px de ancho, generado desde el RTSP de la cámara; máx. 2 vistas por aula). Los veredictos
-  siguen llegando por SSE y se superponen como etiqueta. Se recomienda registrar el canal
+- **Video en vivo (2026-10-24):** la tarjeta muestra la cámara del aula por WebRTC cuando go2rtc está disponible,
+  con overlay facial por SSE; si WebRTC no está soportado o falla, usa
+  `<img>` apuntando a `GET /dashboard/camera/{room_id}/mjpeg?access_token=` (MJPEG a ~15 fps y
+  hasta 960 px, con lector compartido por aula que descarta frames viejos para no acumular retraso).
+  Se recomienda registrar el canal
   `102` (substream) en Dispositivos.
 
 ### F6h - Reportes profesionales (2026-10-24) - **✅ LISTO**
@@ -873,3 +874,8 @@ Se quitan al docente `Cursos y grupos`, `Horario general`, `Matrículas` y `Estu
 ### 8.6 Avisos pendientes de backend
 - `GET /dpi/at-risk` filtra al docente por **curso**, no por grupo: ve alumnos de otros grupos del mismo curso. Acotar a sus grupos.
 - `GET /students` sigue devolviendo todos los alumnos al docente (ya anotado en §7.3).
+
+### F6i — Video en vivo por WebRTC con recuadro facial
+- `core/services/camera-webrtc.ts` (`CameraWebrtc`): `RTCPeerConnection` recvonly, espera ICE (máx. 2 s), envía la oferta a `POST /dashboard/camera/{room}/webrtc` y asigna el stream al `<video>`; `lost` marca la caída.
+- `features/dashboard/components/face-overlay`: `EventSource` a `/faces`, `<canvas>` sobre el video con esquinas en el rostro (suavizado entre detecciones, color según veredicto) y etiqueta; geometría en `shared/utils/face-box.ts` (letterbox `object-contain`).
+- `activity-feed`: modo `connecting | webrtc | mjpeg`; si el navegador no soporta WebRTC o go2rtc no responde, usa el MJPEG (con recuadros dibujados por el servidor). Specs: `face-box.spec.ts`, `camera-webrtc.spec.ts`, `activity-feed.spec.ts`.

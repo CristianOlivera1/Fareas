@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { AuthService } from '../../../../core/services/auth/auth';
+import { CameraWebrtc } from '../../../../core/services/camera-webrtc';
 import { LiveFeed } from '../../../../core/services/live-feed';
 import { ActivityFeed } from './activity-feed';
 
@@ -19,6 +20,7 @@ describe('ActivityFeed', () => {
     TestBed.overrideComponent(ActivityFeed, {
       set: {
         providers: [
+          CameraWebrtc,
           { provide: LiveFeed, useValue: { connect, close: vi.fn(), status: () => 'idle', latest: () => null } },
         ],
       },

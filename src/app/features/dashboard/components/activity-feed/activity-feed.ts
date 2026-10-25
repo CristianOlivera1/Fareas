@@ -3,20 +3,24 @@ import {
   Component,
   CUSTOM_ELEMENTS_SCHEMA,
   DestroyRef,
+  ElementRef,
   computed,
   effect,
   inject,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import { forkJoin } from 'rxjs';
 
 import { environment } from '../../../../../environments/environment';
 import { AuthService } from '../../../../core/services/auth/auth';
 import { CalendarApi } from '../../../../core/services/calendar-api';
+import { CameraWebrtc } from '../../../../core/services/camera-webrtc';
 import { CatalogApi } from '../../../../core/services/catalog-api';
 import { LiveFeed, LiveStatus, LiveVerdict, VerdictKind } from '../../../../core/services/live-feed';
 import { Avatar } from '../../../../shared/components/avatar/avatar';
+import { FaceOverlay } from '../face-overlay/face-overlay';
 
 interface VerdictStyle {
   readonly label: string;
@@ -75,10 +79,10 @@ const STATUS_TEXT: Record<LiveStatus, { label: string; dot: string }> = {
 
 @Component({
   selector: 'app-activity-feed',
-  imports: [Avatar],
+  imports: [Avatar, FaceOverlay],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   templateUrl: './activity-feed.html',
-  providers: [LiveFeed],
+  providers: [LiveFeed, CameraWebrtc],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
 })
@@ -87,6 +91,7 @@ export class ActivityFeed {
   private readonly catalog = inject(CatalogApi);
   private readonly calendar = inject(CalendarApi);
   private readonly auth = inject(AuthService);
+  private readonly webrtc = inject(CameraWebrtc);
 
   private readonly lastVerdict = signal<LiveVerdict | null>(null);
   private readonly names = signal<
@@ -104,6 +109,9 @@ export class ActivityFeed {
     return room === null ? null : (this.cameraRooms()[room] ?? null);
   });
 
+  readonly videoRef = viewChild<ElementRef<HTMLVideoElement>>('video');
+  readonly mode = signal<'connecting' | 'webrtc' | 'mjpeg'>(this.webrtc.supported ? 'connecting' : 'mjpeg');
+  readonly token = computed(() => this.auth.accessToken());
   readonly streamFailed = signal(false);
   readonly streamUrl = computed(() => {
     const room = this.roomId();
@@ -135,7 +143,10 @@ export class ActivityFeed {
 
   constructor() {
     const destroyRef = inject(DestroyRef);
-    destroyRef.onDestroy(() => this.live.close());
+    destroyRef.onDestroy(() => {
+      this.live.close();
+      this.webrtc.stop();
+    });
 
     forkJoin({
       settings: this.calendar.settings(),
@@ -174,10 +185,36 @@ export class ActivityFeed {
     });
 
     effect(() => {
+      const room = this.roomId();
+      const video = this.videoRef()?.nativeElement;
+      untracked(() => this.startVideo(room, video));
+    });
+
+    effect(() => {
+      if (this.webrtc.lost()) this.mode.set('mjpeg');
+    });
+
+    effect(() => {
       const verdict = this.live.latest();
       if (!verdict || verdict.verdict === 'sin_rostro') return;
       this.lastVerdict.set(verdict);
       untracked(() => this.resolveName(verdict.student_id));
+    });
+  }
+
+  private startVideo(room: number | null, video: HTMLVideoElement | undefined): void {
+    if (room === null) {
+      this.webrtc.stop();
+      return;
+    }
+    if (!this.webrtc.supported) {
+      this.mode.set('mjpeg');
+      return;
+    }
+    if (!video) return;
+    this.mode.set('connecting');
+    void this.webrtc.start(video, room).then((connected) => {
+      if (this.roomId() === room) this.mode.set(connected ? 'webrtc' : 'mjpeg');
     });
   }
 
