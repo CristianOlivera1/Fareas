@@ -88,8 +88,8 @@ class ScrfdDetector:
             axis=1,
         )
         kps = np.empty_like(kps_d)
-        kps[:, 0::2] = centers[:, 0:1] - kps_d[:, 0::2]
-        kps[:, 1::2] = centers[:, 1:2] - kps_d[:, 1::2]
+        kps[:, 0::2] = centers[:, 0:1] + kps_d[:, 0::2]
+        kps[:, 1::2] = centers[:, 1:2] + kps_d[:, 1::2]
         return scores, boxes, kps
 
     def detect(self, frame: np.ndarray, det_thresh: float | None = None, max_faces: int = 0) -> list[Face]:

@@ -26,6 +26,12 @@ For a complete list of available schematics (such as `components`, `directives`,
 ng generate --help
 ```
 
+## Realtime video 
+
+```bash 
+powershell -File ..\tools\go2rtc\start.ps1
+```
+
 ## Building
 
 To build the project run:

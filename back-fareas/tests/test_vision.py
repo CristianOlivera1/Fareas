@@ -219,3 +219,23 @@ def test_pipeline_reinicia_la_confirmacion_si_cambia_la_persona():
     assert p.process_frame(_frame(7), now=0.0, track_key=1).verdict == "verificando"
     assert p.process_frame(_frame(8), now=1.0, track_key=1).verdict == "verificando"
     assert p.process_frame(_frame(8), now=2.0, track_key=1).verdict == "asistio"
+
+
+@pytest.mark.skipif(not all(m.exists() for m in MODELOS) or not VIDEO.exists(),
+                    reason="requiere models/*.onnx y resources/ con el video demo")
+def test_landmarks_caen_dentro_del_rostro_en_orden_anatomico():
+    from app.ai.detector import ScrfdDetector
+
+    det = ScrfdDetector(str(MODELOS[0]))
+    cara = None
+    for frame in _video_frames(VIDEO):
+        encontradas = det.detect(frame, max_faces=1)
+        if encontradas:
+            cara = encontradas[0]
+            break
+    assert cara is not None
+    x1, y1, x2, y2 = cara.box
+    ojo_izq, ojo_der, nariz, boca_izq, boca_der = cara.kps
+    assert ojo_izq[0] < ojo_der[0] and boca_izq[0] < boca_der[0]
+    assert ojo_izq[1] < nariz[1] < boca_izq[1]
+    assert all(x1 <= p[0] <= x2 and y1 <= p[1] <= y2 for p in cara.kps)

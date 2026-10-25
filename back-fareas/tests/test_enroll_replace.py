@@ -13,9 +13,12 @@ from app.tables import AppUser, AuditLog, FaceEmbedding, UserRole
 EMAIL = "temp.replace.faces@unamba.edu.pe"
 
 
+FRONTAL_KPS = np.array([[40, 45], [80, 45], [60, 65], [45, 85], [75, 85]], dtype=np.float32)
+
+
 class FakeDetector:
     def detect(self, image, det_thresh=0.5, max_faces=1):
-        return [SimpleNamespace(kps=np.zeros((5, 2), dtype=np.float32))]
+        return [SimpleNamespace(box=np.array([5, 5, 115, 115], dtype=np.float32), score=0.9, kps=FRONTAL_KPS)]
 
 
 class FakeEmbedder:
@@ -30,7 +33,7 @@ class FakeEmbedder:
 
 
 def _photo() -> str:
-    image = np.full((120, 120, 3), 127, dtype=np.uint8)
+    image = np.random.default_rng(1).integers(0, 255, (120, 120, 3), dtype=np.uint8)
     ok, buffer = cv2.imencode(".jpg", image)
     assert ok
     return "data:image/jpeg;base64," + base64.b64encode(buffer.tobytes()).decode()
@@ -95,3 +98,54 @@ async def test_deleting_the_face_removes_the_stored_photo(db_session, setup):
 
     assert result["deleted"] == 1
     assert list(setup.storage_dir.iterdir()) == []
+
+
+def _rostro(box=(5, 5, 115, 115), score=0.9, kps=FRONTAL_KPS):
+    return SimpleNamespace(box=np.array(box, dtype=np.float32), score=score, kps=np.array(kps, dtype=np.float32))
+
+
+def _imagen_nitida() -> np.ndarray:
+    return np.random.default_rng(3).integers(0, 255, (120, 120, 3), dtype=np.uint8)
+
+
+def test_calidad_acepta_un_rostro_frontal_y_nitido():
+    faces.validar_calidad(_imagen_nitida(), _rostro(), 1)
+
+
+@pytest.mark.parametrize(
+    ("rostro", "texto"),
+    [
+        (_rostro(box=(40, 40, 90, 90)), "muy pequeño"),
+        (_rostro(score=0.4), "no se ve con claridad"),
+        (_rostro(kps=[[40, 45], [80, 45], [78, 65], [45, 85], [75, 85]]), "de frente"),
+        (_rostro(kps=[[40, 45], [80, 75], [60, 65], [45, 85], [75, 85]]), "cabeza derecha"),
+    ],
+)
+def test_calidad_rechaza_fotos_deficientes(rostro, texto):
+    with pytest.raises(faces.errors.DomainError, match=texto):
+        faces.validar_calidad(_imagen_nitida(), rostro, 2)
+
+
+def test_calidad_rechaza_fotos_borrosas():
+    plana = np.full((120, 120, 3), 127, dtype=np.uint8)
+    with pytest.raises(faces.errors.DomainError, match="borrosa"):
+        faces.validar_calidad(plana, _rostro(), 1)
+
+
+async def test_enrolar_nombra_la_cuenta_que_ya_tiene_ese_rostro(db_session, setup, monkeypatch):
+    await _enroll(db_session, setup)
+    otro = AppUser(
+        role=UserRole.ESTUDIANTE, email="temp.replace.faces.otro@unamba.edu.pe", code="990002",
+        full_name="Otra Cuenta", password_hash="x", is_active=True,
+    )
+    db_session.add(otro)
+    await db_session.commit()
+    await db_session.refresh(otro)
+    otro_id = otro.id
+    try:
+        monkeypatch.setattr(faces, "get_embedder", lambda: SimpleNamespace(get=lambda image, kps: np.ones(512, dtype=np.float32) / np.sqrt(512)))
+        with pytest.raises(faces.errors.ConflictError, match=r"Estudiante Reemplazo \(990001\)"):
+            await faces.enrolar(db_session, setup.admin, otro_id, [_photo(), _photo(), _photo()], consent=True)
+    finally:
+        await db_session.exec(delete(AppUser).where(AppUser.id == otro_id))
+        await db_session.commit()
