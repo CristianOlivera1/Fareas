@@ -88,6 +88,7 @@ export const NAV: readonly NavEntry[] = [
       { label: 'Alumnos en riesgo', route: '/at-risk', icon: 'material-symbols:warning-outline', roles: SOLO_ADMIN },
       { label: 'Reportes', route: '/reports', icon: 'material-symbols:description-outline', roles: TODOS },
       { label: 'Bitácora', route: '/audit', icon: 'material-symbols:history-toggle-off-outline', roles: SOLO_ADMIN },
+      { label: 'Prueba piloto', route: '/pilot', icon: 'material-symbols:science-outline', roles: SOLO_ADMIN },
     ],
   },
 ];
