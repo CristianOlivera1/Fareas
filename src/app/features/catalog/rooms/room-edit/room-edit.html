@@ -1,0 +1,55 @@
+@if (!autoOpen()) {
+  <button
+    type="button"
+    class="edit-room-trigger grid size-11 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--fareas-primary)"
+    [class.is-always-visible]="alwaysVisible()"
+    [attr.aria-label]="'Editar aula ' + room().code"
+    title="Editar aula"
+    (click)="open()"
+  >
+    <iconify-icon icon="material-symbols:edit-outline" width="18" aria-hidden="true"></iconify-icon>
+  </button>
+}
+
+<p-dialog
+  header="Editar aula"
+  [(visible)]="visible"
+  [modal]="true"
+  [style]="{ width: '420px' }"
+>
+  <div class="space-y-4 pt-2">
+    <app-ui-input
+      label="Código"
+      [disabled]="true"
+      hint="El código no se puede cambiar después de crear el aula"
+      [ngModel]="room().code"
+    />
+    <app-ui-input
+      label="Nombre"
+      placeholder="Laboratorio de Redes"
+      [ngModel]="form().name"
+      (ngModelChange)="patch({ name: $event })"
+    />
+    <app-ui-input
+      label="Edificio"
+      placeholder="Pabellón de Informática"
+      [ngModel]="form().building"
+      (ngModelChange)="patch({ building: $event })"
+    />
+    <label class="flex items-center gap-2 pt-1">
+      <p-toggleswitch
+        [ngModel]="form().is_active"
+        (ngModelChange)="patch({ is_active: $event })"
+      />
+      <span class="text-sm text-gray-700">Aula activa (abre sesiones)</span>
+    </label>
+  </div>
+  <ng-template pTemplate="footer">
+    <app-ui-button variant="ghost" [disabled]="saving()" (click)="visible.set(false)">
+      Cancelar
+    </app-ui-button>
+    <app-ui-button [loading]="saving()" [disabled]="saving()" (click)="save()">
+      Guardar
+    </app-ui-button>
+  </ng-template>
+</p-dialog>

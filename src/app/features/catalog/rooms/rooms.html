@@ -6,6 +6,59 @@
   }
 </app-page-header>
 
+@if (buildingMapError(); as msg) {
+  <app-ui-alert variant="danger" title="No se pudo cargar el plano de aulas" class="mb-4 block">
+    {{ msg }}
+  </app-ui-alert>
+}
+
+<app-room-building-map
+  class="mb-4 block"
+  [rooms]="buildingRooms()"
+  [selectedRoom]="selectedRoom()"
+  [loading]="buildingMapLoading()"
+  (selected)="selectRoom($event)"
+  (edit)="openRoomEditor($event)"
+/>
+
+@if (editingRoom(); as room) {
+  <app-room-edit
+    [room]="room"
+    [autoOpen]="true"
+    (visibleChange)="closeRoomEditor($event)"
+    (saved)="reload()"
+  />
+}
+
+@if (selectedRoom(); as room) {
+  <section class="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-xs sm:px-5">
+    <div class="flex min-w-0 items-center gap-3">
+      <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-(--fareas-primary)">
+        <iconify-icon icon="material-symbols:meeting-room-outline" width="22" aria-hidden="true"></iconify-icon>
+      </span>
+      <div class="min-w-0">
+        <p class="text-xs font-medium text-gray-500">Aula seleccionada</p>
+        <h2 class="truncate text-sm font-semibold text-gray-900">
+          {{ room.code }}@if (room.name) { <span class="font-normal text-gray-600"> · {{ room.name }}</span> }
+        </h2>
+        <p class="truncate text-xs text-gray-500">{{ room.building || 'Edificio de Aulas' }}</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      @if (room.is_active) {
+        <span class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+          <span class="size-1.5 rounded-full bg-green-500"></span> Activa
+        </span>
+      } @else {
+        <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+          <span class="size-1.5 rounded-full bg-gray-400"></span> Inactiva
+        </span>
+      }
+      <app-room-edit [room]="room" [alwaysVisible]="true" (saved)="reload()" />
+    </div>
+  </section>
+}
+
 <div class="mb-4 flex flex-wrap items-center gap-3">
   <app-ui-input class="w-full sm:w-72" icon="material-symbols:search" placeholder="Buscar por código o nombre…"
     [ngModel]="q()" (ngModelChange)="onSearch($event)" />
@@ -38,32 +91,20 @@
     }
   </ng-template>
   <ng-template appCell="actions" let-room>
-    <div class="flex items-center justify-center gap-1">
-      <button type="button"
-        class="grid size-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-        title="Editar aula" (click)="openEdit(room)">
-        <iconify-icon icon="material-symbols:edit-outline" width="18"></iconify-icon>
-      </button>
-    </div>
+    <app-room-edit [room]="room" (saved)="reload()" />
   </ng-template>
 </app-data-table>
 
-<p-dialog [header]="form().id ? 'Editar aula' : 'Nueva aula'"
+<p-dialog header="Nueva aula"
   [(visible)]="dialogVisible" [modal]="true" [style]="{ width: '420px' }">
   <div class="space-y-4 pt-2">
     <app-ui-input label="Código" [required]="true" placeholder="LAB 304"
-      [disabled]="form().id !== null" hint="Único por aula; no se puede cambiar después"
+      hint="Único por aula"
       [ngModel]="form().code" (ngModelChange)="patch({ code: $event })" />
     <app-ui-input label="Nombre" placeholder="Laboratorio de Redes"
       [ngModel]="form().name" (ngModelChange)="patch({ name: $event })" />
     <app-ui-input label="Edificio" placeholder="Pabellón de Informática"
       [ngModel]="form().building" (ngModelChange)="patch({ building: $event })" />
-    @if (form().id !== null) {
-      <label class="flex items-center gap-2 pt-1">
-        <p-toggleswitch [ngModel]="form().is_active" (ngModelChange)="patch({ is_active: $event })" />
-        <span class="text-sm text-gray-700">Aula activa (abre sesiones)</span>
-      </label>
-    }
   </div>
   <ng-template pTemplate="footer">
     <app-ui-button variant="ghost" (click)="dialogVisible = false">Cancelar</app-ui-button>
