@@ -1,4 +1,5 @@
 import time
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -8,6 +9,8 @@ import numpy as np
 from app.ai.detector import Face, ScrfdDetector
 from app.ai.embedder import ArcFaceEmbedder
 from app.ai.recognizer import FaceGallery
+
+SAME_PERSON_MIN = 0.45
 
 COLORS: dict[str, tuple[int, int, int]] = {
     "verde": (0, 200, 0),
@@ -63,6 +66,8 @@ class VisionPipeline:
         margin: float = 0.0,
         confirm_frames: int = 1,
         min_face_px: int = 0,
+        smooth_frames: int = 1,
+        max_yaw: float | None = None,
     ) -> None:
         self.detector = detector
         self.embedder = embedder
@@ -73,6 +78,9 @@ class VisionPipeline:
         self.margin = margin
         self.confirm_frames = max(1, confirm_frames)
         self.min_face_px = min_face_px
+        self.smooth_frames = max(1, smooth_frames)
+        self.max_yaw = max_yaw
+        self._windows: dict[object, deque[np.ndarray]] = {}
         self._last_mark: dict[int, float] = {}
         self._streaks: dict[object, tuple[int, int]] = {}
         self._clock: Callable[[], float] = time.monotonic
@@ -85,6 +93,31 @@ class VisionPipeline:
         width = float(face.box[2] - face.box[0])
         height = float(face.box[3] - face.box[1])
         return min(width, height) >= self.min_face_px
+
+    def _frontal(self, face: Face) -> bool:
+        if self.max_yaw is None:
+            return True
+        left_eye, right_eye, nose = face.kps[0], face.kps[1], face.kps[2]
+        eye_distance = float(np.linalg.norm(right_eye - left_eye))
+        if eye_distance < 1.0:
+            return False
+        yaw = abs(float(nose[0] - (left_eye[0] + right_eye[0]) / 2)) / eye_distance
+        return yaw <= self.max_yaw
+
+    def _smoothed(self, track_key: object, embedding: np.ndarray) -> np.ndarray:
+        if self.smooth_frames == 1:
+            return embedding
+        window = self._windows.get(track_key)
+        if window is None:
+            window = self._windows[track_key] = deque(maxlen=self.smooth_frames)
+        if window:
+            reference = np.mean(window, axis=0)
+            reference /= np.linalg.norm(reference)
+            if float(embedding @ reference) < SAME_PERSON_MIN:
+                window.clear()
+        window.append(embedding)
+        mean = np.mean(window, axis=0)
+        return (mean / np.linalg.norm(mean)).astype(np.float32)
 
     def _confirmed(self, track_key: object, sid: int) -> bool:
         last_sid, count = self._streaks.get(track_key, (-1, 0))
@@ -102,11 +135,17 @@ class VisionPipeline:
         faces = [f for f in self.detector.detect(frame, max_faces=5) if self._big_enough(f)]
         if not faces:
             self._streaks.pop(track_key, None)
+            self._windows.pop(track_key, None)
             return FrameResult(verdict="sin_rostro", color="", buzzer="ninguno", seconds=0, message="")
 
         faces.sort(key=lambda f: self._area(f), reverse=True)
         face = faces[0]
-        embedding = self.embedder.get(frame, face.kps)
+        if not self._frontal(face):
+            return FrameResult(
+                faces=faces, verdict="verificando", color="azul", buzzer="ninguno",
+                seconds=1, message=MESSAGES["verificando"], box=face.box,
+            )
+        embedding = self._smoothed(track_key, self.embedder.get(frame, face.kps))
         sid, sim = self.gallery.identify(
             embedding, candidates=candidates, threshold=self.threshold, margin=self.margin
         )

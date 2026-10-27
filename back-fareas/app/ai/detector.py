@@ -5,6 +5,7 @@ import numpy as np
 import onnxruntime as ort
 
 from app.ai.boxes import nms
+from app.ai.ort_options import session_options
 
 DET_MEAN = 127.5
 DET_STD = 128.0
@@ -22,8 +23,7 @@ class Face:
 
 class ScrfdDetector:
     def __init__(self, model_path: str, input_size: tuple[int, int] = (640, 640), det_thresh: float = 0.5):
-        opts = ort.SessionOptions()
-        opts.log_severity_level = 3
+        opts = session_options()
         self.session = ort.InferenceSession(model_path, opts, providers=["CPUExecutionProvider"])
         self.input_name = self.session.get_inputs()[0].name
         self.output_names = [o.name for o in self.session.get_outputs()]
