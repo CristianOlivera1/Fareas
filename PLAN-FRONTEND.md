@@ -45,11 +45,11 @@ Chart.js 4, material-symbols/akar-icons ya en uso.
    **Estado frontend:** este bloque NO se ha implementado aún; queda documentado aquí para
    insertarse como sub-bloque de F3b (ver §4 F3b).
 2. **Hardware al final (F7)**: cámara Hikvision + ESP32 se conectan cuando el
-   frontend puede MONITOREARLOS (RF-35) — así cada paso se verifica desde la UI.
+   frontend puede MONITOREARLOS (RF-35) - así cada paso se verifica desde la UI.
 3. **Sidebar agrupado con submenús** (secciones colapsables), con visibilidad por rol.
 4. **Backend mínimo extra aprobado**: `GET /attendance/sessions-today`
    (sesiones abiertas de hoy con session_id/curso/grupo/aula/estado) para el modal
-   de marca manual RF-21 — **✅ YA IMPLEMENTADO EN EL BACKEND** (Bloque 6b del
+   de marca manual RF-21 - **✅ YA IMPLEMENTADO EN EL BACKEND** (Bloque 6b del
    PLAN-BACKEND, excluye cerradas; el frontend ya lo consume en la pantalla
    Asistencias con el modal RF-21 pre-integrado).
 5. **Rate limit de login en el backend**: añadido en el Bloque 6b (5 fallos/IP/min → 429;
@@ -106,8 +106,8 @@ El sidebar actual (`layouts/admin/components/sidebar`) se extiende: grupos colap
 
 | Grupo | Ítem (ruta) | Icono |
 |---|---|---|
-| — | Dashboard (`/dashboard`) | `material-symbols:dashboard-outline` |
-| — | Asistencias (`/attendance`) | `material-symbols:fact-check-outline` |
+| - | Dashboard (`/dashboard`) | `material-symbols:dashboard-outline` |
+| - | Asistencias (`/attendance`) | `material-symbols:fact-check-outline` |
 | Académico ▾ | Cursos y grupos (`/courses`) | `material-symbols:auto-stories-outline` |
 | | Horario general (`/schedule`) | `material-symbols:calendar-view-week` |
 | | Matrículas (`/enrollments`) | `material-symbols:how-to-reg-outline` |
@@ -123,9 +123,9 @@ El sidebar actual (`layouts/admin/components/sidebar`) se extiende: grupos colap
 | | Reportes (`/reports`) | `material-symbols:description-outline` |
 | | Bitácora (`/audit`) | `material-symbols:history-toggle-off-outline` |
 
-**DOCENTE ve:** Dashboard · Asistencias · Académico (Cursos, Horario general, Matrículas — solo lectura)
+**DOCENTE ve:** Dashboard · Asistencias · Académico (Cursos, Horario general, Matrículas - solo lectura)
 · Catálogo (solo «Estudiantes», lectura y únicamente los matriculados en sus grupos; el backend filtra por
-privacidad de DNI/WhatsApp, Ley 29733) · Calendario (Feriados, Justificaciones — lectura) · Herramientas (Reportes).
+privacidad de DNI/WhatsApp, Ley 29733) · Calendario (Feriados, Justificaciones - lectura) · Herramientas (Reportes).
 No accede a Enrolamiento facial (biometría: solo admin).
 
 **ESTUDIANTE ve:** únicamente «Mis asistencias» (`/me`) y «Mi perfil»; cualquier otra URL de `/admin` lo devuelve a `/admin/me` con aviso.
@@ -140,7 +140,7 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 - [x] `core/api/`: `api-url.ts` (dev: `environment.apiUrl`; prod: `/api/v1` relativo),
   `page.ts` (tipo `Page<T>` idéntico al backend), `params.ts` (serializa `?page=&page_size=&q=`).
 - [x] `core/services/` genéricos por módulo: `catalog-api.ts` (rooms/devices/teachers/students
-  con `Page<T>`), `courses-api.ts`, `calendar-api.ts` — HttpClient tipado, sin estado global
+  con `Page<T>`), `courses-api.ts`, `calendar-api.ts` - HttpClient tipado, sin estado global
   (cada página recarga; PLAN §7: sin NgRx).
 - [x] UI kit compartido: `shared/components/` → `page-header`, `data-table` (ya existe:
   ampliar a `Page<T>` + paginador PrimeNG), `confirm-dialog` (PrimeNG ConfirmationService),
@@ -151,16 +151,16 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
 - **Entregable:** login → panel con menú completo por rol; rutas nuevas navegan a placeholders.
 
 ### F2 - Catálogos y carga académica (1-1.5 días) - RF-02…RF-06, RF-22, RF-35
-- [x] **Aulas** `/rooms`: tabla paginada + crear/editar (dialog) — `GET/POST /rooms`, `PATCH /rooms/{id}`.
-- [x] **Docentes** `/teachers`: tabla + alta (dialog: nombre, email, DNI, WhatsApp) — `GET/POST /teachers`;
+- [x] **Aulas** `/rooms`: tabla paginada + crear/editar (dialog) - `GET/POST /rooms`, `PATCH /rooms/{id}`.
+- [x] **Docentes** `/teachers`: tabla + alta (dialog: nombre, email, DNI, WhatsApp) - `GET/POST /teachers`;
   botón "Reenviar clave" → `POST /accounts/{id}/send-temp-password`; editar → `PATCH /accounts/{id}`.
-- [x] **Estudiantes** `/students`: tabla + alta (incluye `code` y `semester`) — `GET/POST /students`;
+- [x] **Estudiantes** `/students`: tabla + alta (incluye `code` y `semester`) - `GET/POST /students`;
   columna "Rostro" con badge Enrolado/Sin rostro (F4 lo conecta a `GET /students/{id}/faces`).
-- [x] **Dispositivos** `/devices`: tabla + alta (tipo cámara exige `rtsp_url`) — `GET/POST /devices`,
+- [x] **Dispositivos** `/devices`: tabla + alta (tipo cámara exige `rtsp_url`) - `GET/POST /devices`,
   `PATCH /devices/{id}`; **pestaña "Monitoreo" RF-35**: tarjetas por aula con estado en línea
   (verde/gris) desde `GET /devices/status` (público) con auto-refresh cada 30 s.
 - [x] **Cursos y grupos** `/courses`: lista de cursos (`GET/POST /courses`) → detalle de curso con
-  sus grupos (`GET /courses/{id}/groups?semester=` — **Bloque 11: cada grupo trae `semester_label`,
+  sus grupos (`GET /courses/{id}/groups?semester=` - **Bloque 11: cada grupo trae `semester_label`,
   `capacity` y `enrolled_count`**), crear grupo (docente+aula+**cupo, 40 por defecto**: selects de
   `/teachers` y `/rooms`) → detalle de grupo con BLOQUES horarios (tabla semanal **LUN-VIE**,
   crear/patch/delete con detección de choque RF-06 mostrando el 409 del backend como toast).
@@ -263,18 +263,18 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
     (solo admin/docente; el estado de la fila pasa a "Falta justificada", FJ).
   - **Plazo de rectificación:** el backend responde 403 a docentes fuera de los 7 días
     (`rectify_days`); la UI puede ocultar la acción en filas antiguas y mostrar el motivo.
-- [x] **Feriados** `/calendar/holidays`: lista + alta/baja — `GET/POST /holidays`, `DELETE /holidays/{id}`;
+- [x] **Feriados** `/calendar/holidays`: lista + alta/baja - `GET/POST /holidays`, `DELETE /holidays/{id}`;
   **Bloque 11:** botón "Cargar feriados nacionales del año" → `POST /holidays/national?year=`
   (o body `{year}`) y "Paro por rango" → `POST /holidays/range` `{desde, hasta, descripcion,
   omitir_fines_de_semana}` → chip con `{creados, omitidos, sesiones_canceladas}`.
 - [x] **Justificaciones** `/calendar/justifications`: lista filtrable por alumno + alta
-  (rango fechas, motivo, curso opcional, documento URL) — `GET/POST /justifications`, `DELETE /justifications/{id}`.
+  (rango fechas, motivo, curso opcional, documento URL) - `GET/POST /justifications`, `DELETE /justifications/{id}`.
   **Bloque 11 (R6):** la respuesta de alta trae `faltas_afectadas` (mostrarlo en el toast) y el
   docente está obligado a elegir curso; eliminar revierte las faltas (confirmar con dialog).
   **F4.1:** el campo "documento URL" se complementa con adjunto PDF/JPG/PNG (subida por backend).
 - [x] **Parámetros** `/calendar/settings`: formulario semestre/bloque/tolerancia/**ventana de
   apertura (early_open_minutes), rectify_days, dpi_min_sessions y fechas del semestre
-  (semester_start/end)** — `GET/PATCH /settings` (aviso: "aplica a sesiones siguientes, nunca
+  (semester_start/end)** - `GET/PATCH /settings` (aviso: "aplica a sesiones siguientes, nunca
   retroactivo" RF-34; validación cliente: aviso < límite; inicio < fin).
 - **Entregable:** el flujo completo de un día lectivo se opera 100% desde la UI.
 
@@ -301,7 +301,7 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   cerrar sesión y cancelar la clase; feriados nacionales y por rango, alta de justificación y
   guardado de parámetros (todos con su `POST/PATCH` en 200/201).
 - [x] **Bugs reales corregidos al verificar**: `attendance.ts` usaba `<app-ui-input>` sin
-  importarlo — con `CUSTOM_ELEMENTS_SCHEMA` no fallaba el build pero lanzaba `NG01203` en runtime
+  importarlo - con `CUSTOM_ELEMENTS_SCHEMA` no fallaba el build pero lanzaba `NG01203` en runtime
   y el buscador no se renderizaba; y Justificaciones pedía `page_size=200` cuando el backend
   limita a 100 (422 → el selector de cursos quedaba vacío).
 
@@ -420,7 +420,7 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   bucle de cámaras (verificable con `simulate_camera.py` + `simulate_esp32.py` corriendo).
 
 ### F6 - Reportes y bitácora (2026-10-23) - **✅ LISTO**
-> `/reports` (`features/reports`): tres tarjetas — asistencia detallada (rango de fechas + curso opcional, Excel y PDF), registro de asistencia del grupo (matriz A/T/F/FJ; el docente solo ve sus grupos) y riesgo de inasistencia (curso opcional). Descarga con `ReportsApi` (blob + nombre desde `Content-Disposition`, con `expose_headers` añadido al CORS del backend) y `shared/utils/download.ts`; los errores del backend llegan como blob y se leen como JSON para mostrar el motivo.
+> `/reports` (`features/reports`): tres tarjetas - asistencia detallada (rango de fechas + curso opcional, Excel y PDF), registro de asistencia del grupo (matriz A/T/F/FJ; el docente solo ve sus grupos) y riesgo de inasistencia (curso opcional). Descarga con `ReportsApi` (blob + nombre desde `Content-Disposition`, con `expose_headers` añadido al CORS del backend) y `shared/utils/download.ts`; los errores del backend llegan como blob y se leen como JSON para mostrar el motivo.
 > `/audit` (`features/audit`, solo admin): tabla paginada de `GET /audit-log` con filtros acción, entidad, rol de quien actuó y fecha (en la URL) y diálogo con los valores anterior y nuevo en JSON. Specs: `reports-api.spec.ts`.
 
 ### F6 (diseño original) - Reportes, importación OCR y bitácora (½-1 día; F6b/F6c aparte) - RF-16, RF-07, RF-32
@@ -428,8 +428,8 @@ compartidas (el backend ya rechaza con 403 igualmente: doble capa).
   "Excel" / "PDF" → `GET /reports/attendance.xlsx|pdf` con `responseType: 'blob'` +
   descarga vía `URL.createObjectURL` (respeta el `filename` del Content-Disposition);
   docente ve solo SUS grupos (el backend ya filtra).
-  **Bloque 11:** dos reportes adicionales — "Registro de asistencia" del grupo
-  (`GET /reports/group-matrix.xlsx?group_id=` → matriz alumnos × fechas con **A/T/F/FJ/—**)
+  **Bloque 11:** dos reportes adicionales - "Registro de asistencia" del grupo
+  (`GET /reports/group-matrix.xlsx?group_id=` → matriz alumnos × fechas con **A/T/F/FJ/-**)
   y "Riesgo DPI" (`GET /reports/dpi-risk.xlsx?course_id=` → alumnos en alerta/límite con
   faltas restantes). El estado `FJ` = falta justificada (no cuenta para el 30 %).
 - [x] **Importar horario** `/imports` (RF-07): implementado en F6b (3 pasos, PDF/foto,
@@ -563,7 +563,7 @@ confirmación se habilitó. No se confirmó para no crear cuentas de prueba;
 - **Pestaña «Por ciclo»** (por defecto): 1) elegir ciclo y grupo (se sugiere la letra que cubre más cursos) y ver el horario del paquete con docente, horario, cupos libres y los cursos que **no tienen ese grupo**; 2) elegir alumnos de tres maneras: **buscar** y agregar, **pegar códigos** de matrícula (informa los no encontrados) o **todo un ciclo** de alumnos (útil para ingresantes); 3) «N alumnos × M cursos = P matrículas» con aviso de cupos justos y botón **Matricular**. El resultado indica matriculados, los que ya estaban y los problemas **agrupados por alumno** (grupo lleno, cruce de horario…); el resto se matricula igual.
 - **Pestaña «Por grupo»:** el flujo anterior, sin selector de periodo y con **selección múltiple** de alumnos (más pegar códigos); conserva retiro, reactivación y transferencia.
 
-**Estudiante (`/my-enrollment`, menú «Mi matrícula»)** — simplificado (2026-10-24)
+**Estudiante (`/my-enrollment`, menú «Mi matrícula»)** - simplificado (2026-10-24)
 - Se eliminó el menú **«Mis cursos»** (repetía a «Mi horario»; el avance de faltas por curso sigue en «Inicio») y de «Mi matrícula» se quitaron **«Mi horario»** y **«Matricularme en un ciclo completo»**.
 - La pantalla es una sola lista de **«Cursos disponibles»** con pestañas de ciclo (el suyo primero; puede mezclar **cualquier ciclo** y la selección se conserva al cambiar de pestaña). Cada curso tiene una **casilla**; al marcar varios aparece una barra fija con los cursos elegidos y **Confirmar matrícula**.
 - Un curso con un solo grupo muestra su horario, docente y cupos; con **varios grupos** pide elegir uno (los llenos o con cruce aparecen deshabilitados); un curso **sin horario aún** se muestra como «Horario por definir» y se puede marcar (al confirmar se crea el grupo A sin docente).
@@ -846,8 +846,8 @@ abrir `GET /holidays` al estudiante) y un aviso en pantalla cuando llegue un cor
 
 | Grupo | Menú | Ruta | Para qué sirve | Datos |
 |---|---|---|---|---|
-| — | Dashboard | `/dashboard` | Resumen del día de sus grupos | existente |
-| — | Asistencias | `/attendance` | Marca manual, rectificación, cierre y revisión | existente |
+| - | Dashboard | `/dashboard` | Resumen del día de sus grupos | existente |
+| - | Asistencias | `/attendance` | Marca manual, rectificación, cierre y revisión | existente |
 | Mi docencia | Mis grupos | `/my-groups` | Grupos que dicta en el periodo: cupo, horario y lista de alumnos con acceso al registro del grupo | `GET /groups?teacher_id=`, `GET /groups/{id}/students`, `GET /reports/group-matrix.xlsx` |
 | | Mi horario | `/my-schedule` | Su semana (misma pantalla del estudiante, con sus clases) | `GET /schedule?teacher_id=` |
 | | Alumnos en riesgo | `/at-risk` | Alumnos en alerta o sobre el límite en sus cursos, con faltas restantes | `GET /dpi/at-risk` |
@@ -861,9 +861,9 @@ Se quitan al docente `Cursos y grupos`, `Horario general`, `Matrículas` y `Estu
 ### 8.3 Administrador: sin cambios (los 15 ítems + Alumnos en riesgo en Herramientas).
 
 ### 8.4 Backend añadido (`routers/me.py`, solo rol estudiante, con `tests/test_student_portal.py`)
-- `GET /me/schedule?semester=` — bloques de sus matrículas activas (misma forma que `GET /schedule`).
-- `GET /me/courses?semester=` — cursos del periodo con grupo, docente, ciclo y bloques.
-- `GET /me/justifications` — sus justificaciones con documento firmado.
+- `GET /me/schedule?semester=` - bloques de sus matrículas activas (misma forma que `GET /schedule`).
+- `GET /me/courses?semester=` - cursos del periodo con grupo, docente, ciclo y bloques.
+- `GET /me/justifications` - sus justificaciones con documento firmado.
 
 ### 8.5 Implementado
 - `nav.ts`: menús por rol, `Mi docencia` para docente, `rolesForRoute` une los roles de las entradas que comparten ruta (`/my-schedule`, `/at-risk`).
@@ -875,7 +875,7 @@ Se quitan al docente `Cursos y grupos`, `Horario general`, `Matrículas` y `Estu
 - `GET /dpi/at-risk` filtra al docente por **curso**, no por grupo: ve alumnos de otros grupos del mismo curso. Acotar a sus grupos.
 - `GET /students` sigue devolviendo todos los alumnos al docente (ya anotado en §7.3).
 
-### F6i — Video en vivo por WebRTC con recuadro facial
+### F6i - Video en vivo por WebRTC con recuadro facial
 - `core/services/camera-webrtc.ts` (`CameraWebrtc`): `RTCPeerConnection` recvonly, espera ICE (máx. 2 s), envía la oferta a `POST /dashboard/camera/{room}/webrtc` y asigna el stream al `<video>`; `lost` marca la caída.
 - `features/dashboard/components/face-overlay`: `EventSource` a `/faces`, `<canvas>` sobre el video con esquinas en el rostro (suavizado entre detecciones, color según veredicto) y etiqueta; geometría en `shared/utils/face-box.ts` (letterbox `object-contain`).
 - `activity-feed`: modo `connecting | webrtc | mjpeg`; si el navegador no soporta WebRTC o go2rtc no responde, usa el MJPEG (con recuadros dibujados por el servidor). Specs: `face-box.spec.ts`, `camera-webrtc.spec.ts`, `activity-feed.spec.ts`.

@@ -158,7 +158,7 @@ def excel_horario(bloques: list[dict], semestre: str, opciones: Opciones) -> byt
         rejilla = construir_rejilla(filas_ciclo)
         total = len(rejilla.columnas) + 1
         hoja.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total)
-        hoja.cell(1, 1, f"{TITULO} — {titulo_hoja(semestre, ciclo)}").font = Font(bold=True, size=13)
+        hoja.cell(1, 1, f"{TITULO} - {titulo_hoja(semestre, ciclo)}").font = Font(bold=True, size=13)
         hoja.cell(2, 1, "Hora").font = Font(bold=True, color="FFFFFF")
         hoja.cell(2, 1).fill = PatternFill("solid", fgColor=AZUL)
         hoja.cell(2, 1).alignment = centro

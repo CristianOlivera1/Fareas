@@ -44,7 +44,7 @@
                       [title]="'Añadir clase el ' + weekdayLabel(cell.weekday) + ' a las ' + row.label"
                       (click)="blockAdd.emit({ weekday: cell.weekday, hour: row.hour })"
                     >
-                      <span class="text-sm text-gray-300 group-hover/celda:hidden">—</span>
+                      <span class="text-sm text-gray-300 group-hover/celda:hidden">-</span>
                       <iconify-icon
                         icon="material-symbols:add"
                         width="18"
@@ -52,7 +52,7 @@
                       ></iconify-icon>
                     </button>
                   } @else {
-                    <div class="flex h-full min-h-14 items-center justify-center text-sm text-gray-300">—</div>
+                    <div class="flex h-full min-h-14 items-center justify-center text-sm text-gray-300">-</div>
                   }
                 } @else {
                   <div class="flex h-full min-h-14 flex-col gap-1">

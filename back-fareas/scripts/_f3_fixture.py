@@ -45,7 +45,7 @@ async def create() -> None:
     room = (await db.exec(select(Room).where(Room.is_active))).first()
     assert admin and room, "se necesita un admin y un aula del seed"
 
-    course = Course(code=f"{PREFIX}01", name="Fixture F3 (temporal) — borrar", cycle=9)
+    course = Course(code=f"{PREFIX}01", name="Fixture F3 (temporal) - borrar", cycle=9)
     db.add(course)
     await db.flush()
 

@@ -103,7 +103,7 @@ export class AuditPage {
   }
 
   formatDate(value: string | null): string {
-    return value ? value.replace('T', ' ') : '—';
+    return value ? value.replace('T', ' ') : '-';
   }
 
   trackById(_: number, row: unknown): unknown {

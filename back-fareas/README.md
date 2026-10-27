@@ -200,7 +200,7 @@ DATABASE_URL=... pytest -q
 ```
 
 > `pg_dump` 17 mete un token aleatorio `\restrict`/`\unrestrict` en cada dump:
-> por eso el `grep -v` — es lo único que puede aparecer en el `diff`.
+> por eso el `grep -v` - es lo único que puede aparecer en el `diff`.
 
 `001` y `002` se ejecutan sobre una BD **vacía**: no son idempotentes a nivel
 de esquema (`CREATE TYPE/TABLE` fallan si los objetos ya existen).
@@ -230,12 +230,12 @@ Endpoints de auth: `POST /auth/login` · `POST /auth/refresh` · `POST /auth/log
 
 **Cambio de contraseña con OTP (2026-10-22, RF-11/RF-12):**
 
-1. `POST /auth/change-password/otp` `{current_password}` — valida la clave actual
+1. `POST /auth/change-password/otp` `{current_password}` - valida la clave actual
    y envía un código de 6 dígitos al correo institucional. Responde el correo
    **enmascarado**, `expires_in` (600 s) y `resend_in` (60 s). Cooldown de 60 s.
-2. `POST /auth/change-password/otp/verify` `{code}` — valida el código; el OTP
+2. `POST /auth/change-password/otp/verify` `{code}` - valida el código; el OTP
    queda marcado como verificado (`verified`).
-3. `POST /auth/change-password` `{current_password, new_password}` — exige y
+3. `POST /auth/change-password` `{current_password, new_password}` - exige y
    **consume** el OTP verificado, actualiza la clave y devuelve `access_token`.
 
 Reglas del flujo:
@@ -357,12 +357,12 @@ reuso, expiración, logout, logout-all y revocación por cambio de clave). La
 suite completa (sin `test_vision.py`, que requiere el MP4 demo) se corre con
 `pytest -q`.
 
-### Bloque 6 — motor de asistencia (RF-21…RF-26)
+### Bloque 6 - motor de asistencia (RF-21…RF-26)
 
-- `GET /attendance/today?course=&room=&status=` — registros del día (vista `v_today_attendance`).
-- `POST /sessions/{id}/manual-mark` — RF-21: marca manual del docente (solo en SUS grupos).
-- `PATCH /attendance/{id}/rectify` — RF-15: rectifica el estado con motivo obligatorio (audit_log).
-- `POST /sessions/{id}/close` — RF-26: cierre manual (admin); el automático corre cada 60 s
+- `GET /attendance/today?course=&room=&status=` - registros del día (vista `v_today_attendance`).
+- `POST /sessions/{id}/manual-mark` - RF-21: marca manual del docente (solo en SUS grupos).
+- `PATCH /attendance/{id}/rectify` - RF-15: rectifica el estado con motivo obligatorio (audit_log).
+- `POST /sessions/{id}/close` - RF-26: cierre manual (admin); el automático corre cada 60 s
   (APScheduler) y genera faltas a matriculados sin registro + alertas DPI (RF-24).
 - Clasificación RF-23 (**R2, Bloque 11**): `asistio` entre `inicio − apertura
   anticipada` y `inicio + tolerancia`; `tardanza` después de eso y hasta el **fin
@@ -383,7 +383,7 @@ El video de la "puerta del aula" vive en `back-fareas/resources/` (fuera de
 git por peso, pero DENTRO del proyecto). `scripts/simulate_camera.py` lo usa
 por defecto y los smokes de visión lo cargan vía `app/ai/resources.py`.
 
-### Bloque 7 — WebSocket de dispositivos ESP32 (RF-25, RF-33, RF-35)
+### Bloque 7 - WebSocket de dispositivos ESP32 (RF-25, RF-33, RF-35)
 
 Protocolo en `ws://localhost:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET>`:
 
@@ -392,41 +392,41 @@ Protocolo en `ws://localhost:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET>`
 2. `heartbeat` cada 30 s → actualiza `last_heartbeat`; sin latidos por 90 s el
    scheduler lo marca fuera de línea (RF-35, visible en `GET /devices/status`).
 3. El backend despacha veredictos Tabla 8: `{type:verdict, status, color,
-   buzzer, seconds, message}` — el firmware enciende el NeoPixel + buzzer.
+   buzzer, seconds, message}` - el firmware enciende el NeoPixel + buzzer.
 
 ```bash
 # Simular el nodo desde la PC (emula el LED en consola)
 .venv/Scripts/python -u scripts/simulate_esp32.py esp32-lab305 --intervalo 5
 ```
 
-### Bloque 8 — Dashboard en vivo y reportes (RF-13, RF-16)
+### Bloque 8 - Dashboard en vivo y reportes (RF-13, RF-16)
 
-- `GET /dashboard/summary` — tarjetas: asistencias/tardanzas/ausencias de hoy,
+- `GET /dashboard/summary` - tarjetas: asistencias/tardanzas/ausencias de hoy,
   % de ausentismo, cámaras y alertas DPI (`v_student_dpi` + `app_settings`).
-- `GET /dashboard/live?access_token=<JWT>&room_id=` — **SSE** con los veredictos
+- `GET /dashboard/live?access_token=<JWT>&room_id=` - **SSE** con los veredictos
   Tabla 8 del bucle de cámaras. EventSource no puede mandar cabeceras: el JWT
   va por query y se valida rol docente/admin. Ídem `/dashboard/live-room/{room_id}`.
-- `GET /stats/hourly?day=` — marcas por hora de inicio de bloque (franja 07–20).
-- `GET /stats/distribution?desde=&hasta=` — dona asistio/tardanza/falta/sin_registro
+- `GET /stats/hourly?day=` - marcas por hora de inicio de bloque (franja 07–20).
+- `GET /stats/distribution?desde=&hasta=` - dona asistio/tardanza/falta/sin_registro
   (`sin_registro` = matriculados de sesiones cerradas sin marca).
-- `GET /reports/attendance.xlsx|pdf?desde=&hasta=&course_id=` — RF-16 con
+- `GET /reports/attendance.xlsx|pdf?desde=&hasta=&course_id=` - RF-16 con
   encabezado institucional; el docente solo descarga SUS grupos (RF-21).
 
-### Bloques 9, 14, 15 y 17 — Importación OCR de horarios, nóminas y malla curricular (RF-07)
+### Bloques 9, 14, 15 y 17 - Importación OCR de horarios, nóminas y malla curricular (RF-07)
 
-- `POST /courses/import-pdf` — sube un **PDF digital, PDF escaneado o foto**
+- `POST /courses/import-pdf` - sube un **PDF digital, PDF escaneado o foto**
   (JPG/PNG/WEBP, ≤10 MB y 10 páginas; multipart, solo admin). Devuelve `tipo`
   (`pdf_texto`, `pdf_ocr` o `imagen`), páginas y bloques CANDIDATOS (curso,
   grupo, día, horas) con `confiable`, `nota`, `pagina`, `linea`, y sugerencias
   ya rellenadas de `teacher_id`, `room_id` y `curso_sugerido` (parecido por
   código/nombre cuando el curso aún no existe con ese código exacto).
   **No persiste nada**: es la pantalla de revisión del RF-07.
-- `POST /courses/import-curriculum` (+ `/confirm`) — importa la **malla curricular**
+- `POST /courses/import-curriculum` (+ `/confirm`) - importa la **malla curricular**
   (PDF, foto o captura con un ciclo por columna o por sección): devuelve cada curso
   (`code`, `name`, `cycle`) con `confiable`, `nota`, `ya_existe`; `default_cycle`
   opcional para listas sin títulos. El `confirm` crea los nuevos y omite los que ya
   existen sin modificarlos. Solo admin.
-- `POST /courses/import-pdf/confirm` — recibe la propuesta corregida,
+- `POST /courses/import-pdf/confirm` - recibe la propuesta corregida,
   `semester_label` (periodo; por defecto el vigente), `cycle` (1–10),
   `teacher_id`/`room_id` por defecto y, opcionalmente, `teacher_id`/`room_id`
   por bloque (ambos pueden quedar en `null` si el horario no los trae). Crea
@@ -435,11 +435,11 @@ Protocolo en `ws://localhost:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET>`
   `omitidos` en vez de duplicar bloques. Un grupo solo admite un docente; el
   docente y el aula se completan luego con `PATCH /blocks/{id}`, y la sesión de
   asistencia solo se abre cuando ambos existen.
-- `POST /students/import-preview` — sube una **nómina impresa en tabla**
+- `POST /students/import-preview` - sube una **nómina impresa en tabla**
   (PDF/foto) y `default_semester`; devuelve alumnos con código, DNI, nombres,
   correo (generado como `codigo@unamba.edu.pe` si falta), ciclo, `confiable`,
   `duplicado`, `errores` y la línea OCR. No crea nada.
-- `POST /students/import-confirm` — recibe las filas corregidas y un
+- `POST /students/import-confirm` - recibe las filas corregidas y un
   `group_id` opcional. Crea las cuentas **fila por fila** (un duplicado no
   bloquea al resto), con clave temporal y correo RF-08; si se elige grupo,
   matricula con R8. Devuelve `creados`, `omitidos`, `matriculados` y errores por
@@ -450,7 +450,7 @@ Protocolo en `ws://localhost:8000/api/v1/ws/devices?token=<DEVICE_TOKEN_SECRET>`
   > semestre vigente. OCR local: RapidOCR con modelos incluidos en el paquete;
   > manuscrito no soportado y las filas dudosas se marcan para corregir.
 
-### Bloque 11 — reglas de negocio (R1…R15)
+### Bloque 11 - reglas de negocio (R1…R15)
 
 > Las reglas R1…R15 ya viven dentro de `db/001_schema.sql`: los scripts
 > `005_reglas_negocio.sql`, `006_session_cancelada.sql` y `007_vistas_reglas.sql`
@@ -469,7 +469,7 @@ el admin con `PATCH /settings`).
   nadie marque; al cierre con cero marcas queda `needs_review` sin faltas (R4) y
   se resuelve en `GET /attendance/sessions-review` → `confirmar_faltas | cancelar`.
   Cancelación con motivo (`POST /sessions/{id}/cancel`, `POST /blocks/{id}/cancel-day`
-  con `fecha` opcional) — nunca genera faltas (R5).
+  con `fecha` opcional) - nunca genera faltas (R5).
 - **Justificaciones (R6):** crear marca las faltas del rango (`is_justified` +
   `justification_id`) y las futuras nacen justificadas; eliminar revierte. El
   docente solo justifica a sus alumnos y con su curso; sin plazo.
@@ -489,7 +489,7 @@ el admin con `PATCH /settings`).
 - **Feriados (R12):** `POST /holidays/range` (rango, omite fines de semana) y
   `POST /holidays/national?year=` (fijos + Semana Santa, ajustables).
 - **Reportes:** `GET /reports/group-matrix.xlsx?group_id=` (alumnos × fechas con
-  **A/T/F/FJ/—**) y `GET /reports/dpi-risk.xlsx?course_id=` (alerta/límite).
+  **A/T/F/FJ/-**) y `GET /reports/dpi-risk.xlsx?course_id=` (alerta/límite).
 
 ## Scripts de hardware / simulación
 

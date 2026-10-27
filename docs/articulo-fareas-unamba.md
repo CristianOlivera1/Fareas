@@ -2,9 +2,9 @@
 
 ## Face recognition and IoT attendance system for university classrooms: design and validation
 
-> **Revista Micaela** — ISSN: 2955-8646 (en línea) / 2709-8990 (impresa)
-> Universidad Nacional Micaela Bastidas de Apurímac — Vicerrectorado de Investigación — Perú
-> Edición especial FERCYT UNAMBA 2026 — Categoría D: Desarrollo Tecnológico
+> **Revista Micaela** - ISSN: 2955-8646 (en línea) / 2709-8990 (impresa)
+> Universidad Nacional Micaela Bastidas de Apurímac - Vicerrectorado de Investigación - Perú
+> Edición especial FERCYT UNAMBA 2026 - Categoría D: Desarrollo Tecnológico
 > *Versión anónima para el primer envío (doble ciego): sin nombres, ORCID, correos, filiación ni agradecimientos.*
 
 ---
@@ -47,13 +47,13 @@ Los requerimientos se obtuvieron del análisis de la operación académica de la
 
 Antes de implementar el panel web se elaboró un prototipo de alta fidelidad en Figma (Figura 1) para validar la navegación y los flujos principales. Cubre inicio de sesión, panel de control, horarios, grupos, docentes, aulas, estudiantes, usuarios, enrolamiento facial, feriados y perfil. Se construyó de forma componentizada (elementos básicos, moléculas, organismos y plantillas de página), organización que se trasladó a Angular, donde cada componente autónomo reutiliza los mismos estilos globales y mantiene una apariencia minimalista y coherente.
 
-> **Figura 1 — imagen que debes subir.** Captura general del tablero de Figma con todas las pantallas del prototipo visibles (vista panorámica, 300 ppp, PNG); si hay espacio, añade como segundo panel la página de componentes (elementos básicos, moléculas y organismos). Título debajo, en negrita y centrado: «**Figura 1** Prototipo de la interfaz del sistema en Figma».
+> **Figura 1 - imagen que debes subir.** Captura general del tablero de Figma con todas las pantallas del prototipo visibles (vista panorámica, 300 ppp, PNG); si hay espacio, añade como segundo panel la página de componentes (elementos básicos, moléculas y organismos). Título debajo, en negrita y centrado: «**Figura 1** Prototipo de la interfaz del sistema en Figma».
 
 ### 2.4 Arquitectura del sistema
 
 El sistema adopta una arquitectura cliente-servidor de monolito modular. El cliente es una aplicación web de una sola página en Angular 21 con componentes autónomos y señales reactivas. El servidor es una API REST en FastAPI (Python 3.13) con acceso asíncrono a PostgreSQL 17 mediante SQLModel. La cámara IP Hikvision de 4 MP, alimentada por PoE+, entrega su flujo principal (canal 101) por RTSP (Schulzrinne et al., 2016); el servidor lo procesa, registra la asistencia y comunica el veredicto al nodo de la puerta por WebSocket (Fette & Melnikov, 2011) y al panel web por eventos enviados por el servidor. La sesión de usuario se gestiona con JSON Web Tokens (Jones et al., 2015) y las contraseñas se almacenan con Argon2 (Biryukov et al., 2021). El acceso se controla por rol (administrador, docente y estudiante) tanto en el cliente como en el servidor. El esquema relacional contiene 18 tablas; los *embeddings* se guardan en una columna `REAL[512]` y la similitud se calcula en NumPy, sin extensiones vectoriales. La Figura 2 muestra la arquitectura general.
 
-> **Figura 2 — imagen que debes subir.** El diagrama `docs/arquitectura-fareas.png` (editable en `docs/arquitectura-fareas.svg`): cámara Hikvision → switch PoE+ → PC servidor (FastAPI + PostgreSQL + modelos ONNX) → router Wi-Fi → nodo ESP32 (anillo LED + zumbador), y el navegador del docente conectado al servidor. Expórtalo a 300 ppp si el texto es pequeño. Título debajo, en negrita y centrado: «**Figura 2** Arquitectura general del sistema».
+> **Figura 2 - imagen que debes subir.** El diagrama `docs/arquitectura-fareas.png` (editable en `docs/arquitectura-fareas.svg`): cámara Hikvision → switch PoE+ → PC servidor (FastAPI + PostgreSQL + modelos ONNX) → router Wi-Fi → nodo ESP32 (anillo LED + zumbador), y el navegador del docente conectado al servidor. Expórtalo a 300 ppp si el texto es pequeño. Título debajo, en negrita y centrado: «**Figura 2** Arquitectura general del sistema».
 
 ### 2.5 Canal de reconocimiento facial
 
@@ -137,7 +137,7 @@ Los tiempos medidos se presentan en la Tabla 1. El procesamiento completo de un 
 
 En la integración con la cámara IP real, el sistema registró la cámara como en línea y detectó rostros del flujo en vivo (Figura 3); en una captura de verificación, el rostro detectado midió 106 píxeles con una confianza de 0,82. El video del panel pasó de presentar retraso acumulado (flujo JPEG secuencial) a una reproducción fluida con WebRTC, observación cualitativa cuya latencia de extremo a extremo se medirá en el piloto.
 
-> **Figura 3 — imagen que debes subir.** Captura del panel «Actividad en tiempo real» del dashboard con el video de la cámara, el recuadro de esquinas sobre el rostro y la etiqueta del veredicto (por ejemplo, «Registro correcto» en verde), junto con la tarjeta de la persona reconocida. Usa un voluntario con consentimiento o difumina rostro y nombre. Título debajo: «**Figura 3** Panel de monitoreo en vivo con el recuadro facial y el veredicto».
+> **Figura 3 - imagen que debes subir.** Captura del panel «Actividad en tiempo real» del dashboard con el video de la cámara, el recuadro de esquinas sobre el rostro y la etiqueta del veredicto (por ejemplo, «Registro correcto» en verde), junto con la tarjeta de la persona reconocida. Usa un voluntario con consentimiento o difumina rostro y nombre. Título debajo: «**Figura 3** Panel de monitoreo en vivo con el recuadro facial y el veredicto».
 
 ### 3.3 Defectos detectados durante la validación
 
@@ -258,7 +258,7 @@ Guo, J., Deng, J., Lattas, A., & Zafeiriou, S. (2021). *Sample and computation r
 
 Hevner, A. R., March, S. T., Park, J., & Ram, S. (2004). Design science in information systems research. *MIS Quarterly, 28*(1), 75–105. https://doi.org/10.2307/25148625
 
-International Organization for Standardization & International Electrotechnical Commission. (2023). *ISO/IEC 25010:2023. Systems and software engineering — Systems and software Quality Requirements and Evaluation (SQuaRE) — Product quality model* (2nd ed.). https://www.iso.org/standard/78176.html
+International Organization for Standardization & International Electrotechnical Commission. (2023). *ISO/IEC 25010:2023. Systems and software engineering - Systems and software Quality Requirements and Evaluation (SQuaRE) - Product quality model* (2nd ed.). https://www.iso.org/standard/78176.html
 
 Johnson, J., Douze, M., & Jégou, H. (2021). Billion-scale similarity search with GPUs. *IEEE Transactions on Big Data, 7*(3), 535–547. https://doi.org/10.1109/TBDATA.2019.2921572
 

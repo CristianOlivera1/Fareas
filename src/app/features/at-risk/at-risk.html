@@ -31,7 +31,7 @@
   <ng-template appCell="student" let-row>
     <div class="min-w-0">
       <div class="truncate text-sm font-medium text-gray-900">{{ row.student_name }}</div>
-      <div class="font-mono text-xs text-gray-500">{{ row.student_code ?? '—' }}</div>
+      <div class="font-mono text-xs text-gray-500">{{ row.student_code ?? '-' }}</div>
     </div>
   </ng-template>
   <ng-template appCell="course_code" let-row>

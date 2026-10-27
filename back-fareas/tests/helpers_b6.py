@@ -35,7 +35,7 @@ def proximo_lunes(base: date) -> date:
 def weekday_hoy() -> int:
     wd = datetime.now(PERU_TZ).date().isoweekday()
     if wd > 5:
-        pytest.skip("Fin de semana: no hay clases hoy (weekday 1..5) — escenario 'de hoy' imposible")
+        pytest.skip("Fin de semana: no hay clases hoy (weekday 1..5) - escenario 'de hoy' imposible")
     return wd
 
 def h(lunes: date, hhmm: str) -> datetime:

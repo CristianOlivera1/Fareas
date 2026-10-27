@@ -187,11 +187,7 @@
         Se prellena con el aula del último bloque del grupo; puedes cambiarla o dejarla vacía.
       </span>
     </label>
-    <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-      Bloques de 1 h o 2 h, en horas exactas (sin minutos), entre las {{ attendanceStartTime() }} y las
-      {{ attendanceEndTime() }}. El aula es obligatoria; el docente es opcional y se puede asignar después.
-      La asistencia se registra aunque todavía no haya docente.
-    </app-ui-alert>
+
   </div>
   <ng-template pTemplate="footer">
     <app-ui-button variant="ghost" (click)="blockDialogVisible = false">Cancelar</app-ui-button>

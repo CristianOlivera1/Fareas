@@ -272,7 +272,7 @@ export class CycleEnrollment {
     for (const row of results.filter((item) => item.status === 'failed')) {
       const entry = grouped.get(row.student_id) ?? {
         key: String(row.student_id),
-        name: `${row.student_code ?? '—'} · ${row.student_name}`,
+        name: `${row.student_code ?? '-'} · ${row.student_name}`,
         reasons: [],
       };
       entry.reasons.push(`${row.course_code}: ${row.reason ?? 'No se pudo matricular'}`);
