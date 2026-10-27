@@ -59,18 +59,18 @@
   </section>
 }
 
-<div class="mb-4 flex flex-wrap items-center gap-3">
+<!-- <div class="mb-4 flex flex-wrap items-center gap-3">
   <app-ui-input class="w-full sm:w-72" icon="material-symbols:search" placeholder="Buscar por código o nombre…"
     [ngModel]="q()" (ngModelChange)="onSearch($event)" />
   <app-ui-button variant="ghost" size="sm" icon="material-symbols:refresh" (click)="reload()">
     Actualizar
   </app-ui-button>
-</div>
+</div> -->
 
 @if (error(); as msg) {
   <app-ui-alert variant="danger" title="No se pudieron cargar las aulas" class="mb-4 block">{{ msg }}</app-ui-alert>
 }
-
+<!--
 <app-data-table
   [columns]="columns" [data]="rooms()" mode="server"
   [serverPage]="page()" [serverTotal]="total()" [serverPageSize]="pageSize()"
@@ -93,7 +93,7 @@
   <ng-template appCell="actions" let-room>
     <app-room-edit [room]="room" (saved)="reload()" />
   </ng-template>
-</app-data-table>
+</app-data-table> -->
 
 <p-dialog header="Nueva aula"
   [(visible)]="dialogVisible" [modal]="true" [style]="{ width: '420px' }">

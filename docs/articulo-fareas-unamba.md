@@ -109,7 +109,7 @@ La evaluación tuvo cuatro componentes alineados con los objetivos: (1) **prueba
 
 $$\text{FAR} = \frac{FA}{I}, \qquad \text{FRR} = \frac{FR}{G} = 1 - \text{TAR} \qquad (5)$$
 
-donde *FA* son las aceptaciones erróneas de intentos impostores (*I* intentos) y *FR* los rechazos de intentos genuinos (*G* intentos). Además, se mide la usabilidad con la Escala de Usabilidad del Sistema (Lewis, 2018) y los hallazgos se organizan según las características de calidad del producto de ISO/IEC 25010:2023 (International Organization for Standardization & International Electrotechnical Commission [ISO/IEC], 2023).
+donde *FA* son las aceptaciones erróneas de intentos impostores (*I* intentos) y *FR* los rechazos de intentos genuinos (*G* intentos). Además, la usabilidad del panel web se mide con la Escala de Usabilidad del Sistema (Lewis, 2018) aplicada a la docente, que es quien lo opera, y la experiencia de los estudiantes en la puerta, donde no manejan una interfaz, con un cuestionario de percepción de seis ítems; los hallazgos se organizan según las características de calidad del producto de ISO/IEC 25010:2023 (International Organization for Standardization & International Electrotechnical Commission [ISO/IEC], 2023).
 
 ## 3. Resultados
 
@@ -160,7 +160,7 @@ La integración con la cámara real permitió detectar y corregir los defectos d
 
 El piloto aún no se ha ejecutado, por lo que **la precisión del reconocimiento con estudiantes reales no se reporta**. Las Tablas 3 y 4 son plantillas que se completarán con los datos recolectados y se mantienen vacías para no presentar datos inexistentes.
 
-> **Protocolo propuesto.** Una sola prueba, en el horario de un curso de la docente asesora, con los estudiantes voluntarios del grupo (entre 25 y 35 [CONFIRMAR: cantidad final]) y con el equipo instalado temporalmente en el aula. Cada participante se enrola con 3 a 5 fotos y realiza 6 capturas frente a la cámara (3 en condición normal y 3 en condición adversa, como luz lateral o lentes); al menos cinco personas no enroladas realizan 3 capturas cada una para estimar la falsa aceptación. Durante el bloque, el sistema funciona en paralelo al registro manual de la docente, que se toma como verdad de terreno, y al final se aplican la Escala de Usabilidad del Sistema, un cuestionario breve de percepción y una consulta a la docente. Participan solo quienes firman el consentimiento informado, con la autorización de la docente; los datos se analizan con códigos, solo se registran valores de similitud (sin imágenes ni video) y las plantillas faciales se eliminan al terminar. Los resultados se resumen con intervalos de confianza de Wilson al 95 %.
+> **Protocolo propuesto.** Una sola prueba, en el horario de un curso de la docente asesora, con los estudiantes voluntarios del grupo (entre 25 y 35 [CONFIRMAR: cantidad final]) y con el equipo instalado temporalmente en el aula. Cada participante se enrola con 3 a 5 fotos y realiza 6 capturas frente a la cámara (3 en condición normal y 3 en condición adversa, como luz lateral o lentes); al menos cinco personas no enroladas realizan 3 capturas cada una para estimar la falsa aceptación. Durante el bloque, el sistema funciona en paralelo al registro manual de la docente, que se toma como verdad de terreno, y al final la docente responde la Escala de Usabilidad del Sistema sobre el panel web y tres preguntas abiertas, y los estudiantes, que solo pasan frente a la cámara y no operan una interfaz, responden un cuestionario breve de percepción sobre su experiencia en la puerta. Participan solo quienes firman el consentimiento informado, con la autorización de la docente; los datos se analizan con códigos, solo se registran valores de similitud (sin imágenes ni video) y las plantillas faciales se eliminan al terminar. Los resultados se resumen con intervalos de confianza de Wilson al 95 %.
 
 **Tabla 3**
 **Desempeño de reconocimiento en el piloto (por completar)**
@@ -182,12 +182,12 @@ El piloto aún no se ha ejecutado, por lo que **la precisión del reconocimiento
 
 | Instrumento | Participantes | Resultado |
 | --- | --- | --- |
-| Escala de Usabilidad del Sistema (docentes) | [COMPLETAR] | [COMPLETAR] |
-| Escala de Usabilidad del Sistema (estudiantes) | [COMPLETAR] | [COMPLETAR] |
+| Escala de Usabilidad del Sistema del panel web (docente) | [COMPLETAR] | [COMPLETAR] |
+| Percepción de los estudiantes en la puerta (mediana por ítem, escala 1 a 5) | [COMPLETAR] | [COMPLETAR] |
 | Veredictos correctos en la puerta (ESP32 físico) | [COMPLETAR] | [COMPLETAR] |
 | Concordancia con la asistencia manual (porcentaje y kappa de Cohen) | [COMPLETAR] | [COMPLETAR] |
 
-*Nota.* Se aplica la Escala de Usabilidad del Sistema (Lewis, 2018).
+*Nota.* La Escala de Usabilidad del Sistema (Lewis, 2018) se aplica solo a quienes operan el panel; con tan pocos usuarios se reporta de forma descriptiva. La percepción de los estudiantes proviene de un cuestionario de elaboración propia, exploratorio y sin validación formal.
 
 ## 4. Discusión
 
@@ -207,7 +207,7 @@ En lo práctico, la solución funciona con equipamiento común de la facultad y 
 
 ### 4.4 Limitaciones
 
-Las limitaciones son siete. Primero, la precisión con estudiantes reales no se ha medido: los resultados son evidencia técnica y no de desempeño biométrico. Segundo, el sistema no detecta vida (*liveness*), por lo que una fotografía o una pantalla podría intentar suplantar a un estudiante (Yu et al., 2023). Tercero, el desempeño puede variar entre grupos demográficos (Grother et al., 2019), por lo que el piloto debe desagregar resultados si la muestra lo permite. Cuarto, las latencias se midieron en un solo equipo y con un video de demostración, con alta variabilidad cuando el equipo estaba ocupado, y no con varias aulas simultáneas. Quinto, la prueba física del nodo ESP32 y la latencia de extremo a extremo del video están pendientes. Sexto, el piloto se hace una vez, en un curso y con instalación temporal, por lo que no evalúa el uso sostenido ni la variación entre aulas, y el cuestionario de percepción, de elaboración propia, es exploratorio. Séptimo, el reglamento establece que pasada la tolerancia de diez minutos el estudiante no puede ingresar (Consejo Universitario de la UNAMBA, 2019, art. 75), mientras que el sistema registra el ingreso posterior como tardanza hasta el fin del bloque; esta regla es configurable y debe acordarse con la facultad antes de su uso oficial.
+Las limitaciones son siete. Primero, la precisión con estudiantes reales no se ha medido: los resultados son evidencia técnica y no de desempeño biométrico. Segundo, el sistema no detecta vida (*liveness*), por lo que una fotografía o una pantalla podría intentar suplantar a un estudiante (Yu et al., 2023). Tercero, el desempeño puede variar entre grupos demográficos (Grother et al., 2019), por lo que el piloto debe desagregar resultados si la muestra lo permite. Cuarto, las latencias se midieron en un solo equipo y con un video de demostración, con alta variabilidad cuando el equipo estaba ocupado, y no con varias aulas simultáneas. Quinto, la prueba física del nodo ESP32 y la latencia de extremo a extremo del video están pendientes. Sexto, el piloto se hace una vez, en un curso y con instalación temporal, por lo que no evalúa el uso sostenido ni la variación entre aulas; además, la usabilidad del panel se evalúa con muy pocos usuarios (la docente asesora), por lo que el puntaje de la Escala de Usabilidad del Sistema es descriptivo, y el cuestionario de percepción de los estudiantes, de elaboración propia, es exploratorio. Séptimo, el reglamento establece que pasada la tolerancia de diez minutos el estudiante no puede ingresar (Consejo Universitario de la UNAMBA, 2019, art. 75), mientras que el sistema registra el ingreso posterior como tardanza hasta el fin del bloque; esta regla es configurable y debe acordarse con la facultad antes de su uso oficial.
 
 ### 4.5 Líneas futuras
 

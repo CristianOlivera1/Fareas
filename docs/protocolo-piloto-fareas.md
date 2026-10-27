@@ -17,7 +17,7 @@
 | Curva FAR–FRR por umbral | Mismos datos, calculada por cuadro |
 | Concordancia con la asistencia manual | Hoja de verdad de terreno de la clase (una sesión) |
 | Tiempo de enrolamiento y hasta el veredicto | Cronómetro y hoja de registro |
-| Usabilidad | SUS (estudiantes y docente) |
+| Usabilidad del panel web | SUS respondido por la docente (y por otros docentes si prueban el panel) |
 | Percepción y privacidad | Cuestionario corto de 6 ítems |
 
 Criterios de referencia (con *n* ≈ 30 se leen con sus intervalos de confianza): TAR ≥ 90 %, 0 identificaciones erróneas, 0 falsas aceptaciones, concordancia con la asistencia manual ≥ 90 %, SUS ≥ 68 y veredicto en la puerta en ≤ 3 s. Como comparación, un sistema con ArcFace y plantilla promedio reportó FAR de 4,76 % y FRR de 2,38 % en una escuela secundaria (Widyani et al., 2026).
@@ -43,7 +43,7 @@ Todo se hace desde la pantalla **Herramientas → Prueba piloto** del sistema (s
 2. **Capturas controladas** antes de la clase (de 40 a 60 min). En la pantalla Prueba piloto se elige al estudiante y la condición, se pulsa **Capturar** y el estudiante camina hacia la puerta como cuando ingresa; la captura dura 10 s. Por estudiante: 3 capturas **normales** y 3 **adversas** (luz lateral, lentes o distancia distinta). La tabla "Avance por estudiante" marca en verde lo completado y muestra cuántos faltan. Orden aleatorio.
 3. **Personas no enroladas** (al menos 5, 3 capturas cada una): se marca la casilla "Persona no enrolada" y se pulsa Capturar.
 4. **Clase real.** El sistema funciona en la puerta durante el bloque mientras la docente pasa su lista. Un observador completa la hoja de la Sección 5. Al cierre se exporta la asistencia del sistema (Reportes) para compararla con el registro manual.
-5. **Cuestionarios** al terminar la clase: SUS y percepción a los estudiantes; SUS y las tres preguntas de la Sección 6 a la docente.
+5. **Cuestionarios** al terminar la clase: los estudiantes responden solo el cuestionario de percepción (no operan ninguna interfaz); la docente responde el SUS sobre el panel y las tres preguntas de la Sección 6. Quien desarrolla o administra la prueba no responde el SUS, porque su opinión está sesgada.
 6. **Cierre.** Descargar el CSV desde la pantalla Prueba piloto, eliminar los rostros enrolados (función de eliminación del sistema) y retirar el equipo. El botón "Borrar datos del piloto" vacía las capturas si hay que repetir el ensayo.
 
 ## 4. Análisis
@@ -65,7 +65,7 @@ Hoja de enrolamiento: alias, fotos intentadas, fotos rechazadas y causa, tiempo 
 
 ## 6. Instrumentos
 
-**SUS (10 ítems, escala 1 a 5; 1 = totalmente en desacuerdo, 5 = totalmente de acuerdo).** Versión en español de Sevilla-Gonzalez et al. (2020, Apéndice multimedia 2):
+**SUS, para la docente (y otros docentes que prueben el panel durante 5 minutos) (10 ítems, escala 1 a 5; 1 = totalmente en desacuerdo, 5 = totalmente de acuerdo).** Versión en español de Sevilla-Gonzalez et al. (2020, Apéndice multimedia 2):
 
 1. Me gustaría usar esta herramienta frecuentemente.
 2. Considero que esta herramienta es innecesariamente compleja.
