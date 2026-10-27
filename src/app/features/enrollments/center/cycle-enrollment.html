@@ -65,7 +65,7 @@
                     <div class="mt-0.5 text-xs text-gray-600">{{ course.course_name }}</div>
                   </td>
                   <td class="px-3 py-2 text-xs text-gray-600">{{ blocksLabel(course.blocks) }}</td>
-                  <td class="px-3 py-2 text-xs text-gray-600">{{ course.teacher_name ?? '—' }}</td>
+                  <td class="px-3 py-2 text-xs text-gray-600">{{ course.teacher_name ?? '-' }}</td>
                   <td class="px-3 py-2 text-right text-xs tabular-nums">
                     <span [class]="course.free === 0 ? 'font-semibold text-red-600' : course.free < 6 ? 'font-semibold text-amber-600' : 'text-gray-700'">
                       {{ course.free }} libres
@@ -122,9 +122,9 @@
             <ul class="mt-1 max-h-48 divide-y divide-gray-100 overflow-auto rounded-xl border border-gray-200">
               @for (person of found(); track person.id) {
                 <li class="flex items-center gap-2 px-3 py-2">
-                  <span class="font-mono text-xs text-gray-500">{{ person.code ?? '—' }}</span>
+                  <span class="font-mono text-xs text-gray-500">{{ person.code ?? '-' }}</span>
                   <span class="min-w-0 flex-1 truncate text-sm text-gray-800">{{ person.full_name }}</span>
-                  <span class="text-[11px] text-gray-400">Ciclo {{ person.semester ? roman(person.semester) : '—' }}</span>
+                  <span class="text-[11px] text-gray-400">Ciclo {{ person.semester ? roman(person.semester) : '-' }}</span>
                   @if (pickedIds().has(person.id)) {
                     <iconify-icon icon="material-symbols:check-circle" width="18" class="text-green-600"></iconify-icon>
                   } @else {

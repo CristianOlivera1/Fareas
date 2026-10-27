@@ -84,7 +84,7 @@ export class Attendance {
   readonly records = signal<AttendanceToday[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
-  readonly lastRefresh = signal('—');
+  readonly lastRefresh = signal('-');
 
   readonly sesiones = signal<SessionToday[]>([]);
   readonly reviews = signal<SessionReview[]>([]);
@@ -194,7 +194,7 @@ export class Attendance {
   }
 
   shortHour(iso: string | null): string {
-    return iso && iso.length >= 16 ? iso.slice(11, 16) : '—';
+    return iso && iso.length >= 16 ? iso.slice(11, 16) : '-';
   }
 
   clearFilters(): void {
@@ -496,7 +496,7 @@ export class Attendance {
   }
 
   shortDate(iso: string): string {
-    return iso || '—';
+    return iso || '-';
   }
 
   private async load(): Promise<void> {

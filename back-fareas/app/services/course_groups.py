@@ -1,3 +1,5 @@
+import string
+
 from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
 
@@ -61,6 +63,35 @@ async def ensure_default_group(
     db.add(group)
     await db.flush()
     return group, True
+
+
+async def create_next_group(
+    db: SQLModelAsyncSession, course: Course, period: str
+) -> CourseGroup:
+    used = {
+        code
+        for code in (
+            await db.exec(
+                select(CourseGroup.group_code).where(
+                    CourseGroup.course_id == course.id,
+                    CourseGroup.semester_label == period,
+                )
+            )
+        ).all()
+    }
+    code = next((letter for letter in string.ascii_uppercase if letter not in used), None)
+    if code is None:
+        raise errors.DomainError(f"El curso {course.code} ya no admite más grupos en {period}")
+    group = CourseGroup(
+        course_id=course.id,
+        group_code=code,
+        teacher_id=None,
+        semester_label=period,
+        capacity=DEFAULT_CAPACITY,
+    )
+    db.add(group)
+    await db.flush()
+    return group
 
 
 async def resolve_group_for_course(

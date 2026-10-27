@@ -71,7 +71,7 @@ export class DevicesPage {
   readonly devices = signal<Device[]>([]);
   readonly total = signal(0);
   readonly statusList = signal<Device[]>([]);
-  readonly lastRefresh = signal('—');
+  readonly lastRefresh = signal('-');
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly saving = signal(false);

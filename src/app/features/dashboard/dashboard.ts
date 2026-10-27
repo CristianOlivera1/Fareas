@@ -22,7 +22,7 @@ interface StatCard {
 }
 
 function buildCards(summary: DashboardSummary | null): StatCard[] {
-  const dash = '—';
+  const dash = '-';
   return [
     {
       title: 'Asistencias hoy',

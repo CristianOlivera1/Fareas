@@ -58,7 +58,7 @@ describe('StudentsPage', () => {
     });
   }
 
-  it('validates DNI, code, institutional email and Peru WhatsApp', () => {
+  it('validates optional DNI, code, institutional email and Peru WhatsApp', () => {
     component.openCreate();
     component.studentForm.setValue({
       full_name: 'Ana Torres',
@@ -77,6 +77,9 @@ describe('StudentsPage', () => {
     expect(component.studentForm.controls.whatsapp.hasError('whatsapp')).toBe(true);
 
     fillValidForm();
+    expect(component.studentForm.valid).toBe(true);
+
+    component.studentForm.controls.dni.setValue('');
     expect(component.studentForm.valid).toBe(true);
   });
 

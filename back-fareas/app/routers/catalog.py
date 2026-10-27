@@ -447,7 +447,7 @@ async def create_teacher(
 class StudentIn(BaseModel):
     full_name: str = Field(min_length=3, max_length=160)
     email: EmailStr
-    dni: str = Field(pattern=r"^\d{8}$")
+    dni: str | None = Field(default=None, pattern=r"^\d{8}$")
     code: str = Field(pattern=r"^\d{6}$", description="Código de matrícula")
     semester: int = Field(ge=1, le=12, description="Ciclo actual")
     whatsapp: str | None = Field(default=None, max_length=20)
@@ -524,7 +524,7 @@ async def students_import_preview(
     request: Request,
     db: DbSession,
     admin: RequireRole(UserRole.ADMIN),
-    file: Annotated[UploadFile, File(description="Nómina en PDF, JPG, PNG o WEBP")],
+    file: Annotated[UploadFile, File(description="Nómina en Excel, CSV, PDF, JPG, PNG o WEBP")],
     default_semester: Annotated[int, Form(ge=1, le=12)] = 1,
 ) -> ImportacionAlumnosPreviewOut:
     raw = await file.read()
@@ -548,8 +548,9 @@ async def students_import_preview(
     if not alumnos:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=("No se detectaron filas con código y nombre. Revisa que sea una nómina "
-                    "impresa en tabla, derecha y con buena luz, o registra a los alumnos a mano."),
+            detail=("No se detectaron filas con código, DNI o correo. Revisa que el archivo "
+                    "tenga una fila por alumno (si es imagen, una tabla derecha y con buena luz), "
+                    "o registra a los alumnos a mano."),
         )
     await audit(db, admin, action="importacion_alumnos_preview", entity="app_user",
                 new_value={"archivo": file.filename, "tipo": documento.tipo,

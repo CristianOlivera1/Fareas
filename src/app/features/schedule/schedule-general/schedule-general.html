@@ -137,13 +137,15 @@
           El curso no necesita grupo ni docente para aparecer en el horario: el grupo se crea solo.
         </span>
       </label>
-      @if (needsGroupChoice()) {
+      @if (showGroupChoice()) {
         <label class="flex flex-col gap-1">
           <span class="text-sm font-medium text-gray-700">Grupo <span class="text-red-500">*</span></span>
           <p-select class="w-full" appendTo="body" [options]="groupChoiceOptions()" optionLabel="label"
             optionValue="value" placeholder="Elige el grupo" [ngModel]="blockForm().group_id"
             (ngModelChange)="onGroup($event)" />
-          <span class="text-xs text-gray-400">Este curso ya se divide en varios grupos.</span>
+          <span class="text-xs text-gray-400">
+            Elige «Nuevo grupo» para abrir otro grupo del mismo curso, por ejemplo en otra aula a la misma hora.
+          </span>
         </label>
       }
     }
@@ -187,11 +189,7 @@
         Se prellena con el aula del último bloque del grupo; puedes cambiarla o dejarla vacía.
       </span>
     </label>
-    <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-      Bloques de 1 h o 2 h, en horas exactas (sin minutos), entre las {{ attendanceStartTime() }} y las
-      {{ attendanceEndTime() }}. El aula es obligatoria; el docente es opcional y se puede asignar después.
-      La asistencia se registra aunque todavía no haya docente.
-    </app-ui-alert>
+
   </div>
   <ng-template pTemplate="footer">
     <app-ui-button variant="ghost" (click)="blockDialogVisible = false">Cancelar</app-ui-button>

@@ -235,7 +235,7 @@ export class HolidaysPage {
 
   deleteLabel(): string | null {
     const h = this.deleteTarget();
-    return h ? `${this.formatDate(h.holiday_date)} — ${h.description}` : null;
+    return h ? `${this.formatDate(h.holiday_date)} - ${h.description}` : null;
   }
 
   cancelDelete(): void {
@@ -272,7 +272,7 @@ export class HolidaysPage {
   }
 
   formatDate(iso: string): string {
-    if (!iso) return '—';
+    if (!iso) return '-';
     return new Date(`${iso}T12:00:00`).toLocaleDateString('es-PE', {
       weekday: 'long',
       day: '2-digit',
@@ -282,13 +282,13 @@ export class HolidaysPage {
   }
 
   weekday(iso: string): string {
-    if (!iso) return '—';
+    if (!iso) return '-';
     const label = new Date(`${iso}T12:00:00`).toLocaleDateString('es-PE', { weekday: 'long' });
     return label.charAt(0).toUpperCase() + label.slice(1);
   }
 
   monthShort(iso: string): string {
-    if (!iso) return '—';
+    if (!iso) return '-';
     return new Date(`${iso}T12:00:00`)
       .toLocaleDateString('es-PE', { month: 'short' })
       .replace('.', '')

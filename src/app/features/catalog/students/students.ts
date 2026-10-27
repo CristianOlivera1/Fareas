@@ -83,7 +83,7 @@ export class StudentsPage {
       institutionalEmail,
       Validators.maxLength(160),
     ]],
-    dni: ['', [Validators.required, Validators.pattern(DNI_PATTERN)]],
+    dni: ['', [Validators.pattern(DNI_PATTERN)]],
     code: ['', [Validators.required, Validators.pattern(CODE_PATTERN)]],
     semester: [null as number | null, [
       Validators.required,

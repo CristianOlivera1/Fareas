@@ -61,6 +61,13 @@ const VERDICT_STYLES: Record<DisplayVerdict, VerdictStyle> = {
     border: 'border-blue-400',
     badge: 'bg-blue-500',
   },
+  verificando: {
+    label: 'Identificando',
+    message: 'Identificando…',
+    dot: 'bg-blue-400 animate-pulse',
+    border: 'border-blue-300',
+    badge: 'bg-blue-500',
+  },
   sin_registro: {
     label: 'Sin registro',
     message: 'No hay clase activa',

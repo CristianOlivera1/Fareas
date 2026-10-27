@@ -10,6 +10,7 @@ DET_MEAN = 127.5
 DET_STD = 128.0
 
 STRIDES = (8, 16, 32)
+SIZE_MULTIPLE = 32
 NUM_ANCHORS = 2
 
 
@@ -27,6 +28,7 @@ class ScrfdDetector:
         self.input_name = self.session.get_inputs()[0].name
         self.output_names = [o.name for o in self.session.get_outputs()]
         self.input_size = input_size
+        self.adaptive_size = True
         self.det_thresh = det_thresh
         self._score_is_logit: bool | None = None
         infos = [(o.name, o.shape) for o in self.session.get_outputs()]
@@ -44,10 +46,15 @@ class ScrfdDetector:
         ]
 
     def _preprocess(self, frame: np.ndarray) -> tuple[np.ndarray, float]:
-        in_w, in_h = self.input_size
+        limit_w, limit_h = self.input_size
         h0, w0 = frame.shape[:2]
-        scale = min(in_w / w0, in_h / h0)
+        scale = min(limit_w / w0, limit_h / h0)
         new_w, new_h = max(1, int(round(w0 * scale))), max(1, int(round(h0 * scale)))
+        if self.adaptive_size:
+            in_w = -(-new_w // SIZE_MULTIPLE) * SIZE_MULTIPLE
+            in_h = -(-new_h // SIZE_MULTIPLE) * SIZE_MULTIPLE
+        else:
+            in_w, in_h = limit_w, limit_h
         resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
         canvas = np.zeros((in_h, in_w, 3), dtype=np.uint8)
         canvas[:new_h, :new_w] = resized
@@ -66,13 +73,14 @@ class ScrfdDetector:
         except (TypeError, ValueError, IndexError):
             return -1
 
-    def _decode_stride(self, raw: dict[str, np.ndarray], names: tuple[str, ...], stride: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _decode_stride(
+        self, raw: dict[str, np.ndarray], names: tuple[str, ...], stride: int, in_h: int, in_w: int
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         score_n, bbox_n, kps_n = names
         scores = raw[score_n].reshape(-1)
         bbox_d = raw[bbox_n].reshape(-1, 4) * stride
         kps_d = raw[kps_n].reshape(-1, 10) * stride
 
-        in_h, in_w = self.input_size
         gh, gw = in_h // stride, in_w // stride
         centers = np.stack(np.mgrid[:gh, :gw][::-1], axis=-1).astype(np.float32)
         centers = (centers * stride).reshape(-1, 2)
@@ -95,6 +103,7 @@ class ScrfdDetector:
     def detect(self, frame: np.ndarray, det_thresh: float | None = None, max_faces: int = 0) -> list[Face]:
         thresh = self.det_thresh if det_thresh is None else det_thresh
         inp, scale = self._preprocess(frame)
+        in_h, in_w = inp.shape[2], inp.shape[3]
         out = self.session.run(self.output_names, {self.input_name: inp})
         raw = dict(zip(self.output_names, out, strict=True))
 
@@ -104,7 +113,7 @@ class ScrfdDetector:
 
         all_boxes, all_scores, all_kps = [], [], []
         for names, stride in self._groups:
-            scores, boxes, kps = self._decode_stride(raw, names, stride)
+            scores, boxes, kps = self._decode_stride(raw, names, stride, in_h, in_w)
             if self._score_is_logit:
                 scores = self._sigmoid(scores)
             all_scores.append(scores)

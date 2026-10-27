@@ -198,7 +198,7 @@ async def reporte_matriz_grupo(
             marca = {"asistio": "A", "tardanza": "T"}.get(estado)
             if estado == "falta":
                 marca = "FJ" if r.is_justified else "F"
-            celdas[(r.student_id, r.session_id)] = marca or "—"
+            celdas[(r.student_id, r.session_id)] = marca or "-"
 
     etiquetas = [etiqueta for _sid, etiqueta in fechas]
     filas_out = [
@@ -206,7 +206,7 @@ async def reporte_matriz_grupo(
             "student_name": alumno.full_name,
             "student_code": alumno.code,
             "celdas": {
-                etiquetas[i]: celdas.get((alumno.id, sid), "—")
+                etiquetas[i]: celdas.get((alumno.id, sid), "-")
                 for i, (sid, _e) in enumerate(fechas)
             },
         }

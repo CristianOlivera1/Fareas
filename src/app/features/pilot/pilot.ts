@@ -141,7 +141,7 @@ export class PilotPage {
   }
 
   percent(value: number | null): string {
-    return value === null ? '—' : `${(value * 100).toFixed(1)} %`;
+    return value === null ? '-' : `${(value * 100).toFixed(1)} %`;
   }
 
   interval(rate: PilotRate): string {

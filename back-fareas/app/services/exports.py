@@ -168,9 +168,9 @@ LEYENDA_MATRIZ = {
     "T": "Tardanza",
     "F": "Falta",
     "FJ": "Falta justificada",
-    "—": "Sin marca del alumno",
+    "-": "Sin marca del alumno",
 }
-COLOR_MATRIZ = {"A": "22C55E", "T": "F59E0B", "F": "EF4444", "FJ": "0EA5E9", "—": "9CA3AF"}
+COLOR_MATRIZ = {"A": "22C55E", "T": "F59E0B", "F": "EF4444", "FJ": "0EA5E9", "-": "9CA3AF"}
 
 
 def excel_matriz_grupo(
@@ -215,7 +215,7 @@ def excel_matriz_grupo(
         base = a + t + f_ + fj
         pct = round((a + t) * 100 / base, 1) if base else 0.0
         valores = [r.get("student_name", ""), r.get("student_code") or "-",
-                   *[celda.get(f, "—") for f in fechas], a, t, f_, fj, pct]
+                   *[celda.get(f, "-") for f in fechas], a, t, f_, fj, pct]
         for col, valor in enumerate(valores, start=1):
             c = ws.cell(row=fila_hdr + 1 + i, column=col, value=valor)
             c.border = borde
@@ -282,8 +282,8 @@ def excel_riesgo_dpi(filas: list[dict], titulo_periodo: str | None = None) -> by
             r.get("sessions_held"), r.get("absences"), r.get("justified_absences"),
             r.get("lates"), r.get("absence_percent"),
             "LÍMITE (inhabilitado)" if nivel == "limite" else "Alerta",
-            r.get("faltas_permitidas") if r.get("faltas_permitidas") is not None else "—",
-            r.get("faltas_restantes") if r.get("faltas_restantes") is not None else "—",
+            r.get("faltas_permitidas") if r.get("faltas_permitidas") is not None else "-",
+            r.get("faltas_restantes") if r.get("faltas_restantes") is not None else "-",
         ]
         for col, valor in enumerate(valores, start=1):
             c = ws.cell(row=fila_hdr + 1 + i, column=col, value=valor)

@@ -61,7 +61,7 @@
     <span class="text-sm text-gray-600">{{ row.entity }}{{ row.entity_id !== null ? ' #' + row.entity_id : '' }}</span>
   </ng-template>
   <ng-template appCell="ip_address" let-row>
-    <span class="font-mono text-xs text-gray-500">{{ row.ip_address ?? '—' }}</span>
+    <span class="font-mono text-xs text-gray-500">{{ row.ip_address ?? '-' }}</span>
   </ng-template>
   <ng-template appCell="detail" let-row>
     <button type="button"
@@ -84,11 +84,11 @@
     <div class="mt-4 grid gap-3 sm:grid-cols-2">
       <div class="min-w-0">
         <p class="mb-1 text-xs font-medium text-gray-500">Valor anterior</p>
-        <pre class="max-h-72 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-800">{{ entry.old_value === null ? '—' : (entry.old_value | json) }}</pre>
+        <pre class="max-h-72 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-800">{{ entry.old_value === null ? '-' : (entry.old_value | json) }}</pre>
       </div>
       <div class="min-w-0">
         <p class="mb-1 text-xs font-medium text-gray-500">Valor nuevo</p>
-        <pre class="max-h-72 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-800">{{ entry.new_value === null ? '—' : (entry.new_value | json) }}</pre>
+        <pre class="max-h-72 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-800">{{ entry.new_value === null ? '-' : (entry.new_value | json) }}</pre>
       </div>
     </div>
   }

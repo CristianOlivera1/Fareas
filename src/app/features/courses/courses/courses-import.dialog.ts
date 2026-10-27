@@ -264,7 +264,7 @@ export class CoursesImportDialog {
   }
 
   roman(cycle: number | null): string {
-    return cycle === null ? '—' : toRoman(cycle);
+    return cycle === null ? '-' : toRoman(cycle);
   }
 
   async confirm(): Promise<void> {

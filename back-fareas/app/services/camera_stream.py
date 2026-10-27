@@ -24,6 +24,7 @@ POLL_S = 0.02
 DETECT_WIDTH = 640
 DETECT_THRESHOLD = 0.5
 DETECT_IDLE_S = 0.02
+DETECT_MIN_INTERVAL_S = 0.2
 BOX_MAX_AGE_S = 0.6
 
 DETECTED_COLOR = (80, 200, 60)
@@ -181,6 +182,7 @@ class _RoomReader:
                 self._stop.wait(DETECT_IDLE_S)
                 continue
             seen = sequence
+            started = time.monotonic()
             width = frame.shape[1]
             ratio = DETECT_WIDTH / width if width > DETECT_WIDTH else 1.0
             small = cv2.resize(frame, None, fx=ratio, fy=ratio, interpolation=cv2.INTER_AREA) if ratio < 1.0 else frame
@@ -194,6 +196,7 @@ class _RoomReader:
             self._boxes = [face.box / ratio for face in faces]
             self._boxes_at = time.monotonic()
             self.boxes_sequence += 1
+            self._stop.wait(max(0.0, DETECT_MIN_INTERVAL_S - (time.monotonic() - started)))
 
     def _reconnect(self, failures: int) -> bool:
         if failures >= RECONNECT_ATTEMPTS:

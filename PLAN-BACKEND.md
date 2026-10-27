@@ -167,12 +167,12 @@ back-fareas/
 > el correo institucional como segundo factor. Todos los roles usan el mismo flujo.
 
 **Flujo (RF-11 + RF-12):**
-1. `POST /auth/change-password/otp` `{current_password}` — valida la clave actual,
+1. `POST /auth/change-password/otp` `{current_password}` - valida la clave actual,
    aplica cooldown de 60 s y envía un OTP de 6 dígitos. Devuelve el correo
    enmascarado (`ju*****ez@unamba.edu.pe`), `expires_in=600` y `resend_in=60`.
-2. `POST /auth/change-password/otp/verify` `{code}` — valida el código y lo marca
+2. `POST /auth/change-password/otp/verify` `{code}` - valida el código y lo marca
    `verified`. Un código incorrecto consume un intento (máx. 5).
-3. `POST /auth/change-password` `{current_password, new_password}` — exige el OTP
+3. `POST /auth/change-password` `{current_password, new_password}` - exige el OTP
    verificado, lo **consume** (un solo uso) y actualiza la contraseña.
 
 **Decisiones clave:**
@@ -241,10 +241,10 @@ completa sin `test_vision.py`: **92 passed**.
 
 ### Bloque 6 - Motor de asistencia (1–2 días) - RF-21…RF-26 - *el corazón* - **✅ COMPLETADO Y VERIFICADO**
 - [x] `services/attendance_engine.py` (lógica pura, testeable): `resolver_sesion(aula, now)` (cámara→aula→grupos activos→bloque vigente→`attendance_session` del día; NO abre en feriados RF-09 ni fuera del horario RF-34) → marca ÚNICA (`UNIQUE(session_id, student_id)`) → clasificación RF-23 ~~dentro del bloque~~ → **R2 (Bloque 11, 2026-10-11): `asistio` entre `inicio − apertura anticipada` y `inicio + tolerancia`; `tardanza` después de eso y hasta el `fin` del bloque; luego la ventana cierra y la falta la genera el cierre (RF-26). La sesión la abre el scheduler (R3).**
-- [x] `services/session_scheduler.py`: APScheduler en el `lifespan` (cada 60 s); **R3/R4 (Bloque 11): `abrir_sesiones_del_dia()` abre la sesión al iniciar su ventana de apertura (aunque nadie marque); `cerrar_sesiones_pendientes()` cierra al `fin` del bloque —incluidas las de fechas anteriores si el servidor estuvo caído—; con cero marcas queda `needs_review` SIN faltas, con marcas genera faltas (marked_at NULL) a los matriculados activos sin registro (nacen justificadas si hay justificación vigente, R6) y alertas DPI.**
+- [x] `services/session_scheduler.py`: APScheduler en el `lifespan` (cada 60 s); **R3/R4 (Bloque 11): `abrir_sesiones_del_dia()` abre la sesión al iniciar su ventana de apertura (aunque nadie marque); `cerrar_sesiones_pendientes()` cierra al `fin` del bloque -incluidas las de fechas anteriores si el servidor estuvo caído-; con cero marcas queda `needs_review` SIN faltas, con marcas genera faltas (marked_at NULL) a los matriculados activos sin registro (nacen justificadas si hay justificación vigente, R6) y alertas DPI.**
 - [x] Alertas DPI al cierre (RF-24): SQL sobre la vista `v_student_dpi` + `services/notifications.py` (correo con la paleta institucional, rojo si ya supera el 1/3).
 - [x] `services/camera_loop.py`: un solo task asyncio en round-robin (~2 fps por aula activa) → pipeline → marca en BD → veredicto al ESP32 del aula + `ultimo_veredicto()` en memoria para el feed SSE del Bloque 8.
-- [x] `routers/attendance.py`: `GET /attendance/today` (vista `v_today_attendance`, filtros curso/aula/estado — alimenta app-student-list, PLAN §5), `POST /sessions/{id}/manual-mark` (RF-21, docente solo en SUS grupos), `PATCH /attendance/{id}/rectify` (RF-15 motivo obligatorio → audit_log), `POST /sessions/{id}/close` (admin). (Bloque 6b añade `GET /attendance/sessions-today` y `GET /attendance/me`; ver arriba).
+- [x] `routers/attendance.py`: `GET /attendance/today` (vista `v_today_attendance`, filtros curso/aula/estado - alimenta app-student-list, PLAN §5), `POST /sessions/{id}/manual-mark` (RF-21, docente solo en SUS grupos), `PATCH /attendance/{id}/rectify` (RF-15 motivo obligatorio → audit_log), `POST /sessions/{id}/close` (admin). (Bloque 6b añade `GET /attendance/sessions-today` y `GET /attendance/me`; ver arriba).
 - [x] `tests/test_attendance_engine.py` + `test_attendance_api.py`: creación/reuso de sesión, feriado, ventana de tardanza, marca única (409), cierre con faltas e idempotencia, marca manual por API, rectificación auditada, 403 a docente ajeno.
 - **Entregable VERIFICADO:** video demo → sesión auto-abierta → Raul (221181) identificado (sim 0.618) → marca `asistio` persistida → cierre sin faltas pendientes → todo en BD. **49/49 tests.**
 
@@ -256,12 +256,12 @@ completa sin `test_vision.py`: **92 passed**.
 5. Numeración de scripts BD: verificar `db/` antes de crear un 00N nuevo (003 ya estaba tomado por refresh tokens).
 
 ### Bloque 7 - ESP32 y dispositivos reales (1 día) - RF-25, RF-27…RF-29, RF-33 - **✅ COMPLETADO Y VERIFICADO**
-- [x] `ws_devices.py` extendido: token por query (close 4401 si inválido), `hello` con `device_key` VALIDADO contra la tabla `device` (ESP32 activo; close 4404 si no existe), heartbeat que actualiza `last_heartbeat` en BD, desconexión y expiración (90 s sin latidos) marcan `is_online=FALSE` — visible en `GET /devices/status` (RF-35).
+- [x] `ws_devices.py` extendido: token por query (close 4401 si inválido), `hello` con `device_key` VALIDADO contra la tabla `device` (ESP32 activo; close 4404 si no existe), heartbeat que actualiza `last_heartbeat` en BD, desconexión y expiración (90 s sin latidos) marcan `is_online=FALSE` - visible en `GET /devices/status` (RF-35).
 - [x] `session_scheduler.py` también ejecuta `expirar_nodos()` cada 60 s (RF-35).
 - [x] `camera_loop.py` envía los veredictos Tabla 8 al device_key conectado vía `enviar_veredicto()`; clasificador RF-23 en vivo conectado al pipeline (asistio/tardanza/sin_registro por sesión) → las marcas faciales SÍ se persisten desde el bucle.
 - [x] `scripts/simulate_esp32.py` actualizado: emula el anillo LED en consola (colores ANSI) y reporta cada veredicto.
 - [x] Tests `test_ws_devices.py`: token inválido (4401), hello de key inexistente (4404), hello válido + heartbeat + ping + tipo desconocido, ciclo online→offline con expiración. **53/53 en la suite.**
-- **Entregable VERIFICADO en demo end-to-end:** cámara de LAB 305 apuntando al video demo (dentro de `resources/`) → sesión auto-abierta → Raul identificado → `INSERT attendance_record (asistio, sim 0.656)` EN BD → ESP32 simulado recibió `[LED VERDE] buzzer=beep_1 — Registro correcto` (y azul para desconocidos, sin_rostro en escena vacía). Cuando conectes el ESP32 físico, el firmware de §4.2 habla el MISMO protocolo.
+- **Entregable VERIFICADO en demo end-to-end:** cámara de LAB 305 apuntando al video demo (dentro de `resources/`) → sesión auto-abierta → Raul identificado → `INSERT attendance_record (asistio, sim 0.656)` EN BD → ESP32 simulado recibió `[LED VERDE] buzzer=beep_1 - Registro correcto` (y azul para desconocidos, sin_rostro en escena vacía). Cuando conectes el ESP32 físico, el firmware de §4.2 habla el MISMO protocolo.
 
 **Lecciones del bloque:**
 1. Al abrir una fuente de video en hilo, ESPERAR el primer frame (warm-up ~5 s): sin eso cada `read()` llegaba vacío y la fuente se abría/cerraba en bucle.
@@ -270,23 +270,23 @@ completa sin `test_vision.py`: **92 passed**.
 4. Los close codes del WS en TestClient llegan como `WebSocketDisconnect(code)` en el cliente (no como dict).
 
 ### Bloque 8 - APIs del dashboard (1 día) - RF-13…RF-16 - **✅ COMPLETADO Y VERIFICADO**
-- [x] `routers/dashboard.py`: `GET /dashboard/summary` (tarjetas RF-13: asistencias/tardanzas/ausencias de hoy, % ausentismo, cámaras, alertas DPI vía `v_student_dpi` + `app_settings`); feed EN VIVO con **SSE** (`EventSourceResponse` de sse-starlette, `ping=15`) retransmitiendo los veredictos de `camera_loop` (`/dashboard/live?access_token=&room_id=` y `/dashboard/live-room/{id}`) — el JWT va por QUERY porque EventSource no manda cabeceras (rol docente/admin validado a mano); `GET /stats/hourly?day=` (franja 07–20 por HORA DE BLOQUE) y `GET /stats/distribution?desde=&hasta=` (dona con `sin_registro` = matriculados de sesiones CERRADAS sin marca).
+- [x] `routers/dashboard.py`: `GET /dashboard/summary` (tarjetas RF-13: asistencias/tardanzas/ausencias de hoy, % ausentismo, cámaras, alertas DPI vía `v_student_dpi` + `app_settings`); feed EN VIVO con **SSE** (`EventSourceResponse` de sse-starlette, `ping=15`) retransmitiendo los veredictos de `camera_loop` (`/dashboard/live?access_token=&room_id=` y `/dashboard/live-room/{id}`) - el JWT va por QUERY porque EventSource no manda cabeceras (rol docente/admin validado a mano); `GET /stats/hourly?day=` (franja 07–20 por HORA DE BLOQUE) y `GET /stats/distribution?desde=&hasta=` (dona con `sin_registro` = matriculados de sesiones CERRADAS sin marca).
 - [x] RF-15/RF-10 ya cubiertos en bloques previos (`attendance.py` rectifica con motivo→audit; justificaciones en `calendar_admin.py`), se reutilizaron.
 - [x] `routers/reports.py` + `services/exports.py`: Excel (openpyxl) y PDF horizontal (reportlab) con encabezado institucional UNAMBA; `GET /reports/attendance.xlsx|pdf?desde=&hasta=&course_id=`; el docente solo exporta SUS grupos (mismo guard RF-21); StreamingResponse con Content-Disposition y funciones puras que devuelven bytes (testeables sin HTTP).
 - [x] Tests `test_dashboard_reports.py` (7): summary, hourly/distribution, SSE sin token (422) / token inválido (401) / estudiante (403) / veredicto en vivo recibido, Excel (zip PK + openpyxl) y PDF (%PDF-), docente ajeno → reporte vacío. **60/60 en la suite.**
 - **Entregable VERIFICADO E2E:** uvicorn real en :8010 → summary/hourly/distribution JSON correctos, SSE con `content-type: text/event-stream`, y `asistencia_2026-09-01_2026-09-27_*.xlsx` (magic 'Microsoft Excel 2007+') + PDF `%PDF-` descargados por curl.
 
 **Lecciones del bloque:**
-1. `GROUP BY status` sin calificar revienta con asyncpg (`AmbiguousColumnError`: `status` existe en record Y session) — siempre `GROUP BY ar.status` / `GROUP BY 1,2`.
+1. `GROUP BY status` sin calificar revienta con asyncpg (`AmbiguousColumnError`: `status` existe en record Y session) - siempre `GROUP BY ar.status` / `GROUP BY 1,2`.
 2. `db.exec(text(...)).one()` devuelve Row (no escalar) → para COUNT usar `.scalar_one()`.
 3. httpx+ASGITransport NO puede consumir un stream SSE infinito (se cuelga): en tests se llama al endpoint y se lee `resp.body_iterator.__anext__()` con `wait_for`, luego `aclose()`.
 4. SQL del dashboard por HORA DE BLOQUE (no `marked_at`): la curva 07–20 muestra la carga real de la franja aunque la marca facial llegue minutos después.
 
 ### Bloque 9 - OCR de horarios (½ día) - RF-07 - **✅ COMPLETADO Y VERIFICADO**
-- [x] `services/ocr_schedule.py`: `extraer_horarios(pdf_bytes)` con pdfplumber — estrategia por CONTEXTO DE LÍNEA: un código de curso (regex `A-Z{2,8}\d{2,4}`: ISA903, SI504…) fija curso actual; las líneas `DIA HH:MM - HH:MM` (día genérico de 3-4 letras, soporta `LUN/MIE`, guiones - – — y '8:00') generan bloques; `Grupo:`/`Sección:` en cualquier línea alimenta el contexto. Todo lo dudoso sale `confiable=False` + `nota` ('día no reconocido', 'horario invertido', 'sin curso previo', 'grupo no detectado').
+- [x] `services/ocr_schedule.py`: `extraer_horarios(pdf_bytes)` con pdfplumber - estrategia por CONTEXTO DE LÍNEA: un código de curso (regex `A-Z{2,8}\d{2,4}`: ISA903, SI504…) fija curso actual; las líneas `DIA HH:MM - HH:MM` (día genérico de 3-4 letras, soporta `LUN/MIE`, guiones - – - y '8:00') generan bloques; `Grupo:`/`Sección:` en cualquier línea alimenta el contexto. Todo lo dudoso sale `confiable=False` + `nota` ('día no reconocido', 'horario invertido', 'sin curso previo', 'grupo no detectado').
 - [x] Alcance honesto: PDF DIGITAL (texto); un escaneo de imagen → 0 bloques → el endpoint responde 422 con explicación (OCR de imagen FUERA de alcance, PLAN §7). Tope 10 MB. **→ Superado por el Bloque 14:** las fotos y los PDF escaneados se leen con RapidOCR; el PDF digital sigue por la vía de texto (más rápida y exacta).
 
-- [x] `routers/courses.py`: `POST /courses/import-pdf` (multipart, SOLO admin) devuelve la previsualización editable SIN persistir nada; `POST /courses/import-pdf/confirm` crea cursos faltantes + un grupo por (curso, group_code) + bloques con la MISMA validación RF-06 — **todo o nada** (`add_block(commit=False)` + rollback en excepción).
+- [x] `routers/courses.py`: `POST /courses/import-pdf` (multipart, SOLO admin) devuelve la previsualización editable SIN persistir nada; `POST /courses/import-pdf/confirm` crea cursos faltantes + un grupo por (curso, group_code) + bloques con la MISMA validación RF-06 - **todo o nada** (`add_block(commit=False)` + rollback en excepción).
 - [x] Tests `test_ocr_schedule.py` (7): extractor puro (2 cursos, horas pegadas, grupo B), ambiguos (día raro, rango invertido), PDF escaneado, preview rechaza docente (403), preview+confirm E2E (cursos/grupos/bloques en BD), choque → 409 y ROLLBACK completo, escaneo/ilegible/vacío → 422. **67/67 en la suite.**
 - **Entregable VERIFICADO E2E:** PDF simulado (reportlab) subido por curl multipart a uvicorn real → preview JSON con 4 bloques confiables → confirm 201 con curso+grupo+2 bloques creados (y eliminados después para dejar la BD demo limpia).
 
@@ -325,7 +325,7 @@ completa sin `test_vision.py`: **92 passed**.
 | 9 | Escuela / aula | Una sola escuela (sin campo "escuela"); el aula pertenece al **BLOQUE**, no al grupo, para que un mismo grupo dicte en laboratorios distintos según el día. **(2026-10-16, 003_aula_por_bloque.sql; 2026-10-17 se quitó del todo `course_group.room_id`, 004_aula_solo_en_bloque.sql.)** |
 
 **Base de datos (scripts manuales, §1; verificados):**
-1. `db/001_schema.sql` — **esquema completo y vigente** (absorbe lo que se aplicó
+1. `db/001_schema.sql` - **esquema completo y vigente** (absorbe lo que se aplicó
    en los ya borrados `005`/`006`/`007`): zona horaria `America/Lima` de la BD;
    `course_group.semester_label` + `capacity` (UNIQUE por semestre); parámetros
    nuevos (`semester_start/end`, `early_open_minutes` 15, `rectify_days` 7,
@@ -337,7 +337,7 @@ completa sin `test_vision.py`: **92 passed**.
    `cancelada` del enum `session_status`; vistas `v_student_dpi` y
    `v_today_attendance` con las reglas R5/R6/R7;
    `course.cycle SMALLINT NOT NULL` (CHECK 1–10, ciclo de la malla).
-2. `db/002_seed.sql` — datos demo + los parámetros vigentes del semestre
+2. `db/002_seed.sql` - datos demo + los parámetros vigentes del semestre
    (umbral facial calibrado 0.55, DPI 20/30, semestre 2026-II). El horario demo
    lleva **el aula en cada bloque** y no puede tener clases cruzadas para un
    alumno: R8c/R9 lo rechazaría al editar (por eso ISA901 iba Vie 07:00-09:00).
@@ -377,7 +377,7 @@ completa sin `test_vision.py`: **92 passed**.
 
 **Endpoints nuevos/modificados (resumen):** `POST /sessions/{id}/cancel` · `POST /blocks/{id}/cancel-day` (`fecha` opcional) · `GET /attendance/sessions-review` · `POST /sessions/{id}/resolve-review` · `PATCH /attendance/{id}/justify` · `GET/POST/DELETE /justifications` (docente con efecto) · `PATCH /attendance/{id}/rectify` (plazo) · `POST /groups/{id}/students` + `DELETE` + `POST …/transfer` (R8) · `GET /courses/{id}/groups` (`semester`, `capacity`, `enrolled_count`) · `GET /settings/semesters` · `GET /dpi/at-risk` · `GET /students/{id}/dpi` · `GET /attendance/me/dpi` · `POST /holidays/range` · `POST /holidays/national?year=` · `POST`/`DELETE /students/{id}/faces` (`consent`) · `GET /devices/{id}` · `GET /reports/group-matrix.xlsx?group_id=` · `GET /reports/dpi-risk.xlsx?course_id=` · `GET /audit-log` (+`actor_role`) · `GET /dashboard/summary` (+`en_riesgo`, `sessions_to_review`, filtro por docente).
 
-**Tests (11.9) — nuevos archivos:** `test_rules_window.py` (R2 y niveles DPI puros), `test_sessions_lifecycle.py` (R3/R4/R5/R10), `test_justifications.py` (R6/R11 + permisos), `test_enrollment_rules.py` (R8/R9), `test_dpi.py` (R7 + envío único + semestre), `test_security.py` (R13/R14). Los tests existentes se actualizaron a la nueva regla (tardanza R2, cierre con needs_review, consentimiento) y `helpers_b6` ahora crea grupos con el semestre vigente y limpia justificaciones/auditoría.
+**Tests (11.9) - nuevos archivos:** `test_rules_window.py` (R2 y niveles DPI puros), `test_sessions_lifecycle.py` (R3/R4/R5/R10), `test_justifications.py` (R6/R11 + permisos), `test_enrollment_rules.py` (R8/R9), `test_dpi.py` (R7 + envío único + semestre), `test_security.py` (R13/R14). Los tests existentes se actualizaron a la nueva regla (tardanza R2, cierre con needs_review, consentimiento) y `helpers_b6` ahora crea grupos con el semestre vigente y limpia justificaciones/auditoría.
 
 **Fuera de alcance (se documenta como limitación):** detección de vida (anti-foto), multi-escuela/multi-sede, cambio de aula por fecha, panel completo de periodos académicos (se mantiene etiqueta + fechas; el ciclo ya es una dimensión del curso), adjunto de justificación (se implementa en el Bloque 13; `document_url` externo se mantiene como compatibilidad) y reasignación de docente con historial separado.
 
@@ -808,11 +808,11 @@ Convención única de estados en todo el sistema: `asistio | tardanza | falta | 
 |---|---|---|
 | 1 | ~~1, 3~~ ✅ | ~~App bajo app/main.py + login JWT~~ - COMPLETADO |
 | 2 | ~~4, 5~~ ✅ | ~~Malla académica + reconocimiento funcionando con video/MP4~~ - COMPLETADO |
-| 3 | ~~6, 7~~ ✅ | ~~Motor de asistencia + protocolo ESP32~~ — COMPLETADO (el ESP32 físico se conecta cuando lo armes) |
-| 4 | ~~8, 9~~ ✅ | ~~Dashboard + reportes + OCR~~ — COMPLETADO |
-| 5 | **11 (reglas de negocio)** ✅ | Semestre, cupos, transferencias, justificaciones, DPI con aviso único, seguridad y reportes por grupo — COMPLETADO (ver §3, Bloque 11) |
-| 6 | **13** ✅ | R2 (fotos/adjuntos) — COMPLETADO: fotos de enrolamiento, adjunto de justificación (UI en F4.1) y foto de perfil (Bloque 16) |
-| 7 | **14 + 15** ✅ | OCR de horario (foto/PDF escaneado) + importación de nómina de alumnos — COMPLETADO |
+| 3 | ~~6, 7~~ ✅ | ~~Motor de asistencia + protocolo ESP32~~ - COMPLETADO (el ESP32 físico se conecta cuando lo armes) |
+| 4 | ~~8, 9~~ ✅ | ~~Dashboard + reportes + OCR~~ - COMPLETADO |
+| 5 | **11 (reglas de negocio)** ✅ | Semestre, cupos, transferencias, justificaciones, DPI con aviso único, seguridad y reportes por grupo - COMPLETADO (ver §3, Bloque 11) |
+| 6 | **13** ✅ | R2 (fotos/adjuntos) - COMPLETADO: fotos de enrolamiento, adjunto de justificación (UI en F4.1) y foto de perfil (Bloque 16) |
+| 7 | **14 + 15** ✅ | OCR de horario (foto/PDF escaneado) + importación de nómina de alumnos - COMPLETADO |
 | 8 | **10** | Calidad y demo final (README, demo E2E, tunnel) |
 
 ---
@@ -867,9 +867,9 @@ La matriz por pantalla está en `PLAN-FRONTEND.md` §7. Pendientes del lado back
 
 - **BD:** `db/012_ventana_matricula.sql` (`app_settings.enrollment_start` y `enrollment_end`, DATE; ya consolidado en `001`). La ventana está abierta si hoy (hora de Perú) está entre ambas fechas, **inclusive**; sin fechas, cerrada. `PATCH /settings` las acepta y rechaza inicio > fin.
 - **Administrador (`routers/enrollment_center.py`):**
-  - `GET /enrollment/package-letters?cycle=` — letras de grupo del ciclo con cuántos cursos cubre cada una.
-  - `GET /enrollment/package?cycle=&group_code=` — grupos del paquete con docente, horario, cupo y libres, y los cursos del ciclo que **no tienen** esa letra en el periodo vigente.
-  - `POST /enrollment/resolve-students` — resuelve códigos de matrícula (informa los no encontrados).
+  - `GET /enrollment/package-letters?cycle=` - letras de grupo del ciclo con cuántos cursos cubre cada una.
+  - `GET /enrollment/package?cycle=&group_code=` - grupos del paquete con docente, horario, cupo y libres, y los cursos del ciclo que **no tienen** esa letra en el periodo vigente.
+  - `POST /enrollment/resolve-students` - resuelve códigos de matrícula (informa los no encontrados).
   - `POST /enrollment/bulk` (`student_ids`/`student_codes` + `group_ids`) y `POST /enrollment/package` (`student_ids`/`student_codes` + `cycle` + `group_code`): hasta 300 alumnos y 20 grupos; cada par alumno-grupo se procesa por separado y devuelve `ok`, `skipped` (ya estaba) o `failed` con el motivo; un fallo no revierte los demás. Auditoría `matricula_masiva` / `matricula_por_ciclo` más la de cada matrícula.
 - **Estudiante (`routers/self_enrollment.py`, solo rol estudiante):** `GET /me/enrollment` (periodo, ciclo del alumno y ventana), `GET /me/enrollment/offer?cycle=` (todos los grupos activos del periodo con cupo, horario, `mine`, `current_group_code` si ya cursa otro grupo del mismo curso y `conflict` con el curso con el que se cruza), `POST /me/enrollment`, `DELETE /me/enrollment/{group_id}`, `POST /me/enrollment/{group_id}/transfer` y `POST /me/enrollment/package`. Todo lo que escribe exige la ventana abierta (403 con el mensaje) y solo actúa sobre el propio estudiante; el administrador sigue pudiendo matricular fuera de la ventana. Las matrículas hechas por el estudiante quedan auditadas con él como actor.
 - **Tests:** `tests/test_enrollment_center.py` (9: vista previa del paquete, parejas ok/fallidas/omitidas, grupo lleno, cruce de horario, códigos desconocidos, permisos, ventana cerrada por defecto, alta/cambio/retiro del estudiante, paquete del estudiante, ventana invertida) y la matriz de roles ampliada. Los alumnos de una tanda se procesan ordenados por código para que el reparto de los últimos cupos sea predecible.
@@ -887,7 +887,7 @@ La matriz por pantalla está en `PLAN-FRONTEND.md` §7. Pendientes del lado back
 - **Asistencia sin docente:** `bloques_candidatos` y `abrir_sesiones_del_dia` ya no exigen docente; siguen exigiendo **aula** y horario. Un docente solo ve los grupos que tiene asignados, así que lo registrado antes de asignarlo lo ve el administrador y, al asignarlo, el docente.
 - **Aviso de curso lleno:** `GET /courses/overflow` (admin) lista los cursos cuyos grupos activos del periodo están **todos** llenos; `GET /dashboard/summary` añade `cursos_llenos` (0 para docentes). Mientras tanto la matrícula sigue rechazando con «Grupo lleno»: el administrador decide cuándo crear el grupo B.
 - **Matrícula por ciclo:** `POST /enrollment/package` con la letra `A` crea el grupo inicial de los cursos del ciclo que no tienen ninguno y lo informa en `created_groups`; con otras letras no crea nada. La vista previa marca `will_create_group` en esos cursos.
-- **Tests:** `tests/test_implicit_groups.py` (10) — grupo inicial, docente opcional, reversión de un bloque fallido, varios grupos, asignar/quitar docente, choque de docente, cupo, aviso de curso lleno (y su desaparición con un grupo nuevo), paquete por ciclo y permisos; `test_sessions_lifecycle` ahora comprueba que **sin aula** no se abre sesión y que **sin docente sí**.
+- **Tests:** `tests/test_implicit_groups.py` (10) - grupo inicial, docente opcional, reversión de un bloque fallido, varios grupos, asignar/quitar docente, choque de docente, cupo, aviso de curso lleno (y su desaparición con un grupo nuevo), paquete por ciclo y permisos; `test_sessions_lifecycle` ahora comprueba que **sin aula** no se abre sesión y que **sin docente sí**.
 - **Fuera de alcance (anotado):** crear automáticamente el grupo B al llenarse (se decidió que lo haga el administrador), lista de espera y copiar el horario de un grupo a otro.
 
 ### Ajustes de la autogestión (2026-10-24, segunda pasada) - Bloque 18
@@ -914,3 +914,4 @@ La matriz por pantalla está en `PLAN-FRONTEND.md` §7. Pendientes del lado back
 - **Prueba piloto en la aplicación:** pantalla `Herramientas → Prueba piloto` (solo admin, `features/pilot`) y router `routers/pilot.py` + `services/pilot.py`: `POST /pilot/captures` abre la cámara (restream de go2rtc si existe) durante N segundos y guarda en `PILOT_DATA_FILE` (CSV seudonimizado, sin imágenes) la similitud del rostro más grande contra cada plantilla enrolada; `GET /pilot/status` devuelve avance por estudiante, TAR/FRR/identificación errónea/FAR con IC de Wilson y la curva FAR–FRR por umbral (umbral, margen y cuadros recalculables); `GET /pilot/export` y `DELETE /pilot/data`. Tests `tests/test_pilot.py` (8) y `pilot.spec.ts` (5). Guía en `docs/protocolo-piloto-fareas.md`.
 - **Recuadro facial en vivo:** el lector del stream corre un hilo detector (SCRFD, ~8-10 detecciones/s sobre una copia de 640 px) y envía cajas faciales y veredictos por SSE para el overlay WebRTC. En MJPEG dibuja las esquinas y etiquetas en el servidor.
 - **Reconocimiento más estricto:** `FaceGallery.identify(margin)` rechaza coincidencias ambiguas (mejor − segundo mejor < `FACE_MATCH_MARGIN`, 0.06); `VisionPipeline` toma el rostro más grande, descarta rostros < `FACE_MIN_SIZE_PX` (60) y exige `FACE_CONFIRM_FRAMES` (3) detecciones consecutivas de la misma persona por aula antes de marcar (veredicto intermedio `verificando`); `camera_loop` usa el umbral de Parámetros (`app_settings.face_match_threshold`), antes ignorado; el detector ahora conserva la proporción del cuadro (letterbox); `faces.enrolar` rechaza con 409 un rostro con similitud ≥ 0.60 respecto a otro estudiante ya enrolado.
+- **Latencia del reconocimiento y del enrolamiento:** el detector SCRFD ajusta su entrada a la proporción del cuadro (múltiplos de 32, p. ej. 384×640 en vez de 640×640 con relleno), con cajas idénticas y menos cómputo; `camera_loop` procesa a 3 fps por aula descontando el tiempo de proceso (antes dormía 0,5 s fijos tras cada aula) y ejecuta el pipeline en un hilo para no bloquear el servidor; el hilo de recuadros del video se limita a 5 detecciones/s para no competir por CPU; el SSE `/dashboard/live` consulta cada 0,15 s y deduplica por `seq` (antes cada 1 s y por segundo de `ts`, lo que descartaba veredictos); el enrolamiento procesa las fotos en paralelo en un hilo y reutiliza la primera imagen como portada en lugar de decodificar y detectar otra vez. El frontend añade el estado «Identificando» (antes `verificando` no tenía estilo y rompía la tarjeta).

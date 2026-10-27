@@ -206,11 +206,11 @@ async def _detalle(db, user, f: Filtros) -> Tabla:
         etiqueta, _, tono = ESTADOS.get(clave, (r.estado, "", "muted"))
         filas.append([
             Celda(f"{r.fecha:%d/%m/%Y}"),
-            Celda(f"{r.marked_at:%H:%M}" if r.marked_at else "—", None),
-            Celda(r.alumno), Celda(r.codigo or "—"),
-            Celda(f"{r.curso_codigo} · {r.curso}"), Celda(r.grupo), Celda(r.aula or "—"),
-            Celda(r.docente or "—"), Celda(etiqueta, tono), Celda(r.method or "—"),
-            Celda(round(float(r.similarity) * 100, 1) if r.similarity is not None else "—"),
+            Celda(f"{r.marked_at:%H:%M}" if r.marked_at else "-", None),
+            Celda(r.alumno), Celda(r.codigo or "-"),
+            Celda(f"{r.curso_codigo} · {r.curso}"), Celda(r.grupo), Celda(r.aula or "-"),
+            Celda(r.docente or "-"), Celda(etiqueta, tono), Celda(r.method or "-"),
+            Celda(round(float(r.similarity) * 100, 1) if r.similarity is not None else "-"),
         ])
     columnas = [
         Columna("fecha", "Fecha", 1.0, "center"), Columna("hora", "Hora", 0.7, "center"),
@@ -283,7 +283,7 @@ async def _resumen_estudiantes(db, user, f: Filtros) -> Tabla:
         a, t, fa, fj = a + r.asistio, t + r.tardanza, fa + r.falta, fj + r.justificada
         pct = _porcentaje(r.asistio + r.tardanza, r.total)
         filas.append([
-            Celda(r.alumno), Celda(r.codigo or "—"), Celda(f"{r.curso_codigo} · {r.curso}"),
+            Celda(r.alumno), Celda(r.codigo or "-"), Celda(f"{r.curso_codigo} · {r.curso}"),
             Celda(r.grupo), Celda(r.total), Celda(r.asistio), Celda(r.tardanza), Celda(r.falta),
             Celda(r.justificada), Celda(pct), Celda(inasistencia), Celda(nivel, tono),
         ])
@@ -340,11 +340,11 @@ async def _riesgo(db, user, f: Filtros) -> Tabla:
         nivel, tono = _nivel(pct, alerta, limite)
         en_limite += nivel == "Límite"
         filas.append([
-            Celda(r.student_name), Celda(r.student_code or "—"), Celda(f"{r.course_code} · {r.course_name}"),
+            Celda(r.student_name), Celda(r.student_code or "-"), Celda(f"{r.course_code} · {r.course_name}"),
             Celda(int(r.sessions_held)), Celda(int(r.absences)), Celda(int(r.justified_absences)),
             Celda(int(r.lates)), Celda(round(pct, 1)), Celda(nivel, tono),
-            Celda(permitidas if permitidas is not None else "—"),
-            Celda(max(0, permitidas - int(r.absences)) if permitidas is not None else "—"),
+            Celda(permitidas if permitidas is not None else "-"),
+            Celda(max(0, permitidas - int(r.absences)) if permitidas is not None else "-"),
         ])
     columnas = [
         Columna("alumno", "Estudiante", 2.6), Columna("codigo", "Código", 1.0), Columna("curso", "Curso", 2.8),

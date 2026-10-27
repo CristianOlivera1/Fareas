@@ -15,7 +15,7 @@ async def send_dpi_alert(
 
     limite = nivel == "limite"
     encabezado = "Inhabilitación por inasistencias (DPI)" if limite else "Alerta de inasistencias"
-    subject = f"Fareas UNAMBA — {encabezado} en {course_code}"
+    subject = f"Fareas UNAMBA - {encabezado} en {course_code}"
     safe_name = html.escape(full_name)
     safe_course = html.escape(course_code)
     color = "#B42318" if limite else "#155DFC"
@@ -35,7 +35,7 @@ async def send_dpi_alert(
         f"{aviso}\n\n"
         "Recuerda que las faltas justificadas (descansos médicos) no cuentan; "
         "si tienes uno, entrégalo en secretaría académica (RF-10).\n\n"
-        "— Sistema Fareas, Facultad de Informática UNAMBA"
+        "- Sistema Fareas, Facultad de Informática UNAMBA"
     )
     content_html = (
         f'<p style="margin:0;">Hola <strong>{safe_name}</strong>,</p>'

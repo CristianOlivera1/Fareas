@@ -49,7 +49,7 @@ function toRow(record: AttendanceToday): StudentRow {
           : 'Falta';
   return {
     recordId: record.record_id,
-    code: record.student_code ?? '—',
+    code: record.student_code ?? '-',
     name: record.student_name,
     initials: record.student_name
       .split(/\s+/)
@@ -60,7 +60,7 @@ function toRow(record: AttendanceToday): StudentRow {
     status,
     course: record.course_name,
     room: record.room_code,
-    time: record.marked_at && record.marked_at.length >= 16 ? record.marked_at.slice(11, 16) : '—',
+    time: record.marked_at && record.marked_at.length >= 16 ? record.marked_at.slice(11, 16) : '-',
   };
 }
 

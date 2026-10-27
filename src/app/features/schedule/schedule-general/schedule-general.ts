@@ -42,6 +42,9 @@ import {
 } from '../../../shared/utils/schedule-hours';
 import { LECTURE_WEEKDAYS, weekdayLabel } from '../../../shared/utils/weekdays';
 
+const NEW_GROUP = -1;
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
 interface Option<T> {
   label: string;
   value: T;
@@ -184,12 +187,19 @@ export class ScheduleGeneralPage {
     this.groups().filter((group) => group.course_id === this.blockForm().course_id),
   );
   readonly needsGroupChoice = computed(() => this.courseGroups().length > 1);
-  readonly groupChoiceOptions = computed<Option<number>[]>(() =>
-    this.courseGroups().map((group) => ({
+  readonly showGroupChoice = computed(() => this.courseGroups().length > 0);
+  readonly nextGroupCode = computed(() => {
+    const used = new Set(this.courseGroups().map((group) => group.group_code));
+    return ALPHABET.find((letter) => !used.has(letter)) ?? null;
+  });
+  readonly groupChoiceOptions = computed<Option<number>[]>(() => {
+    const options = this.courseGroups().map((group) => ({
       label: `Grupo ${group.group_code} · ${group.teacher_name ?? 'Sin docente'} · ${group.enrolled_count}/${group.capacity}`,
       value: group.id,
-    })),
-  );
+    }));
+    const next = this.nextGroupCode();
+    return next ? [...options, { label: `Nuevo grupo ${next} (paralelo)`, value: NEW_GROUP }] : options;
+  });
   readonly editingBlock = computed(() => {
     const id = this.editingBlockId();
     return id === null ? null : (this.rows().find((row) => row.id === id) ?? null);
@@ -397,7 +407,7 @@ export class ScheduleGeneralPage {
       teacher_id: group?.teacher_id ?? null,
       room_id: value ? null : this.blockForm().room_id,
     });
-    if (!value) return;
+    if (!value || value === NEW_GROUP) return;
     try {
       const blocks = (await this.api.blocks(value).toPromise()) ?? [];
       const weekday = this.blockForm().weekday;
@@ -457,7 +467,8 @@ export class ScheduleGeneralPage {
             end_time: form.end_time,
             room_id: form.room_id,
             teacher_id: form.teacher_id,
-            group_id: form.group_id,
+            group_id: form.group_id === NEW_GROUP ? null : form.group_id,
+            new_group: form.group_id === NEW_GROUP,
           })
           .toPromise();
         this.toast.add({

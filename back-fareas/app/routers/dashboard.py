@@ -27,6 +27,7 @@ from app.services.camera_stream import (
 from app.tables import AppSettings, AppUser, Device, DeviceType, UserRole
 
 logger = logging.getLogger("fareas.dashboard")
+LIVE_POLL_S = 0.15
 router = APIRouter(tags=["dashboard"])
 
 class Summary(BaseModel):
@@ -163,17 +164,17 @@ async def dashboard_live(
     await _usuario_de_token(access_token)
 
     async def generador():
-        ultimo_enviado: dict[int, str] = {}
+        ultimo_enviado: dict[int, int] = {}
         try:
             while True:
                 for v in todos_los_veredictos():
                     if room_id is not None and v.get("room_id") != room_id:
                         continue
-                    ts = str(v.get("ts", ""))
-                    if ultimo_enviado.get(v.get("room_id")) != ts:
-                        ultimo_enviado[v.get("room_id")] = ts
+                    seq = int(v.get("seq", 0))
+                    if ultimo_enviado.get(v.get("room_id")) != seq:
+                        ultimo_enviado[v.get("room_id")] = seq
                         yield {"event": "verdict", "data": json.dumps(v, ensure_ascii=False)}
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(LIVE_POLL_S)
         except asyncio.CancelledError:
             raise
         finally:

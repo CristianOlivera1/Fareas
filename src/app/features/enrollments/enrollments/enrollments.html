@@ -133,11 +133,11 @@
           <iconify-icon icon="material-symbols:face-retouching-off" width="13"></iconify-icon> Sin rostro
         </span>
       } @else {
-        <span class="text-xs text-gray-400">—</span>
+        <span class="text-xs text-gray-400">-</span>
       }
     </ng-template>
     <ng-template appCell="semester" let-s>
-      <span class="text-sm text-gray-600">{{ s.semester ? 'Ciclo ' + s.semester : '—' }}</span>
+      <span class="text-sm text-gray-600">{{ s.semester ? 'Ciclo ' + s.semester : '-' }}</span>
     </ng-template>
     <ng-template appCell="status" let-s>
       @if (s.withdrawn_at) {

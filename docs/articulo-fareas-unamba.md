@@ -2,9 +2,9 @@
 
 ## Face recognition and IoT attendance system for university classrooms: design and validation
 
-> **Revista Micaela** — ISSN: 2955-8646 (en línea) / 2709-8990 (impresa)
-> Universidad Nacional Micaela Bastidas de Apurímac — Vicerrectorado de Investigación — Perú
-> Edición especial FERCYT UNAMBA 2026 — Categoría D: Desarrollo Tecnológico
+> **Revista Micaela** - ISSN: 2955-8646 (en línea) / 2709-8990 (impresa)
+> Universidad Nacional Micaela Bastidas de Apurímac - Vicerrectorado de Investigación - Perú
+> Edición especial FERCYT UNAMBA 2026 - Categoría D: Desarrollo Tecnológico
 > *Versión anónima para el primer envío (doble ciego): sin nombres, ORCID, correos, filiación ni agradecimientos.*
 
 ---
@@ -47,13 +47,13 @@ Los requerimientos se obtuvieron del análisis de la operación académica de la
 
 Antes de implementar el panel web se elaboró un prototipo de alta fidelidad en Figma (Figura 1) para validar la navegación y los flujos principales. Cubre inicio de sesión, panel de control, horarios, grupos, docentes, aulas, estudiantes, usuarios, enrolamiento facial, feriados y perfil. Se construyó de forma componentizada (elementos básicos, moléculas, organismos y plantillas de página), organización que se trasladó a Angular, donde cada componente autónomo reutiliza los mismos estilos globales y mantiene una apariencia minimalista y coherente.
 
-> **Figura 1 — imagen que debes subir.** Captura general del tablero de Figma con todas las pantallas del prototipo visibles (vista panorámica, 300 ppp, PNG); si hay espacio, añade como segundo panel la página de componentes (elementos básicos, moléculas y organismos). Título debajo, en negrita y centrado: «**Figura 1** Prototipo de la interfaz del sistema en Figma».
+> **Figura 1 - imagen que debes subir.** Captura general del tablero de Figma con todas las pantallas del prototipo visibles (vista panorámica, 300 ppp, PNG); si hay espacio, añade como segundo panel la página de componentes (elementos básicos, moléculas y organismos). Título debajo, en negrita y centrado: «**Figura 1** Prototipo de la interfaz del sistema en Figma».
 
 ### 2.4 Arquitectura del sistema
 
 El sistema adopta una arquitectura cliente-servidor de monolito modular. El cliente es una aplicación web de una sola página en Angular 21 con componentes autónomos y señales reactivas. El servidor es una API REST en FastAPI (Python 3.13) con acceso asíncrono a PostgreSQL 17 mediante SQLModel. La cámara IP Hikvision de 4 MP, alimentada por PoE+, entrega su flujo principal (canal 101) por RTSP (Schulzrinne et al., 2016); el servidor lo procesa, registra la asistencia y comunica el veredicto al nodo de la puerta por WebSocket (Fette & Melnikov, 2011) y al panel web por eventos enviados por el servidor. La sesión de usuario se gestiona con JSON Web Tokens (Jones et al., 2015) y las contraseñas se almacenan con Argon2 (Biryukov et al., 2021). El acceso se controla por rol (administrador, docente y estudiante) tanto en el cliente como en el servidor. El esquema relacional contiene 18 tablas; los *embeddings* se guardan en una columna `REAL[512]` y la similitud se calcula en NumPy, sin extensiones vectoriales. La Figura 2 muestra la arquitectura general.
 
-> **Figura 2 — imagen que debes subir.** El diagrama `docs/arquitectura-fareas.png` (editable en `docs/arquitectura-fareas.svg`): cámara Hikvision → switch PoE+ → PC servidor (FastAPI + PostgreSQL + modelos ONNX) → router Wi-Fi → nodo ESP32 (anillo LED + zumbador), y el navegador del docente conectado al servidor. Expórtalo a 300 ppp si el texto es pequeño. Título debajo, en negrita y centrado: «**Figura 2** Arquitectura general del sistema».
+> **Figura 2 - imagen que debes subir.** El diagrama `docs/arquitectura-fareas.png` (editable en `docs/arquitectura-fareas.svg`): cámara Hikvision → switch PoE+ → PC servidor (FastAPI + PostgreSQL + modelos ONNX) → router Wi-Fi → nodo ESP32 (anillo LED + zumbador), y el navegador del docente conectado al servidor. Expórtalo a 300 ppp si el texto es pequeño. Título debajo, en negrita y centrado: «**Figura 2** Arquitectura general del sistema».
 
 ### 2.5 Canal de reconocimiento facial
 
@@ -109,7 +109,7 @@ La evaluación tuvo cuatro componentes alineados con los objetivos: (1) **prueba
 
 $$\text{FAR} = \frac{FA}{I}, \qquad \text{FRR} = \frac{FR}{G} = 1 - \text{TAR} \qquad (5)$$
 
-donde *FA* son las aceptaciones erróneas de intentos impostores (*I* intentos) y *FR* los rechazos de intentos genuinos (*G* intentos). Además, se mide la usabilidad con la Escala de Usabilidad del Sistema (Lewis, 2018) y los hallazgos se organizan según las características de calidad del producto de ISO/IEC 25010:2023 (International Organization for Standardization & International Electrotechnical Commission [ISO/IEC], 2023).
+donde *FA* son las aceptaciones erróneas de intentos impostores (*I* intentos) y *FR* los rechazos de intentos genuinos (*G* intentos). Además, la usabilidad del panel web se mide con la Escala de Usabilidad del Sistema (Lewis, 2018) aplicada a la docente, que es quien lo opera, y la experiencia de los estudiantes en la puerta, donde no manejan una interfaz, con un cuestionario de percepción de seis ítems; los hallazgos se organizan según las características de calidad del producto de ISO/IEC 25010:2023 (International Organization for Standardization & International Electrotechnical Commission [ISO/IEC], 2023).
 
 ## 3. Resultados
 
@@ -137,7 +137,7 @@ Los tiempos medidos se presentan en la Tabla 1. El procesamiento completo de un 
 
 En la integración con la cámara IP real, el sistema registró la cámara como en línea y detectó rostros del flujo en vivo (Figura 3); en una captura de verificación, el rostro detectado midió 106 píxeles con una confianza de 0,82. El video del panel pasó de presentar retraso acumulado (flujo JPEG secuencial) a una reproducción fluida con WebRTC, observación cualitativa cuya latencia de extremo a extremo se medirá en el piloto.
 
-> **Figura 3 — imagen que debes subir.** Captura del panel «Actividad en tiempo real» del dashboard con el video de la cámara, el recuadro de esquinas sobre el rostro y la etiqueta del veredicto (por ejemplo, «Registro correcto» en verde), junto con la tarjeta de la persona reconocida. Usa un voluntario con consentimiento o difumina rostro y nombre. Título debajo: «**Figura 3** Panel de monitoreo en vivo con el recuadro facial y el veredicto».
+> **Figura 3 - imagen que debes subir.** Captura del panel «Actividad en tiempo real» del dashboard con el video de la cámara, el recuadro de esquinas sobre el rostro y la etiqueta del veredicto (por ejemplo, «Registro correcto» en verde), junto con la tarjeta de la persona reconocida. Usa un voluntario con consentimiento o difumina rostro y nombre. Título debajo: «**Figura 3** Panel de monitoreo en vivo con el recuadro facial y el veredicto».
 
 ### 3.3 Defectos detectados durante la validación
 
@@ -160,7 +160,7 @@ La integración con la cámara real permitió detectar y corregir los defectos d
 
 El piloto aún no se ha ejecutado, por lo que **la precisión del reconocimiento con estudiantes reales no se reporta**. Las Tablas 3 y 4 son plantillas que se completarán con los datos recolectados y se mantienen vacías para no presentar datos inexistentes.
 
-> **Protocolo propuesto.** Una sola prueba, en el horario de un curso de la docente asesora, con los estudiantes voluntarios del grupo (entre 25 y 35 [CONFIRMAR: cantidad final]) y con el equipo instalado temporalmente en el aula. Cada participante se enrola con 3 a 5 fotos y realiza 6 capturas frente a la cámara (3 en condición normal y 3 en condición adversa, como luz lateral o lentes); al menos cinco personas no enroladas realizan 3 capturas cada una para estimar la falsa aceptación. Durante el bloque, el sistema funciona en paralelo al registro manual de la docente, que se toma como verdad de terreno, y al final se aplican la Escala de Usabilidad del Sistema, un cuestionario breve de percepción y una consulta a la docente. Participan solo quienes firman el consentimiento informado, con la autorización de la docente; los datos se analizan con códigos, solo se registran valores de similitud (sin imágenes ni video) y las plantillas faciales se eliminan al terminar. Los resultados se resumen con intervalos de confianza de Wilson al 95 %.
+> **Protocolo propuesto.** Una sola prueba, en el horario de un curso de la docente asesora, con los estudiantes voluntarios del grupo (entre 25 y 35 [CONFIRMAR: cantidad final]) y con el equipo instalado temporalmente en el aula. Cada participante se enrola con 3 a 5 fotos y realiza 6 capturas frente a la cámara (3 en condición normal y 3 en condición adversa, como luz lateral o lentes); al menos cinco personas no enroladas realizan 3 capturas cada una para estimar la falsa aceptación. Durante el bloque, el sistema funciona en paralelo al registro manual de la docente, que se toma como verdad de terreno, y al final la docente responde la Escala de Usabilidad del Sistema sobre el panel web y tres preguntas abiertas, y los estudiantes, que solo pasan frente a la cámara y no operan una interfaz, responden un cuestionario breve de percepción sobre su experiencia en la puerta. Participan solo quienes firman el consentimiento informado, con la autorización de la docente; los datos se analizan con códigos, solo se registran valores de similitud (sin imágenes ni video) y las plantillas faciales se eliminan al terminar. Los resultados se resumen con intervalos de confianza de Wilson al 95 %.
 
 **Tabla 3**
 **Desempeño de reconocimiento en el piloto (por completar)**
@@ -182,12 +182,12 @@ El piloto aún no se ha ejecutado, por lo que **la precisión del reconocimiento
 
 | Instrumento | Participantes | Resultado |
 | --- | --- | --- |
-| Escala de Usabilidad del Sistema (docentes) | [COMPLETAR] | [COMPLETAR] |
-| Escala de Usabilidad del Sistema (estudiantes) | [COMPLETAR] | [COMPLETAR] |
+| Escala de Usabilidad del Sistema del panel web (docente) | [COMPLETAR] | [COMPLETAR] |
+| Percepción de los estudiantes en la puerta (mediana por ítem, escala 1 a 5) | [COMPLETAR] | [COMPLETAR] |
 | Veredictos correctos en la puerta (ESP32 físico) | [COMPLETAR] | [COMPLETAR] |
 | Concordancia con la asistencia manual (porcentaje y kappa de Cohen) | [COMPLETAR] | [COMPLETAR] |
 
-*Nota.* Se aplica la Escala de Usabilidad del Sistema (Lewis, 2018).
+*Nota.* La Escala de Usabilidad del Sistema (Lewis, 2018) se aplica solo a quienes operan el panel; con tan pocos usuarios se reporta de forma descriptiva. La percepción de los estudiantes proviene de un cuestionario de elaboración propia, exploratorio y sin validación formal.
 
 ## 4. Discusión
 
@@ -207,7 +207,7 @@ En lo práctico, la solución funciona con equipamiento común de la facultad y 
 
 ### 4.4 Limitaciones
 
-Las limitaciones son siete. Primero, la precisión con estudiantes reales no se ha medido: los resultados son evidencia técnica y no de desempeño biométrico. Segundo, el sistema no detecta vida (*liveness*), por lo que una fotografía o una pantalla podría intentar suplantar a un estudiante (Yu et al., 2023). Tercero, el desempeño puede variar entre grupos demográficos (Grother et al., 2019), por lo que el piloto debe desagregar resultados si la muestra lo permite. Cuarto, las latencias se midieron en un solo equipo y con un video de demostración, con alta variabilidad cuando el equipo estaba ocupado, y no con varias aulas simultáneas. Quinto, la prueba física del nodo ESP32 y la latencia de extremo a extremo del video están pendientes. Sexto, el piloto se hace una vez, en un curso y con instalación temporal, por lo que no evalúa el uso sostenido ni la variación entre aulas, y el cuestionario de percepción, de elaboración propia, es exploratorio. Séptimo, el reglamento establece que pasada la tolerancia de diez minutos el estudiante no puede ingresar (Consejo Universitario de la UNAMBA, 2019, art. 75), mientras que el sistema registra el ingreso posterior como tardanza hasta el fin del bloque; esta regla es configurable y debe acordarse con la facultad antes de su uso oficial.
+Las limitaciones son siete. Primero, la precisión con estudiantes reales no se ha medido: los resultados son evidencia técnica y no de desempeño biométrico. Segundo, el sistema no detecta vida (*liveness*), por lo que una fotografía o una pantalla podría intentar suplantar a un estudiante (Yu et al., 2023). Tercero, el desempeño puede variar entre grupos demográficos (Grother et al., 2019), por lo que el piloto debe desagregar resultados si la muestra lo permite. Cuarto, las latencias se midieron en un solo equipo y con un video de demostración, con alta variabilidad cuando el equipo estaba ocupado, y no con varias aulas simultáneas. Quinto, la prueba física del nodo ESP32 y la latencia de extremo a extremo del video están pendientes. Sexto, el piloto se hace una vez, en un curso y con instalación temporal, por lo que no evalúa el uso sostenido ni la variación entre aulas; además, la usabilidad del panel se evalúa con muy pocos usuarios (la docente asesora), por lo que el puntaje de la Escala de Usabilidad del Sistema es descriptivo, y el cuestionario de percepción de los estudiantes, de elaboración propia, es exploratorio. Séptimo, el reglamento establece que pasada la tolerancia de diez minutos el estudiante no puede ingresar (Consejo Universitario de la UNAMBA, 2019, art. 75), mientras que el sistema registra el ingreso posterior como tardanza hasta el fin del bloque; esta regla es configurable y debe acordarse con la facultad antes de su uso oficial.
 
 ### 4.5 Líneas futuras
 
@@ -258,7 +258,7 @@ Guo, J., Deng, J., Lattas, A., & Zafeiriou, S. (2021). *Sample and computation r
 
 Hevner, A. R., March, S. T., Park, J., & Ram, S. (2004). Design science in information systems research. *MIS Quarterly, 28*(1), 75–105. https://doi.org/10.2307/25148625
 
-International Organization for Standardization & International Electrotechnical Commission. (2023). *ISO/IEC 25010:2023. Systems and software engineering — Systems and software Quality Requirements and Evaluation (SQuaRE) — Product quality model* (2nd ed.). https://www.iso.org/standard/78176.html
+International Organization for Standardization & International Electrotechnical Commission. (2023). *ISO/IEC 25010:2023. Systems and software engineering - Systems and software Quality Requirements and Evaluation (SQuaRE) - Product quality model* (2nd ed.). https://www.iso.org/standard/78176.html
 
 Johnson, J., Douze, M., & Jégou, H. (2021). Billion-scale similarity search with GPUs. *IEEE Transactions on Big Data, 7*(3), 535–547. https://doi.org/10.1109/TBDATA.2019.2921572
 

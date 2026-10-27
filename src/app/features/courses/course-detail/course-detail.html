@@ -290,11 +290,6 @@
         [ngModel]="blockForm().room_id" (ngModelChange)="patchBlock({ room_id: $event })" />
       <span class="text-xs text-gray-400">Se prellena con el aula del último bloque del grupo.</span>
     </label>
-    <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-      Bloques de 1 h o 2 h, en horas exactas (sin minutos), entre las {{ attendanceStartTime() }} y las
-      {{ attendanceEndTime() }} y dentro de la semana de Lunes a Viernes. Sin docente o sin aula el bloque
-      queda pendiente y no abre sesiones de asistencia.
-    </app-ui-alert>
   </div>
   <ng-template pTemplate="footer">
     <app-ui-button variant="ghost" (click)="blockDialogVisible = false">Cancelar</app-ui-button>
