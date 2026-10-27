@@ -33,7 +33,7 @@
 
   @if (step() === 1) {
     <div class="space-y-4">
-      <app-file-drop [file]="file()" (fileChange)="onFile($event)"
+      <app-file-drop [file]="file()" [accept]="accept" [hint]="hint" (fileChange)="onFile($event)"
         (fileError)="onFileError($event)" />
 
       <label class="flex max-w-xs flex-col gap-1">
@@ -43,12 +43,6 @@
           (ngModelChange)="defaultSemester.set($event)" />
         <span class="text-xs text-gray-400">Se usa en las filas que no traen columna CICLO.</span>
       </label>
-
-      <app-ui-alert variant="info" [inline]="true" icon="material-symbols:info-outline">
-        Funciona mejor con una nómina impresa en tabla, derecha y con buena luz. El texto manuscrito
-        no se reconoce. La previsualización no crea cuentas: primero corriges y recién después
-        confirmas.
-      </app-ui-alert>
 
       @if (loading()) {
         <app-scan-loader label="Leyendo nómina de estudiantes…" />
@@ -67,7 +61,7 @@
           <div>
             <h3 class="text-sm font-semibold text-gray-900">Revisa antes de crear las cuentas</h3>
             <p class="text-xs text-gray-500">
-              {{ typeLabel() }} · {{ p.paginas }} página(s) · {{ p.total }} fila(s)
+              {{ typeLabel() }} · {{ p.paginas }} {{ isSpreadsheet() ? 'hoja(s)' : 'página(s)' }} · {{ p.total }} fila(s)
             </p>
           </div>
           <div class="flex flex-wrap gap-2 text-xs">
@@ -113,7 +107,7 @@
                 <tr>
                   <th class="px-2 py-2.5">#</th>
                   <th class="px-2 py-2.5">Código</th>
-                  <th class="px-2 py-2.5">DNI</th>
+                  <th class="px-2 py-2.5">DNI <span class="font-normal normal-case text-gray-400">(opc.)</span></th>
                   <th class="px-2 py-2.5">Apellidos y nombres</th>
                   <th class="px-2 py-2.5">Correo</th>
                   <th class="px-2 py-2.5">Ciclo</th>
@@ -257,7 +251,7 @@
             </p>
             <ul class="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-amber-800">
               @for (problem of r.errores; track $index) {
-                <li>Fila {{ problem.fila }} · {{ problem.code ?? 'sin código' }} — {{ problem.motivo }}</li>
+                <li>Fila {{ problem.fila }} · {{ problem.code ?? 'sin código' }} - {{ problem.motivo }}</li>
               }
             </ul>
           </div>
@@ -269,7 +263,7 @@
   <ng-template pTemplate="footer">
     @if (step() === 1) {
       <app-ui-button variant="ghost" (click)="close()">Cancelar</app-ui-button>
-      <app-ui-button icon="material-symbols:document-scanner-outline"
+      <app-ui-button icon="material-symbols:upload-file-outline"
         [disabled]="!canRead()" (click)="readRoster()">
         {{ loading() ? 'Leyendo…' : 'Leer nómina' }}
       </app-ui-button>

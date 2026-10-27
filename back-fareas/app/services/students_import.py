@@ -19,6 +19,7 @@ from app.services.ocr_roster import (
     validar_alumno,
 )
 from app.services.settings import semestre_vigente
+from app.services.spreadsheet_roster import is_spreadsheet, read_spreadsheet
 from app.tables import AppUser, CourseGroup, UserRole
 
 
@@ -102,6 +103,13 @@ async def preview_nomina(
     filename: str | None,
     default_semester: int,
 ) -> tuple[DocumentoLeido, list[AlumnoExtraido]]:
+    if is_spreadsheet(raw, filename):
+        hoja = read_spreadsheet(
+            raw, filename, default_semester=default_semester, domain=_dominio()
+        )
+        documento = DocumentoLeido(tipo=hoja.kind, paginas=hoja.sheets, items=[], lineas=[])
+        await _marcar_duplicados(db, hoja.students)
+        return documento, hoja.students
     documento = await leer_documento_async(raw, filename)
     alumnos = parsear_nomina(documento, default_semester=default_semester, dominio_email=_dominio())
     if not alumnos and documento.tipo == "pdf_texto":
@@ -153,7 +161,7 @@ async def confirmar_nomina(
         alumno = AlumnoExtraido(
             fila=fila.fila or indice,
             code=fila.code,
-            dni=fila.dni,
+            dni=fila.dni or None,
             full_name=fila.full_name,
             email=fila.email,
             semester=fila.semester,
@@ -202,15 +210,12 @@ async def confirmar_nomina(
                 matriculados += 1 if body.group_id is not None else 0
             continue
 
-        conflicto = (
-            await db.exec(
-                select(AppUser).where(
-                    or_(AppUser.dni == alumno.dni, AppUser.email == alumno.email)
-                )
-            )
-        ).first()
+        coincidencias = [AppUser.email == alumno.email]
+        if alumno.dni:
+            coincidencias.append(AppUser.dni == alumno.dni)
+        conflicto = (await db.exec(select(AppUser).where(or_(*coincidencias)))).first()
         if conflicto is not None:
-            campo = "DNI" if conflicto.dni == alumno.dni else "correo"
+            campo = "DNI" if alumno.dni and conflicto.dni == alumno.dni else "correo"
             errores.append(
                 ErrorImportacion(
                     fila=alumno.fila,

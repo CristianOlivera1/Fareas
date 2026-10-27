@@ -51,14 +51,14 @@
         <iconify-icon icon="material-symbols:face-retouching-off" width="13"></iconify-icon> Sin rostro
       </span>
     } @else {
-      <span class="text-xs text-gray-400">—</span>
+      <span class="text-xs text-gray-400">-</span>
     }
   </ng-template>
   <ng-template appCell="email" let-s>
     <span class="text-sm text-gray-600">{{ s.email }}</span>
   </ng-template>
   <ng-template appCell="semester" let-s>
-    <span class="text-sm text-gray-600">{{ s.semester ? 'Ciclo ' + s.semester : '—' }}</span>
+    <span class="text-sm text-gray-600">{{ s.semester ? 'Ciclo ' + s.semester : '-' }}</span>
   </ng-template>
   <ng-template appCell="is_active" let-s>
     @if (s.is_active) {
@@ -110,7 +110,7 @@
         placeholder="raul.montesinos@unamba.edu.pe" icon="material-symbols:mail-outline"
         inputmode="email" autocomplete="email" [maxlength]="160" [error]="fieldError('email')" />
       <div class="grid grid-cols-2 gap-3">
-        <app-ui-input formControlName="dni" label="DNI" [required]="true" placeholder="8 dígitos"
+        <app-ui-input formControlName="dni" label="DNI" placeholder="8 dígitos"
           inputmode="numeric" autocomplete="off" [maxlength]="8" [error]="fieldError('dni')"/>
         <app-ui-input formControlName="code" label="Código de matrícula" [required]="true"
           placeholder="221181" inputmode="numeric" autocomplete="off" [maxlength]="6"

@@ -430,8 +430,10 @@ def validar_alumno(
 
     if alumno.dni:
         alumno.dni = re.sub(r"\D", "", alumno.dni)
-    if not alumno.dni or len(alumno.dni) != 8:
-        alumno.errores.append("Falta el DNI de 8 dígitos")
+    if not alumno.dni:
+        alumno.dni = None
+    elif len(alumno.dni) != 8:
+        alumno.errores.append("El DNI debe tener 8 dígitos")
 
     if alumno.full_name:
         alumno.full_name = re.sub(r"\s+", " ", alumno.full_name).strip()

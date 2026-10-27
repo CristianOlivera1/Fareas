@@ -61,6 +61,8 @@ export class StudentsImportDialog {
 
   readonly steps = STEPS;
   readonly cycles = CYCLES;
+  readonly accept = '.xlsx,.xlsm,.csv,.tsv,.pdf,.jpg,.jpeg,.png,.webp';
+  readonly hint = 'Excel, CSV, PDF, JPG, PNG o WEBP · máximo 10 MB';
 
   readonly step = signal(1);
   readonly file = signal<File | null>(null);
@@ -85,6 +87,7 @@ export class StudentsImportDialog {
     () => this.rows().length > 0 && this.invalidCount() === 0 && !this.confirming(),
   );
   readonly typeLabel = computed(() => this.documentLabel(this.preview()?.tipo));
+  readonly isSpreadsheet = computed(() => ['xlsx', 'csv'].includes(this.preview()?.tipo ?? ''));
 
   constructor() {
     void this.loadGroups();
@@ -99,7 +102,7 @@ export class StudentsImportDialog {
         .toPromise();
       this.groupOptions.set(
         (groups ?? []).map((group) => ({
-          label: `${group.course_code} · Grupo ${group.group_code} — ${group.teacher_name ?? 'Sin docente'}`,
+          label: `${group.course_code} · Grupo ${group.group_code} - ${group.teacher_name ?? 'Sin docente'}`,
           value: group.id,
         })),
       );
@@ -147,7 +150,7 @@ export class StudentsImportDialog {
       this.toast.add({
         severity: 'warn',
         summary: 'Falta el archivo',
-        detail: 'Sube una nómina en PDF o una foto antes de leerla.',
+        detail: 'Sube una nómina en Excel, CSV, PDF o foto antes de leerla.',
         life: 3500,
       });
       return;
@@ -274,7 +277,7 @@ export class StudentsImportDialog {
   rowIssues(row: StudentImportEditableRow): string[] {
     const issues: string[] = [];
     if (!/^\d{6}$/.test(row.code.trim())) issues.push('Código de 6 dígitos');
-    if (!/^\d{8}$/.test(row.dni.trim())) issues.push('DNI de 8 dígitos');
+    if (row.dni.trim() && !/^\d{8}$/.test(row.dni.trim())) issues.push('DNI de 8 dígitos');
     if (row.full_name.trim().length < 3) issues.push('Nombre completo');
     if (!this.validEmail(row.email)) issues.push('Correo válido');
     if (!row.semester || row.semester < 1 || row.semester > 12) issues.push('Ciclo');
@@ -295,7 +298,7 @@ export class StudentsImportDialog {
       this.toast.add({
         severity: 'warn',
         summary: 'Hay filas por corregir',
-        detail: 'Revisa el código, DNI, nombre, correo y ciclo de cada fila.',
+        detail: 'Revisa el código, nombre, correo y ciclo de cada fila.',
         life: 4200,
       });
       return;
@@ -368,6 +371,8 @@ export class StudentsImportDialog {
   }
 
   private documentLabel(type: string | undefined): string {
+    if (type === 'xlsx') return 'Excel';
+    if (type === 'csv') return 'CSV';
     if (type === 'pdf_texto') return 'PDF con texto';
     if (type === 'pdf_ocr') return 'PDF escaneado';
     if (type === 'imagen') return 'Imagen';

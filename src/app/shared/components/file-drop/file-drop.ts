@@ -69,7 +69,8 @@ export class FileDrop {
       .map((value) => value.trim().toLowerCase())
       .filter(Boolean);
     if (allowed.length > 0 && !allowed.includes(extension)) {
-      this.fileError.emit('Formato no soportado. Sube un PDF, JPG, PNG o WEBP.');
+      const formats = allowed.map((value) => value.slice(1).toUpperCase()).join(', ');
+      this.fileError.emit(`Formato no soportado. Sube un archivo ${formats}.`);
       return;
     }
     if (file.size > this.maxSizeMb() * 1024 * 1024) {
