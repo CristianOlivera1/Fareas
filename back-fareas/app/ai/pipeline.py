@@ -153,7 +153,7 @@ class VisionPipeline:
         if sid is not None and not self._confirmed(track_key, sid):
             return FrameResult(
                 faces=faces, verdict="verificando", color="azul", buzzer="ninguno",
-                seconds=1, student_id=sid, similarity=sim, message=MESSAGES["verificando"], box=face.box,
+                seconds=1, similarity=sim, message=MESSAGES["verificando"], box=face.box,
             )
         if sid is None:
             self._streaks.pop(track_key, None)
