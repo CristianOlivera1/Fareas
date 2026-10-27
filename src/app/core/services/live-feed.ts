@@ -9,6 +9,7 @@ export type VerdictKind =
   | 'denegado'
   | 'desconocido'
   | 'sin_registro'
+  | 'verificando'
   | 'sin_rostro';
 
 export interface LiveVerdict {

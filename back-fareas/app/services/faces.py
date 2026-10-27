@@ -1,7 +1,9 @@
+import asyncio
 import base64
 import binascii
 import contextlib
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
@@ -78,14 +80,27 @@ def validar_calidad(img: np.ndarray, face, idx: int) -> None:
         raise errors.DomainError(f"Foto {idx}: la foto está borrosa; mantén firme la cámara y mejora la luz")
 
 
-def _embedding_de_foto(det: ScrfdDetector, emb: ArcFaceEmbedder, img: np.ndarray, idx: int) -> np.ndarray:
+def _embedding_de_foto(
+    det: ScrfdDetector, emb: ArcFaceEmbedder, photo_b64: str, idx: int
+) -> tuple[np.ndarray, np.ndarray]:
+    img = _decode_photo(photo_b64)
     faces = det.detect(img, det_thresh=DETECT_THRESHOLD, max_faces=2)
     if not faces:
         raise errors.DomainError(f"Foto {idx}: no se detectó ningún rostro")
     if len(faces) > 1:
         raise errors.DomainError(f"Foto {idx}: se detectaron {len(faces)} rostros; debe ser solo el alumno")
     validar_calidad(img, faces[0], idx)
-    return emb.get(img, faces[0].kps)
+    return emb.get(img, faces[0].kps), img
+
+
+def _procesar_fotos(
+    det: ScrfdDetector, emb: ArcFaceEmbedder, photos_b64: list[str]
+) -> tuple[list[np.ndarray], np.ndarray]:
+    with ThreadPoolExecutor(max_workers=len(photos_b64)) as pool:
+        resultados = list(
+            pool.map(lambda par: _embedding_de_foto(det, emb, par[1], par[0] + 1), enumerate(photos_b64))
+        )
+    return [r[0] for r in resultados], resultados[0][1]
 
 def group_consistency(embeddings: list[np.ndarray]) -> tuple[float, int, float]:
     worst_similarity, worst_index = 1.0, 0
@@ -147,7 +162,7 @@ async def enrolar(
         raise errors.DomainError(f"Se requieren entre {MIN_PHOTOS} y {MAX_PHOTOS} fotos (recibidas: {len(photos_b64)})")
 
     det, emb = get_detector(), get_embedder()
-    embeddings = [_embedding_de_foto(det, emb, _decode_photo(p), i + 1) for i, p in enumerate(photos_b64)]
+    embeddings, primera = await asyncio.to_thread(_procesar_fotos, det, emb, photos_b64)
 
     group_sim, worst_index, min_pair = group_consistency(embeddings)
     if group_sim < INTRA_MIN_SIMILARITY:
@@ -164,12 +179,9 @@ async def enrolar(
     storage = get_storage()
     photo_key = None
     try:
-        primera = _decode_photo(photos_b64[0])
-        fs = det.detect(primera, det_thresh=DETECT_THRESHOLD)
-        if fs:
-            ok, buf = cv2.imencode(".jpg", primera)
-            if ok:
-                photo_key = await storage.put(face_key(student_id), buf.tobytes(), "image/jpeg")
+        ok, buf = cv2.imencode(".jpg", primera)
+        if ok:
+            photo_key = await storage.put(face_key(student_id), buf.tobytes(), "image/jpeg")
     except Exception:
         photo_key = None
 

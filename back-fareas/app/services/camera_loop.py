@@ -24,7 +24,9 @@ from app.tables import Device, DeviceType, Enrollment
 
 logger = logging.getLogger("fareas.cameras")
 
-FPS_POR_AULA = 2.0
+FPS_POR_AULA = 3.0
+PAUSA_MIN_S = 0.02
+_secuencia = 0
 
 _task: asyncio.Task | None = None
 _stop = asyncio.Event()
@@ -192,8 +194,13 @@ async def _procesar_aula(pipe, room_id: int) -> None:
 
         pipe.classifier = clasificador
         pipe.threshold = float(cfg.face_match_threshold)
-        resultado = pipe.process_frame(frame, candidates=candidates, track_key=room_id)
+        resultado = await asyncio.to_thread(
+            pipe.process_frame, frame, candidates=candidates, track_key=room_id
+        )
+        global _secuencia
+        _secuencia += 1
         _ultimo[room_id] = {
+            "seq": _secuencia,
             "room_id": room_id,
             "verdict": resultado.verdict,
             "student_id": resultado.student_id,
@@ -281,6 +288,7 @@ async def _bucle() -> None:
             if not room_ids:
                 await asyncio.sleep(5.0)
                 continue
+            inicio = time.monotonic()
             for room_id in room_ids:
                 if _stop.is_set():
                     break
@@ -288,7 +296,8 @@ async def _bucle() -> None:
                     await _procesar_aula(pipe, room_id)
                 except Exception:
                     logger.exception("Fallo procesando el aula %s", room_id)
-                await asyncio.sleep(1.0 / FPS_POR_AULA)
+            restante = len(room_ids) / FPS_POR_AULA - (time.monotonic() - inicio)
+            await asyncio.sleep(max(PAUSA_MIN_S, restante))
         except Exception:
             logger.exception("El bucle de cámaras falló; reintenta en 5 s")
             await asyncio.sleep(5.0)
