@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
-import { catchError, interval, of, startWith, switchMap } from 'rxjs';
+import { catchError, interval, of, startWith, switchMap, timer } from 'rxjs';
 
 import type { AppNotification } from '../../../../core/models/notification';
 import { NotificationsApi } from '../../../../core/services/notifications-api';
@@ -32,6 +32,8 @@ const SEVERITY_CLASSES: Record<string, string> = {
   warning: 'bg-amber-50 text-amber-600',
   danger: 'bg-red-50 text-red-600',
 };
+
+const ENABLE_NOTIFICATION_POLLING = false;
 
 @Component({
   selector: 'app-notifications-bell',
@@ -57,9 +59,9 @@ export class NotificationsBell {
   readonly badge = computed(() => (this.unread() > 99 ? '99+' : String(this.unread())));
 
   constructor() {
-    interval(10_000)
+    const refresh = ENABLE_NOTIFICATION_POLLING ? interval(10_000).pipe(startWith(0)) : timer(0);
+    refresh
       .pipe(
-        startWith(0),
         switchMap(() => this.api.unreadCount().pipe(catchError(() => of(null)))),
         takeUntilDestroyed(this.destroyRef),
       )

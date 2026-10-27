@@ -221,6 +221,70 @@ def test_pipeline_reinicia_la_confirmacion_si_cambia_la_persona():
     assert p.process_frame(_frame(8), now=2.0, track_key=1).verdict == "asistio"
 
 
+class _EmbSecuencia:
+    def __init__(self, vectores):
+        self._vectores = list(vectores)
+        self.llamadas = 0
+
+    def get(self, frame, lmk):
+        vector = self._vectores[min(self.llamadas, len(self._vectores) - 1)]
+        self.llamadas += 1
+        return vector
+
+
+def _ruidoso(base: np.ndarray, ruido: np.ndarray, amplitud: float) -> np.ndarray:
+    v = base + amplitud * ruido
+    return (v / np.linalg.norm(v)).astype(np.float32)
+
+
+def test_pipeline_promedia_embeddings_de_varios_cuadros():
+    g = FaceGallery()
+    g.set_student(7, [_vec(7)])
+    cuadros = [_ruidoso(_vec(7), _vec(20), 0.9), _ruidoso(_vec(7), _vec(21), 0.9)]
+    sin_promedio = VisionPipeline(_DetFake(), _EmbSecuencia(cuadros), g, threshold=0.78)
+    assert sin_promedio.process_frame(_frame(1), track_key=1).verdict == "desconocido"
+    assert sin_promedio.process_frame(_frame(1), track_key=1).verdict == "desconocido"
+
+    con_promedio = VisionPipeline(_DetFake(), _EmbSecuencia(cuadros), g, threshold=0.78, smooth_frames=3)
+    assert con_promedio.process_frame(_frame(1), track_key=1).verdict == "desconocido"
+    assert con_promedio.process_frame(_frame(1), track_key=1).verdict == "asistio"
+
+
+def test_pipeline_no_mezcla_dos_personas_en_la_ventana():
+    g = FaceGallery()
+    g.set_student(7, [_vec(7)])
+    g.set_student(8, [_vec(8)])
+    p = VisionPipeline(_DetFake(), _EmbSecuencia([_vec(7), _vec(7), _vec(8)]), g, threshold=0.75,
+                       smooth_frames=3)
+    ultimo = [p.process_frame(_frame(1), track_key=1) for _ in range(3)][-1]
+    assert ultimo.student_id == 8 and ultimo.verdict == "asistio"
+
+
+class _DetPerfil:
+    def __init__(self, nariz_x: float):
+        self.nariz_x = nariz_x
+
+    def detect(self, frame, det_thresh=None, max_faces=0):
+        from app.ai.detector import Face
+
+        kps = np.array([[30, 40], [70, 40], [self.nariz_x, 60], [35, 80], [65, 80]], dtype=np.float32)
+        return [Face(box=np.array([0, 0, 100, 100], dtype=np.float32), score=0.9, kps=kps)]
+
+
+def test_pipeline_omite_rostros_de_perfil_sin_calcular_el_embedding():
+    g = FaceGallery()
+    g.set_student(7, [_vec(7)])
+    emb = _EmbSecuencia([_vec(7)])
+    perfil = VisionPipeline(_DetPerfil(95), emb, g, threshold=0.75, max_yaw=0.5)
+    resultado = perfil.process_frame(_frame(7), track_key=1)
+    assert resultado.verdict == "verificando" and resultado.student_id is None
+    assert emb.llamadas == 0
+
+    de_frente = VisionPipeline(_DetPerfil(52), emb, g, threshold=0.75, max_yaw=0.5)
+    assert de_frente.process_frame(_frame(7), track_key=1).verdict == "asistio"
+    assert emb.llamadas == 1
+
+
 @pytest.mark.skipif(not all(m.exists() for m in MODELOS) or not VIDEO.exists(),
                     reason="requiere models/*.onnx y resources/ con el video demo")
 def test_landmarks_caen_dentro_del_rostro_en_orden_anatomico():

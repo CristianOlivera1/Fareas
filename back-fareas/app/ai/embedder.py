@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 
+from app.ai.ort_options import session_options
+
 _ARCFACE_DST = np.float32(
     [
         [38.2946, 51.6963],
@@ -30,8 +32,7 @@ def normed_embedding(embedding: np.ndarray) -> np.ndarray:
 
 class ArcFaceEmbedder:
     def __init__(self, model_path: str) -> None:
-        opts = ort.SessionOptions()
-        opts.log_severity_level = 3
+        opts = session_options()
         self.session = ort.InferenceSession(model_path, opts, providers=["CPUExecutionProvider"])
         self.input_name = self.session.get_inputs()[0].name
         shape = self.session.get_inputs()[0].shape
