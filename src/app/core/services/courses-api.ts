@@ -76,6 +76,7 @@ export class CoursesApi extends BaseApi {
       room_id: number | null;
       teacher_id: number | null;
       group_id?: number | null;
+      new_group?: boolean;
     },
   ) {
     return this.post<Block & { group_code: string; group_created: boolean }>(

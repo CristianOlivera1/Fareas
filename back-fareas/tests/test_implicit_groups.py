@@ -239,3 +239,46 @@ async def test_only_admins_manage_groups_and_course_blocks(client, docente_heade
     assert created.status_code == 403
     assert (await client.patch(f"{API}/groups/1", headers=docente_headers, json={"capacity": 10})).status_code == 403
     assert (await client.get(f"{API}/courses/overflow", headers=docente_headers)).status_code == 403
+
+
+async def test_new_group_flag_creates_the_next_parallel_group(client, admin_headers, db_session, world):
+    course = world.courses[0]
+    await client.post(f"{API}/courses/{course.id}/blocks", headers=admin_headers, json=_block(world.rooms[0]))
+
+    parallel = await client.post(
+        f"{API}/courses/{course.id}/blocks",
+        headers=admin_headers,
+        json=_block(world.rooms[1], new_group=True, teacher_id=world.teachers[0].id),
+    )
+
+    assert parallel.status_code == 201, parallel.text
+    assert parallel.json()["group_code"] == "B" and parallel.json()["group_created"] is True
+    groups = await _groups(db_session, course)
+    assert [(g.group_code, g.teacher_id) for g in groups] == [("A", None), ("B", world.teachers[0].id)]
+
+
+async def test_new_group_flag_with_a_clash_leaves_no_empty_group(client, admin_headers, db_session, world):
+    course = world.courses[0]
+    await client.post(f"{API}/courses/{course.id}/blocks", headers=admin_headers, json=_block(world.rooms[0]))
+
+    clash = await client.post(
+        f"{API}/courses/{course.id}/blocks", headers=admin_headers, json=_block(world.rooms[0], new_group=True)
+    )
+
+    assert clash.status_code == 409, clash.text
+    assert [g.group_code for g in await _groups(db_session, course)] == ["A"]
+
+
+async def test_new_group_flag_and_group_id_are_mutually_exclusive(client, admin_headers, world):
+    course = world.courses[0]
+    first = await client.post(f"{API}/courses/{course.id}/blocks", headers=admin_headers, json=_block(world.rooms[0]))
+    group_id = (await client.get(f"{API}/courses/{course.id}/groups", headers=admin_headers)).json()[0]["id"]
+    assert first.status_code == 201
+
+    both = await client.post(
+        f"{API}/courses/{course.id}/blocks",
+        headers=admin_headers,
+        json=_block(world.rooms[1], new_group=True, group_id=group_id),
+    )
+
+    assert both.status_code in (400, 422), both.text

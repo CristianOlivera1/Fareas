@@ -39,8 +39,6 @@ interface RoomForm {
     UiButton,
     UiInput,
     UiAlert,
-    DataTable,
-    DataTableCellDirective,
     DialogModule,
     RoomEdit,
     RoomBuildingMap,

@@ -8,10 +8,12 @@ from app.services import errors
 from app.services.audit import audit
 from app.services.course_groups import (
     count_active_enrollments,
+    create_next_group,
     full_courses,
     resolve_group_for_course,
 )
 from app.services.schedule import _docente_valido, _raise_if_teacher_conflict, add_block
+from app.services.settings import semestre_vigente
 from app.tables import AppUser, Course, CourseGroup, UserRole
 
 router = APIRouter(tags=["courses"])
@@ -19,6 +21,7 @@ router = APIRouter(tags=["courses"])
 
 class CourseBlockIn(BlockIn):
     group_id: int | None = Field(default=None, description="Solo si el curso tiene varios grupos")
+    new_group: bool = Field(default=False, description="Crea el siguiente grupo del curso (B, C…)")
 
 
 class CourseBlockOut(BlockOut):
@@ -54,7 +57,13 @@ async def create_course_block(
     course_id: int, body: CourseBlockIn, request: Request, db: DbSession, admin: RequireRole(UserRole.ADMIN)
 ) -> CourseBlockOut:
     course = await _get_or_404(db, Course, course_id, "Curso")
-    group, created = await resolve_group_for_course(db, course, body.group_id)
+    if body.new_group and body.group_id is not None:
+        raise errors.DomainError("Indica un grupo existente o pide uno nuevo, no ambos")
+    if body.new_group:
+        group = await create_next_group(db, course, await semestre_vigente(db))
+        created = True
+    else:
+        group, created = await resolve_group_for_course(db, course, body.group_id)
     block = await add_block(
         db, admin, group_id=group.id, weekday=body.weekday, start_time=body.start_time,
         end_time=body.end_time, room_id=body.room_id, teacher_id=body.teacher_id,
