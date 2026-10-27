@@ -97,7 +97,7 @@ copy .env.example .env
 psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/001_schema.sql
 psql -U postgres -d fareas -v ON_ERROR_STOP=1 -f db/002_seed.sql
 
-fastapi dev          # entrypoint de pyproject.toml (app.main:app)
+fastapi dev          # entrypoint de pyproject.toml (app.main:app) or preview led  fastapi dev --host 0.0.0.0  conection esp32
 
 # alternativas: uvicorn app.main:app --reload  |  python main.py
 ```
