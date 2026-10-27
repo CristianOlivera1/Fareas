@@ -1,0 +1,159 @@
+:host {
+  display: block;
+}
+
+.scene-wrap {
+  overflow-x: auto;
+  border-block: 1px solid #e5e7eb;
+  background: #b4d9f6;
+}
+
+.building-scene {
+  display: block;
+  width: 100%;
+  min-width: 860px;
+  height: auto;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+/* Piso seleccionado */
+.floor-band .tint {
+  opacity: 0;
+  transition: opacity .25s;
+  pointer-events: none;
+}
+
+.floor-band.on .tint {
+  opacity: .32;
+}
+
+/* Piso seleccionado en el tramo del conector */
+.connector-panel .tint {
+  opacity: 0;
+  transition: opacity .25s;
+  pointer-events: none;
+}
+
+.connector-panel.is-selected .tint {
+  opacity: .32;
+}
+
+/* Salones */
+.room {
+  cursor: pointer;
+  outline: none;
+}
+
+.room text {
+  fill: #3a3f4b;
+  font-weight: 500;
+  transition: fill .2s;
+  pointer-events: none;
+}
+
+.room:hover text,
+.room:focus-visible text {
+  fill: #000;
+}
+
+.room.on text {
+  fill: #0b0f18;
+  font-weight: 700;
+}
+
+.room .ring {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 3;
+  transition: stroke .2s;
+}
+
+.room:focus-visible .ring,
+.room.on .ring {
+  stroke: #0b0f18;
+}
+
+.room.is-inactive {
+  opacity: .55;
+}
+
+/* Acción de edición (aparece bajo el aula al pasar el cursor) */
+.rooms-layer {
+  pointer-events: none;
+}
+
+.room {
+  pointer-events: auto;
+}
+
+.room-edit {
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity .15s ease;
+}
+
+.room:hover .room-edit,
+.room.on .room-edit {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.room-edit-bg {
+  fill: #fff;
+  stroke: #cdd6df;
+  stroke-width: 1.2;
+  filter: drop-shadow(0 2px 3px rgb(15 23 42 / 18%));
+  transition: stroke .15s;
+}
+
+.room-edit-icon {
+  fill: #273044;
+  transition: fill .15s;
+}
+
+.room-edit:hover .room-edit-bg {
+  stroke: #0b0f18;
+}
+
+.room-edit:hover .room-edit-icon {
+  fill: #0b0f18;
+}
+
+/* Nubes */
+.cloud {
+  animation: room-cloud-drift 40s ease-in-out infinite alternate;
+}
+
+.cloud.b {
+  animation-duration: 55s;
+  animation-direction: alternate-reverse;
+}
+
+/* Aulas fuera de la fachada */
+.outside-room.is-selected {
+  border-color: var(--fareas-primary);
+  background: #eff6ff;
+}
+
+@keyframes room-cloud-drift {
+  from {
+    transform: translateX(-14px);
+  }
+
+  to {
+    transform: translateX(18px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud,
+  .room .ring,
+  .room text,
+  .room-edit,
+  .floor-band .tint,
+  .connector-panel .tint {
+    animation: none;
+    transition: none;
+  }
+}

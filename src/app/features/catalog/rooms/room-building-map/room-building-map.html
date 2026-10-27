@@ -1,0 +1,612 @@
+<section class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs">
+  <div class="flex flex-wrap items-start justify-between gap-4 px-5 pb-4 pt-5 sm:px-6">
+    <div>
+      <h2 class="text-lg font-semibold tracking-tight text-gray-900">Edificio de Aulas</h2>
+      <p class="mt-1 max-w-[62ch] text-sm text-gray-500">
+        Pabellón de cuatro pisos con salones numerados por nivel. Selecciona un salón para
+        resaltarlo.
+      </p>
+    </div>
+    @if (loading()) {
+      <span class="rounded-full bg-gray-50 px-3 py-1.5 text-sm text-gray-500" role="status">
+        Cargando aulas…
+      </span>
+    } @else {
+      <div class="flex items-center gap-2 rounded-full bg-gray-50 px-3 py-1.5 text-sm text-gray-600">
+        <iconify-icon
+          icon="material-symbols:meeting-room-outline"
+          width="18"
+          aria-hidden="true"
+        ></iconify-icon>
+        {{ rooms().length }} {{ rooms().length === 1 ? 'aula registrada' : 'aulas registradas' }}
+      </div>
+    }
+  </div>
+
+  <div class="scene-wrap" [attr.aria-busy]="loading()">
+    <svg
+      class="building-scene"
+      viewBox="0 0 1536 1024"
+      role="group"
+      aria-labelledby="room-map-title room-map-description"
+    >
+      <title id="room-map-title">Fachada del edificio de aulas</title>
+      <desc id="room-map-description">
+        Edificio de cuatro pisos con salones numerados por nivel. Usa Tab para recorrer los salones
+        y Enter o Espacio para seleccionar uno.
+      </desc>
+
+      <defs>
+        <linearGradient id="room-map-sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#a6d3f6"></stop>
+          <stop offset=".6" stop-color="#c8e4fa"></stop>
+          <stop offset="1" stop-color="#dceefc"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-wall" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#f8f9fb"></stop>
+          <stop offset="1" stop-color="#e2e6ec"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-blue" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#3f92ec"></stop>
+          <stop offset="1" stop-color="#1c66c0"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-blue-top" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#5aa6f2"></stop>
+          <stop offset="1" stop-color="#2f82da"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-blue-col" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#4a9aee"></stop>
+          <stop offset=".55" stop-color="#2b7bd6"></stop>
+          <stop offset="1" stop-color="#1a62ba"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-glass" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#86b7e2"></stop>
+          <stop offset=".5" stop-color="#3f6f9f"></stop>
+          <stop offset="1" stop-color="#9cc3e6"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-glass-window" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#4f7794"></stop>
+          <stop offset="1" stop-color="#26425a"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-olive" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#868a68"></stop>
+          <stop offset=".45" stop-color="#b4b78f"></stop>
+          <stop offset="1" stop-color="#8d9170"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-parapet" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffffff"></stop>
+          <stop offset="1" stop-color="#e6e9ed"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-shade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#1b2a3c" stop-opacity=".28"></stop>
+          <stop offset="1" stop-color="#1b2a3c" stop-opacity="0"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-grass" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#9fd25c"></stop>
+          <stop offset="1" stop-color="#7fb441"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-road" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#8f94a9"></stop>
+          <stop offset="1" stop-color="#777d93"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-inner" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#587fa6"></stop>
+          <stop offset="1" stop-color="#34557a"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-portico" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#cdd3da"></stop>
+          <stop offset="1" stop-color="#97a0ab"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-round-shade" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#000" stop-opacity=".22"></stop>
+          <stop offset=".3" stop-color="#000" stop-opacity="0"></stop>
+          <stop offset=".72" stop-color="#fff" stop-opacity="0"></stop>
+          <stop offset="1" stop-color="#000" stop-opacity=".2"></stop>
+        </linearGradient>
+        <linearGradient id="room-map-end-wall" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#dfe2e8"></stop>
+          <stop offset="1" stop-color="#eceef2"></stop>
+        </linearGradient>
+      </defs>
+
+      <!-- Cielo -->
+      <rect width="1536" height="900" fill="url(#room-map-sky)"></rect>
+      <g fill="#eaf5fe" opacity=".95" aria-hidden="true">
+        <g class="cloud">
+          <path
+            d="M0,312 L196,312 Q208,296 182,292 Q176,268 140,271 Q126,246 86,254 Q60,248 46,274 Q10,268 0,290Z"
+          ></path>
+        </g>
+        <g class="cloud b">
+          <circle cx="410" cy="414" r="30"></circle>
+          <circle cx="452" cy="396" r="40"></circle>
+          <circle cx="505" cy="408" r="30"></circle>
+          <circle cx="350" cy="420" r="24"></circle>
+          <rect x="340" y="410" width="190" height="30"></rect>
+        </g>
+        <g class="cloud">
+          <path
+            d="M1394,272 L1536,272 L1536,214 Q1510,206 1492,222 Q1478,198 1446,212 Q1426,214 1420,236 Q1394,238 1394,272Z"
+          ></path>
+        </g>
+      </g>
+
+      <!-- Suelo -->
+      <g aria-hidden="true">
+        <polygon points="0,800 1536,800 1536,846 0,900" fill="url(#room-map-grass)"></polygon>
+        <polygon points="0,830 400,812 520,806 0,858" fill="#b4de72" opacity=".5"></polygon>
+        <polygon points="700,832 1536,812 1536,830 780,850" fill="#b4de72" opacity=".45"></polygon>
+        <polygon points="40,796 600,796 700,850 560,846 40,812" fill="#dccdb4"></polygon>
+        <polygon points="900,804 1080,804 1160,842 1000,838" fill="#dccdb4"></polygon>
+        <polygon points="0,900 1536,846 1536,868 0,935" fill="#d8c8ae"></polygon>
+        <polygon points="0,935 1536,868 1536,1024 0,1024" fill="url(#room-map-road)"></polygon>
+        <polygon points="0,935 1536,868 1536,873 0,941" fill="#c9bba3"></polygon>
+      </g>
+
+      <!-- Bloque izquierdo -->
+      <g aria-hidden="true">
+        <polygon points="20,446 312,432 312,672 20,672" fill="url(#room-map-wall)"></polygon>
+        <rect
+          x="62"
+          y="478"
+          width="12"
+          height="30"
+          fill="url(#room-map-glass-window)"
+          stroke="#dfe4ea"
+          stroke-width="2"
+        ></rect>
+        <rect
+          x="62"
+          y="590"
+          width="12"
+          height="30"
+          fill="url(#room-map-glass-window)"
+          stroke="#dfe4ea"
+          stroke-width="2"
+        ></rect>
+        <rect
+          x="68"
+          y="430"
+          width="100"
+          height="236"
+          fill="url(#room-map-glass)"
+          stroke="#eef1f4"
+          stroke-width="4"
+        ></rect>
+        @for (x of leftMullions; track x) {
+          <line [attr.x1]="x" y1="432" [attr.x2]="x" y2="664" stroke="#eef1f4" stroke-width="3">
+          </line>
+        }
+        @for (y of leftGlassRows; track y) {
+          <line x1="70" [attr.y1]="y" x2="166" [attr.y2]="y" stroke="#eef1f4" stroke-width="3">
+          </line>
+        }
+        <rect x="68" y="531" width="100" height="16" fill="#8d9170"></rect>
+        <rect x="168" y="432" width="94" height="234" fill="url(#room-map-olive)"></rect>
+        @for (window of oliveWindows; track window.x + '-' + window.y) {
+          <rect
+            [attr.x]="window.x"
+            [attr.y]="window.y"
+            [attr.width]="window.w"
+            [attr.height]="window.h"
+            fill="url(#room-map-glass-window)"
+            stroke="#f1f4f6"
+            stroke-width="3"
+          ></rect>
+          <polygon [attr.points]="window.shine" fill="#fff" opacity=".16"></polygon>
+        }
+        <polygon points="68,430 168,430 130,666 68,666" fill="#fff" opacity=".1"></polygon>
+        <polygon points="20,438 100,391 312,425 312,456 20,456" fill="url(#room-map-blue)"></polygon>
+        <polygon points="100,391 312,425 312,433 100,399" fill="#6fb0f5" opacity=".7"></polygon>
+        <rect x="66" y="666" width="198" height="18" fill="url(#room-map-blue)"></rect>
+        <rect x="66" y="684" width="198" height="112" fill="url(#room-map-portico)"></rect>
+        <rect x="104" y="700" width="124" height="96" fill="#7f8a96" opacity=".55"></rect>
+        <rect x="70" y="684" width="28" height="112" fill="url(#room-map-blue-col)"></rect>
+        <rect x="232" y="684" width="20" height="112" fill="url(#room-map-blue-col)"></rect>
+        <rect x="120" y="716" width="52" height="80" fill="#4a5a69" opacity=".7"></rect>
+      </g>
+
+      <!-- Edificio curvo -->
+      <g aria-hidden="true">
+        <path
+          d="M314,497 C360,520 560,520 602,500 L602,676 C560,704 360,704 314,676 Z"
+          fill="url(#room-map-olive)"
+        ></path>
+        <g opacity=".16">
+          @for (x of roundStripes; track x) {
+            <line [attr.x1]="x" y1="500" [attr.x2]="x" y2="690" stroke="#3d4128" stroke-width="2">
+            </line>
+          }
+        </g>
+        <path
+          d="M314,497 C360,520 560,520 602,500 L602,676 C560,704 360,704 314,676 Z"
+          fill="url(#room-map-round-shade)"
+        ></path>
+        @for (window of roundWindows; track window.x + '-' + window.y) {
+          <g [attr.transform]="'translate(' + window.x + ' ' + window.y + ') skewY(' + window.skew + ')'">
+            <rect
+              width="28"
+              [attr.height]="window.h"
+              fill="url(#room-map-glass-window)"
+              stroke="#f1f4f6"
+              stroke-width="3"
+            ></rect>
+            <polygon [attr.points]="window.shine" fill="#fff" opacity=".16"></polygon>
+          </g>
+        }
+        <path d="M314,548 C360,574 560,574 602,552 L602,590 C560,614 360,614 314,590 Z" fill="#eef0f3"></path>
+        <path d="M314,580 C360,604 560,604 602,582 L602,590 C560,614 360,614 314,590 Z" fill="#c4cad2"></path>
+        <path d="M314,658 C360,684 560,684 602,662 L602,696 C560,722 360,722 314,696 Z" fill="url(#room-map-blue)"></path>
+        <path
+          d="M312,452 C312,422 368,410 452,410 C540,410 596,425 602,468 L602,502 C560,524 360,524 312,499 Z"
+          fill="url(#room-map-blue-top)"
+        ></path>
+        <path
+          d="M330,432 C380,414 520,410 580,440"
+          fill="none"
+          stroke="#9ccbf8"
+          stroke-width="5"
+          stroke-linecap="round"
+          opacity=".7"
+        ></path>
+        <rect x="342" y="704" width="206" height="92" fill="url(#room-map-portico)"></rect>
+        <rect x="356" y="736" width="184" height="60" fill="#2c4358"></rect>
+        @for (x of doorMullions; track x) {
+          <line [attr.x1]="x" y1="736" [attr.x2]="x" y2="796" stroke="#7d8fa0" stroke-width="2"></line>
+        }
+        <line x1="356" y1="756" x2="540" y2="756" stroke="#7d8fa0" stroke-width="2"></line>
+        <polygon points="356,736 440,736 400,796 356,796" fill="#fff" opacity=".1"></polygon>
+        <rect x="322" y="696" width="22" height="100" fill="url(#room-map-blue-col)"></rect>
+        <rect x="424" y="700" width="18" height="96" fill="url(#room-map-blue-col)"></rect>
+        <rect x="548" y="700" width="20" height="96" fill="url(#room-map-blue-col)"></rect>
+        <rect x="568" y="690" width="34" height="106" fill="url(#room-map-wall)"></rect>
+        <rect
+          x="574"
+          y="716"
+          width="22"
+          height="30"
+          fill="url(#room-map-glass-window)"
+          stroke="#dfe4ea"
+          stroke-width="2"
+        ></rect>
+      </g>
+
+      <!-- Conector y torre de escaleras -->
+      <g aria-hidden="true">
+        <polygon points="602,505 632,500 632,800 602,800" fill="url(#room-map-wall)"></polygon>
+        <polygon points="602,455 632,448 632,502 602,507" fill="url(#room-map-blue)"></polygon>
+        <rect x="632" y="500" width="70" height="300" fill="url(#room-map-wall)"></rect>
+        <rect
+          x="642"
+          y="618"
+          width="50"
+          height="28"
+          fill="url(#room-map-glass-window)"
+          stroke="#dfe4ea"
+          stroke-width="2"
+        ></rect>
+        <rect
+          x="642"
+          y="706"
+          width="50"
+          height="28"
+          fill="url(#room-map-glass-window)"
+          stroke="#dfe4ea"
+          stroke-width="2"
+        ></rect>
+        <rect x="702" y="447" width="100" height="353" fill="url(#room-map-inner)"></rect>
+        @for (flight of stairs; track flight.y) {
+          <rect x="712" [attr.y]="flight.y" width="80" height="22" fill="#f4f6f8"></rect>
+          <rect x="712" [attr.y]="flight.y + 22" width="80" height="5" fill="#9fb0c0"></rect>
+          @for (riser of flight.risers; track riser) {
+            <line
+              [attr.x1]="riser"
+              [attr.y1]="flight.y - 22"
+              [attr.x2]="riser"
+              [attr.y2]="flight.y"
+              stroke="#eef2f5"
+              stroke-width="2"
+            ></line>
+          }
+          <line
+            x1="712"
+            [attr.y1]="flight.y - 22"
+            x2="792"
+            [attr.y2]="flight.y - 22"
+            stroke="#eef2f5"
+            stroke-width="3"
+          ></line>
+          <line
+            x1="714"
+            [attr.y1]="flight.y + 27"
+            x2="742"
+            [attr.y2]="flight.y + 90"
+            stroke="#eef2f5"
+            stroke-width="3"
+          ></line>
+          <line
+            x1="760"
+            [attr.y1]="flight.y + 27"
+            x2="788"
+            [attr.y2]="flight.y + 90"
+            stroke="#c9d6e2"
+            stroke-width="2"
+            opacity=".7"
+          ></line>
+        }
+        <rect x="702" y="447" width="10" height="353" fill="url(#room-map-blue-col)"></rect>
+        <rect x="744" y="440" width="13" height="360" fill="url(#room-map-blue-col)"></rect>
+        <rect x="788" y="440" width="14" height="360" fill="url(#room-map-blue-col)"></rect>
+        <polygon
+          points="632,447 632,431 662,421 782,405 802,426 802,447"
+          fill="url(#room-map-blue)"
+        ></polygon>
+        <polyline
+          points="662,421 782,405 802,426"
+          fill="none"
+          stroke="#8cc3f8"
+          stroke-width="3"
+          opacity=".8"
+        ></polyline>
+      </g>
+
+      <!-- Ala principal -->
+      <g>
+        <polygon points="800,447 1397,347 1397,805 800,805" fill="#dde1e7"></polygon>
+
+        <g aria-hidden="true">
+          @for (points of facadeGlass; track points) {
+            <polygon
+              [attr.points]="points"
+              fill="url(#room-map-glass-window)"
+              stroke="#cfd8e0"
+              stroke-width="2.5"
+            ></polygon>
+          }
+          @for (points of facadeStrips; track points) {
+            <polygon [attr.points]="points" fill="#c6ccd4"></polygon>
+          }
+        </g>
+
+        @for (floor of floors(); track floor.level) {
+          <g
+            class="floor-band"
+            role="group"
+            [attr.aria-label]="floor.label"
+            [class.on]="selectedFloor() === floor.level"
+          >
+            <polygon [attr.points]="floor.parapet" fill="url(#room-map-parapet)"></polygon>
+            <polyline
+              [attr.points]="floor.topLine"
+              fill="none"
+              stroke="#fff"
+              stroke-width="3"
+            ></polyline>
+            <polygon [attr.points]="floor.shade" fill="url(#room-map-shade)"></polygon>
+            <polygon class="tint" [attr.points]="floor.parapet" [attr.fill]="floor.color"></polygon>
+          </g>
+        }
+
+        <g aria-hidden="true">
+          @for (column of facadeColumns; track column.x) {
+            <rect
+              [attr.x]="column.x"
+              [attr.y]="column.top"
+              [attr.width]="column.width"
+              [attr.height]="column.height"
+              fill="url(#room-map-blue-col)"
+            ></rect>
+          }
+        </g>
+
+        <polygon points="1392,372 1495,462 1495,805 1392,805" fill="url(#room-map-end-wall)"></polygon>
+        <g aria-hidden="true">
+          @for (railing of railings; track railing.y) {
+            <rect
+              x="1397"
+              [attr.y]="railing.y"
+              width="26"
+              [attr.height]="railing.height"
+              fill="#2f82da"
+              opacity=".25"
+            ></rect>
+            @for (post of railing.posts; track post) {
+              <line
+                [attr.x1]="post"
+                [attr.y1]="railing.y"
+                [attr.x2]="post"
+                [attr.y2]="railing.y + railing.height"
+                stroke="#2f82da"
+                stroke-width="2"
+              ></line>
+            }
+            <line
+              x1="1397"
+              [attr.y1]="railing.y"
+              x2="1423"
+              [attr.y2]="railing.y"
+              stroke="#2f82da"
+              stroke-width="3"
+            ></line>
+          }
+        </g>
+        <polygon points="1392,676 1495,698 1495,706 1392,684" fill="#2f82da"></polygon>
+        <polygon points="803,426 1398,326 1398,347 803,447" fill="url(#room-map-blue)"></polygon>
+        <polygon points="803,426 1398,326 1440,334 850,434" fill="#68adf5" opacity=".75"></polygon>
+        <polygon points="1392,326 1508,444 1495,462 1392,347" fill="#1f6dc6"></polygon>
+        <polygon points="1392,326 1440,334 1508,444 1494,444" fill="#4a9aee"></polygon>
+        <polygon points="1355,354 1392,347 1392,805 1355,805" fill="url(#room-map-blue-col)"></polygon>
+        <rect x="800" y="802" width="600" height="6" fill="#aab2bc"></rect>
+        <polygon points="1495,548 1536,540 1536,602 1495,608" fill="#eef0f3"></polygon>
+        <polygon points="1495,548 1536,540 1536,552 1495,560" fill="#2f82da"></polygon>
+
+        <!-- Salones (capa superior: rótulos y acción de edición) -->
+        <g class="rooms-layer">
+          @for (floor of floors(); track floor.level) {
+            @for (point of floor.rooms; track point.room.id) {
+              <g
+                class="room"
+                [class.on]="selectedRoom()?.id === point.room.id"
+                [class.room-connector]="point.connector"
+                [class.is-inactive]="!point.room.is_active"
+                [attr.transform]="'translate(' + point.x + ' ' + point.y + ')'"
+                [attr.aria-label]="
+                  'Salón ' + point.room.code + (point.room.name ? ', ' + point.room.name : '') +
+                    ', ' + floor.level + '° piso'
+                "
+                [attr.aria-pressed]="selectedRoom()?.id === point.room.id"
+                role="button"
+                tabindex="0"
+                (click)="toggleRoom(point.room)"
+                (keydown)="handleRoomKeydown($event, point.room)"
+              >
+                @if (point.connector) {
+                  <!-- Tramo del conector: ventanas, franja de piso y rótulo del aula -->
+                  <g class="connector-panel" [class.is-selected]="selectedFloor() === floor.level">
+                    <rect x="-35" y="-58" width="70" height="6" fill="#c6ccd4"></rect>
+                    <rect
+                      x="-26.6"
+                      y="-48"
+                      width="22.4"
+                      height="26"
+                      fill="url(#room-map-glass-window)"
+                      stroke="#cfd8e0"
+                      stroke-width="2.5"
+                    ></rect>
+                    <rect
+                      x="4.2"
+                      y="-48"
+                      width="22.4"
+                      height="26"
+                      fill="url(#room-map-glass-window)"
+                      stroke="#cfd8e0"
+                      stroke-width="2.5"
+                    ></rect>
+                    <rect x="-35" y="-22" width="70" height="60" fill="url(#room-map-parapet)"></rect>
+                    <line x1="-35" y1="-22" x2="35" y2="-22" stroke="#fff" stroke-width="3"></line>
+                    <rect x="-35" y="34" width="70" height="4" fill="#d3d8de"></rect>
+                    <rect
+                      class="tint"
+                      x="-35"
+                      y="-58"
+                      width="70"
+                      height="96"
+                      [attr.fill]="floor.color"
+                    ></rect>
+                  </g>
+                }
+
+                <rect
+                  class="ring"
+                  [attr.x]="point.connector ? -32 : -point.width / 2 - 4"
+                  [attr.y]="point.connector ? -17 : -19"
+                  [attr.width]="point.connector ? 64 : point.width + 8"
+                  [attr.height]="point.connector ? 34 : 38"
+                  rx="7"
+                ></rect>
+                <rect
+                  class="hit"
+                  [attr.x]="point.connector ? -35 : -point.width / 2 - 14"
+                  [attr.y]="point.connector ? -58 : -25"
+                  [attr.width]="point.connector ? 70 : point.width + 28"
+                  [attr.height]="point.connector ? 102 : 50"
+                  fill="transparent"
+                ></rect>
+                <text
+                  text-anchor="middle"
+                  dominant-baseline="central"
+                  [attr.font-size]="point.fontSize"
+                >{{ point.room.code }}</text>
+
+                <g
+                  class="room-edit"
+                  aria-hidden="true"
+                  (click)="requestEdit(point.room, $event)"
+                >
+                  <title>Editar {{ point.room.code }}</title>
+                  <rect class="room-edit-bg" x="-13" y="20" width="26" height="24" rx="8"></rect>
+                  <path
+                    class="room-edit-icon"
+                    d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+                    transform="translate(-6.8 25.6) scale(0.56)"
+                  ></path>
+                </g>
+              </g>
+            }
+          }
+        </g>
+      </g>
+
+      <!-- Sombra de base -->
+      <rect x="20" y="796" width="1480" height="14" fill="#2a4a1a" opacity=".12" aria-hidden="true"></rect>
+
+      <!-- Arbustos y árboles -->
+      <g aria-hidden="true">
+        @for (bush of bushes; track bush.x) {
+          <g [attr.transform]="'translate(' + bush.x + ' ' + bush.y + ') scale(' + bush.scale + ')'">
+            <ellipse cx="0" cy="0" rx="26" ry="16" fill="#5f9c3d"></ellipse>
+            <ellipse cx="-16" cy="4" rx="16" ry="11" fill="#538f33"></ellipse>
+            <ellipse cx="14" cy="-5" rx="17" ry="12" fill="#6fae49"></ellipse>
+          </g>
+        }
+        <ellipse cx="24" cy="654" rx="34" ry="54" fill="#5c9b3b"></ellipse>
+        <ellipse cx="8" cy="720" rx="26" ry="44" fill="#4f8d32"></ellipse>
+        <ellipse cx="44" cy="716" rx="22" ry="38" fill="#6aac45"></ellipse>
+        <rect x="22" y="740" width="9" height="58" fill="#6b4a2c"></rect>
+        <rect x="1512" y="734" width="10" height="68" fill="#6b4a2c"></rect>
+        <ellipse cx="1510" cy="690" rx="34" ry="56" fill="#5c9b3b"></ellipse>
+        <ellipse cx="1526" cy="678" rx="24" ry="46" fill="#6aac45"></ellipse>
+        <ellipse cx="1490" cy="724" rx="22" ry="36" fill="#4f8d32"></ellipse>
+      </g>
+
+      <!-- Farola -->
+      <g aria-hidden="true" transform="translate(-22 0)">
+        <ellipse cx="660" cy="852" rx="40" ry="6" fill="#1c3a10" opacity=".25"></ellipse>
+        <rect x="654" y="636" width="8" height="210" fill="#31353d"></rect>
+        <rect x="647" y="828" width="22" height="20" rx="3" fill="#2a2d34"></rect>
+        <polygon points="644,640 672,640 667,613 649,613" fill="#262930"></polygon>
+        <rect x="650" y="618" width="16" height="17" fill="#d3e6f6" opacity=".85"></rect>
+        <polygon points="648,613 668,613 658,602" fill="#262930"></polygon>
+      </g>
+    </svg>
+  </div>
+
+  <div
+    class="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 border-t border-gray-100 px-5 py-3 text-xs text-gray-500 sm:px-6"
+  >
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <span class="flex items-center gap-2">
+        <span class="size-2 rounded-full bg-green-500"></span>
+        Aula activa
+      </span>
+      <span class="flex items-center gap-2">
+        <span class="size-2 rounded-full bg-gray-400"></span>
+        Aula inactiva
+      </span>
+    </div>
+    <span>Las aulas se agrupan por el número de piso en su código.</span>
+  </div>
+
+  @if (outsideRooms().length > 0) {
+    <div class="border-t border-gray-100 px-5 py-4 sm:px-6">
+      <h3 class="text-sm font-medium text-gray-800">Aulas fuera de la fachada</h3>
+      <p class="mt-0.5 text-xs text-gray-500">
+        No caben en el plano o su código no indica el piso. Selecciónalas desde aquí.
+      </p>
+      <div class="mt-2 flex flex-wrap gap-2">
+        @for (room of outsideRooms(); track room.id) {
+          <button
+            type="button"
+            class="outside-room rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:border-(--fareas-primary) hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--fareas-primary)"
+            [class.is-selected]="selectedRoom()?.id === room.id"
+            [attr.aria-pressed]="selectedRoom()?.id === room.id"
+            [attr.title]="room.code + ' · ' + floorLabelFor(room)"
+            (click)="toggleRoom(room)"
+          >
+            {{ room.code }}
+          </button>
+        }
+      </div>
+    </div>
+  }
+</section>

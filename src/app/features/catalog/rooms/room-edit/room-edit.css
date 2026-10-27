@@ -1,0 +1,33 @@
+:host {
+  display: flex;
+  justify-content: center;
+}
+
+.edit-room-trigger {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.edit-room-trigger.is-always-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+:host-context(tr:hover) .edit-room-trigger,
+:host-context(tr:focus-within) .edit-room-trigger {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .edit-room-trigger {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edit-room-trigger {
+    transition: none;
+  }
+}
