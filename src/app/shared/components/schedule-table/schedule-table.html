@@ -1,5 +1,5 @@
 <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-  <table class="w-full min-w-[900px] border-collapse text-left">
+  <table class="w-full min-w-[900px] table-fixed border-collapse text-left">
     <caption class="sr-only">Horario semanal de clases</caption>
     <thead>
       <tr class="border-b-2 border-gray-200 bg-gray-50/80">
@@ -55,10 +55,10 @@
                     <div class="flex h-full min-h-14 items-center justify-center text-sm text-gray-300">-</div>
                   }
                 } @else {
-                  <div class="flex h-full min-h-14 flex-col gap-1">
+                  <div class="flex h-full min-h-14 gap-1">
                     @for (entry of cell.entries; track entry.id) {
                       <div
-                        class="chip tone-{{ courseColorIndex(entry.course_code) }} group relative flex flex-1 flex-col rounded-lg border-l-[3px] px-2.5 py-1.5"
+                        class="chip tone-{{ courseColorIndex(entry.course_code) }} group relative flex min-w-0 flex-1 flex-col rounded-lg border-l-[3px] px-2.5 py-1.5"
                       >
                         <div class="flex items-start justify-between gap-1">
                           <span class="text-[12px] font-semibold leading-tight">

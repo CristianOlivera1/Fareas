@@ -136,29 +136,27 @@ export class ScheduleTable {
         cells.push({ weekday, entries: [], rowspan: 1, covered: false });
         continue;
       }
-      const firstBlock = startingBlocks[0];
-      const durationHours = firstBlock.endHour - firstBlock.startHour;
-      const hasOverlap =
-        startingBlocks.length > 1 ||
-        scheduleBlocks.some(
-          (block) =>
-            block !== firstBlock &&
-            block.startHour > firstBlock.startHour &&
-            block.startHour < firstBlock.endHour,
+      let clusterEnd = Math.max(...startingBlocks.map((block) => block.endHour));
+      let cluster = startingBlocks;
+      let grown = true;
+      while (grown) {
+        const next = scheduleBlocks.filter(
+          (block) => block.startHour >= hour && block.startHour < clusterEnd,
         );
-      if (durationHours > 1 && !hasOverlap) {
-        for (let offset = 1; offset < durationHours; offset++) {
-          coveredHours.add(hour + offset);
-        }
-        cells.push({ weekday, entries: [firstBlock.entry], rowspan: durationHours, covered: false });
-      } else {
-        cells.push({
-          weekday,
-          entries: startingBlocks.map((block) => block.entry),
-          rowspan: 1,
-          covered: false,
-        });
+        const nextEnd = Math.max(...next.map((block) => block.endHour));
+        grown = next.length > cluster.length || nextEnd > clusterEnd;
+        cluster = next;
+        clusterEnd = nextEnd;
       }
+      for (let covered = hour + 1; covered < clusterEnd; covered++) {
+        coveredHours.add(covered);
+      }
+      cells.push({
+        weekday,
+        entries: cluster.map((block) => block.entry),
+        rowspan: clusterEnd - hour,
+        covered: false,
+      });
     }
     return cells;
   }
