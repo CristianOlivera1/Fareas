@@ -132,14 +132,16 @@ export class ActivityFeed {
   readonly entry = computed(() => {
     const verdict = this.lastVerdict();
     if (!verdict || verdict.verdict === 'sin_rostro') return null;
-    const person = verdict.student_id !== null ? this.names()[verdict.student_id] : undefined;
+    const verifying = verdict.verdict === 'verificando';
+    const studentId = verifying ? null : verdict.student_id;
+    const person = studentId !== null ? this.names()[studentId] : undefined;
     const name =
       person?.name ??
-      (verdict.student_id !== null ? `Estudiante #${verdict.student_id}` : 'Persona no identificada');
+      (verifying ? 'Identificando…' : studentId !== null ? `Estudiante #${studentId}` : 'Persona no identificada');
     return {
       style: VERDICT_STYLES[verdict.verdict],
       name,
-      studentId: verdict.student_id,
+      studentId,
       avatarUrl: person?.avatarUrl ?? null,
       code: person?.code ?? null,
       room: this.roomCodes()[verdict.room_id] ?? `Aula #${verdict.room_id}`,
