@@ -121,14 +121,14 @@ Para verificar el sistema se partió de los 35 requerimientos funcionales defini
 
 Aquí una «prueba» es un caso individual (función de pytest o caso de Vitest); los archivos que las agrupan se cuentan aparte. En una corrida completa del 28 de octubre de 2026 sobre la versión final se ejecutaron 547 pruebas (403 del servidor, en 44 archivos, y 144 del cliente, en 33) y 544 se aprobaron; ninguna se omitió. Las tres que no pasaron fueron dos pruebas de WebSocket que usan un dispositivo de ejemplo (esp32-lab305) ausente en la base de datos del entorno y una de reportes por docente cuya causa no se investigó; ninguna pertenece al reconocimiento facial. Las del servidor cubren autenticación, catálogos, matrícula, reglas de asistencia, sesiones, justificaciones, seguridad, WebSocket (Fette & Melnikov, 2011), reportes y visión.
 
-Las verificaciones técnicas también llevaron a modificar el diseño. El detector YOLO que se había previsto al inicio (Redmon et al., 2016) se reemplazó por SCRFD para la detección facial (Guo et al., 2021), y se recalibraron tanto los parámetros de decisión del reconocimiento, basado en representaciones faciales de tipo ArcFace (Deng et al., 2022), como la regla de tardanza. La implementación evaluada ya incluye estos cambios. Esto es evidencia de verificación técnica; no demuestra por sí sola que los requerimientos funcionen en condiciones reales, para lo cual se usan las secciones 3.4 y 3.5.
+Las verificaciones técnicas también llevaron a modificar el diseño. El detector YOLO que se había previsto al inicio (Redmon et al., 2016) se reemplazó por SCRFD para la detección facial (Guo et al., 2021), y se recalibraron tanto los parámetros de decisión del reconocimiento, basado en representaciones faciales de tipo ArcFace (Deng et al., 2022), como la regla de tardanza. La implementación evaluada ya incluye estos cambios. Esto es evidencia de verificación técnica; no demuestra por sí sola que los requerimientos funcionen en condiciones reales, para lo cual se recurre a la evaluación biométrica y a la validación operativa que se presentan a continuación.
 
 ### 3.2 Evaluación de rendimiento
 
 La medición de 40 cuadros con rostro del video de demostración se repitió en 11 corridas consecutivas con la configuración final, en el mismo equipo, un portátil Lenovo LOQ con Intel Core i5-12450HX (8 núcleos, 12 hilos), 16 GB de RAM y Windows 11, que también ejecutó el piloto; el reconocimiento usó solo la CPU y no la GPU NVIDIA GeForce RTX 3050 del equipo (cuatro hilos por modelo y sin espera activa). En cada corrida se calcularon la mediana y el percentil 95 de los 40 cuadros, y la Tabla 1 resume las 11 con la mediana de sus medianas y su rango. El equipo no se aisló: además del servidor ejecutaba la sincronización de OneDrive (cerca de un núcleo), el navegador y el editor de código, de modo que las cifras reflejan un uso realista y no el mejor caso.
 
 **Tabla 1**
-**Latencias del canal de reconocimiento (11 corridas de 40 cuadros, solo CPU)**
+**Latencias del canal de reconocimiento con la configuración final (11 corridas de 40 cuadros, solo CPU)**
 
 | Etapa | Mediana de las medianas por corrida (ms) | Rango entre corridas (ms) |
 | --- | --- | --- |
@@ -138,13 +138,13 @@ La medición de 40 cuadros con rostro del video de demostración se repitió en 
 | Cuadro completo (detección, extracción y búsqueda) | 1 346,6 | 198,6 – 1 572,3 |
 | Cuadro completo, percentil 95 de cada corrida | 1 569,6 | 1 288,1 – 2 078,4 |
 
-*Nota.* Elaboración propia. Cuadros de 720 × 1280 píxeles. Todas las filas usan el mismo criterio: estadístico por corrida sobre los 40 cuadros y luego mediana y rango de las 11 corridas. «Cuadro completo» repite la detección y la extracción, por lo que no es la suma de las filas.
+*Nota.* Elaboración propia. Cuadros de 720 × 1280 píxeles. Todas las filas usan el mismo criterio: estadístico por corrida sobre los 40 cuadros y luego mediana y rango de las 11 corridas. «Cuadro completo» es la suma de las tres etapas medidas sobre el mismo cuadro; por eso su mediana (1 346,6 ms) es cercana a la suma de las medianas de las filas anteriores (1 338,4 ms).
 
-El cuadro completo tomó una mediana de 1,35 s (unos 0,7 cuadros por segundo). Solo una corrida (198,6 ms) estuvo por debajo de los 333 ms que corresponderían a los 3 cuadros por segundo configurados, así que el sistema no sostiene esa frecuencia de forma estable en este equipo. La búsqueda entre 5 000 plantillas tomó menos de 2 ms; esta cifra mide solo la comparación de *embeddings*, no el tiempo total de identificación.
+El cuadro completo tomó una mediana de 1,35 s (unos 0,7 cuadros por segundo). Solo una corrida (198,6 ms) estuvo por debajo de los 333 ms que corresponderían a los 3 cuadros por segundo configurados, así que el sistema no sostiene esa frecuencia de forma estable en este equipo. Estas cifras corresponden a la configuración ya optimizada (cuatro hilos y sin espera activa); la mejora de esa optimización se midió aparte, en una sola sesión (véase el defecto 3 en la subsección de defectos), y no es comparable en valor absoluto con la Tabla 1 porque el rendimiento del equipo cambió entre sesiones. La búsqueda entre 5 000 plantillas tomó menos de 2 ms; esta cifra mide solo la comparación de *embeddings*, no el tiempo total de identificación.
 
 ### 3.3 Defectos detectados durante la validación
 
-La integración con la cámara real permitió corregir cuatro defectos principales. (1) Los puntos de referencia faciales se decodificaban con el signo invertido: en un cuadro de prueba la boca quedaba sobre los ojos, la alineación giraba casi 180° y se rechazaban fotos frontales por «cabeza inclinada»; tras corregirlo se añadió una prueba de regresión sobre el video de demostración. (2) La decisión se tomaba con un solo cuadro y sin margen, y se sustituyó por el margen δ, el promedio de *embeddings*, la confirmación en *N* cuadros, el tamaño mínimo y el descarte de perfiles (Ecuación 2). (3) Los hilos de cada modelo quedaban en espera activa: la mediana por cuadro era de 1 115 ms (percentil 95 de 14 s) y bajó a 157 ms en la misma sesión al limitarlos a cuatro y desactivar la espera. (4) El veredicto provisional incluía al candidato y el panel mostraba su nombre antes de confirmar; ahora «identificando» no lleva identidad. También se corrigieron el reescalado sin conservar la proporción, el umbral configurable ignorado y el retraso acumulado del video.
+La integración con la cámara real permitió corregir cuatro defectos principales. (1) Los puntos de referencia faciales se decodificaban con el signo invertido: en un cuadro de prueba la boca quedaba sobre los ojos, la alineación giraba casi 180° y se rechazaban fotos frontales por «cabeza inclinada»; tras corregirlo se añadió una prueba de regresión sobre el video de demostración. (2) La decisión se tomaba con un solo cuadro y sin margen, y se sustituyó por el margen δ, el promedio de *embeddings*, la confirmación en *N* cuadros, el tamaño mínimo y el descarte de perfiles (Ecuación 2). (3) Los hilos de cada modelo quedaban en espera activa: en una comparación dentro de una misma sesión, con el mismo equipo y la misma carga (48 cuadros), la mediana del cuadro completo (detección y extracción) era de 1 115 ms con la configuración por defecto (percentil 95 de 14 s) y de 157 ms al limitar los hilos a cuatro y desactivar la espera. Al repetir la prueba horas después con la configuración ya ajustada, el equipo dio 1,3 s por cuadro (Tabla 1), por lo que la reducción debe leerse como una mejora relativa medida en una misma sesión y no como un tiempo absoluto. (4) El veredicto provisional incluía al candidato y el panel mostraba su nombre antes de confirmar; ahora «identificando» no lleva identidad. También se corrigieron el reescalado sin conservar la proporción, el umbral configurable ignorado y el retraso acumulado del video.
 
 ### 3.4 Evaluación biométrica en el piloto
 
@@ -164,7 +164,7 @@ El piloto se realizó con un grupo de 26 estudiantes, de los cuales 20 aceptaron
 
 *Nota.* Elaboración propia, con la Ecuación 5 y los parámetros indicados. Con 2 intentos impostores el resultado es exploratorio.
 
-Con solo dos intentos impostores, el límite superior del intervalo de la FAR llega a 65,8 %: el resultado no demuestra que la falsa aceptación sea nula, y 20 intentos genuinos permiten afirmar solo que la TAR es de al menos 83,9 % con 95 % de confianza. El tiempo de 4 a 8 s supera los cerca de 0,7 s previstos y es del orden de lo esperable con los 1,35 s por cuadro de la Sección 3.2.
+Con solo dos intentos impostores, el límite superior del intervalo de la FAR llega a 65,8 %: el resultado no demuestra que la falsa aceptación sea nula, y 20 intentos genuinos permiten afirmar solo que la TAR es de al menos 83,9 % con 95 % de confianza. El tiempo de 4 a 8 s supera los cerca de 0,7 s previstos y es del orden de lo esperable con los 1,35 s por cuadro de la evaluación de rendimiento (Tabla 1).
 
 ### 3.5 Validación operativa
 
@@ -248,9 +248,9 @@ Las pruebas técnicas descritas no involucraron la recolección de datos biomét
 
 Alhanaee, K., Alhammadi, M., Almenhali, N., & Shatnawi, M. (2021). Face recognition smart attendance system using deep transfer learning. *Procedia Computer Science, 192*, 4093–4102. https://doi.org/10.1016/j.procs.2021.09.184
 
-Credé, M., Roch, S. G., & Kieszczynka, U. M. (2010). Class attendance in college: A meta-analytic review of the relationship of class attendance with grades and student characteristics. *Review of Educational Research, 80*(2), 272–295. https://doi.org/10.3102/0034654310362998
-
 Consejo Universitario de la Universidad Nacional Micaela Bastidas de Apurímac. (2019, 14 de noviembre). *Reglamento General Académico de la UNAMBA* (Resolución N.° 471-2019-CU-UNAMBA). Universidad Nacional Micaela Bastidas de Apurímac. https://cdn.www.gob.pe/uploads/document/file/8392692/6978325-resolucion-n-471-20219-cu-unamba%282%29.pdf?v=1783351594
+
+Credé, M., Roch, S. G., & Kieszczynka, U. M. (2010). Class attendance in college: A meta-analytic review of the relationship of class attendance with grades and student characteristics. *Review of Educational Research, 80*(2), 272–295. https://doi.org/10.3102/0034654310362998
 
 Decreto Supremo N.° 016-2024-JUS. (2024, 30 de noviembre). Decreto Supremo que aprueba el Reglamento de la Ley N.° 29733, Ley de Protección de Datos Personales. *El Peruano*. https://www.gob.pe/institucion/anpd/normas-legales/6554453-n-016-2024-jus
 
